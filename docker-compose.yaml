@@ -1,0 +1,33 @@
+version: '3.7'
+
+services:
+  backend:
+    volumes:
+      - static:/static
+    env_file:
+      - .env
+    build:
+      context: ./backend
+    ports:
+      - '8000:8000'
+    privileged: true
+  frontend:
+    build:
+      context: ./frontend
+    volumes:
+      - frontend:/app/build
+  nginx:
+    build:
+      context: ./nginx
+    volumes:
+      - static:/static
+      - frontend:/var/www/frontend
+    ports:
+      - '80:80'
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  static:
+  frontend:

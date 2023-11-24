@@ -1,0 +1,16 @@
+2023-11-21 23:15:39 : WARNING - Device (85) device - deleted successfully
+2023-11-21 23:16:15 : INFO - Create new device -  Mac address: bc:5e:33:b0:02:04 / IP: 192.168.0.31 / Vendor: Hangzhou Hikvision Digital Technology Co.,Ltd.
+2023-11-22 08:07:33 : INFO - Device (11) updated - Name: device / Icon: apple / Known: False
+2023-11-22 08:13:21 : INFO - Device (86) updated - Name: Camera 1 / Icon: camera-video-fill / Known: True
+2023-11-22 09:48:06 : INFO - Device (16) updated - Name: device / Icon: thermometer-snow / Known: False
+2023-11-22 09:48:53 : INFO - Device (4) updated - Name: Camera 2 / Icon: camera-video / Known: False
+2023-11-22 09:49:02 : INFO - Device (86) updated - Name: Camera 1 / Icon: camera-video / Known: True
+2023-11-22 20:39:49 : INFO - Device (5) updated - Name: Camera 3 / Icon: camera-video / Known: True
+2023-11-22 20:39:56 : INFO - Device (4) updated - Name: Camera 2 / Icon: camera-video / Known: True
+2023-11-23 18:49:57 : INFO - Device (6) updated - Name: Camera 4 / Icon: camera-video / Known: True
+2023-11-23 18:50:13 : INFO - Device (7) updated - Name: Camera 5 / Icon: camera-video / Known: True
+2023-11-23 18:50:36 : INFO - Device (8) updated - Name: Camera 6 / Icon: camera-video / Known: True
+2023-11-23 18:50:49 : INFO - Device (9) updated - Name: Camera 7 / Icon: camera-video / Known: True
+2023-11-23 18:51:02 : INFO - Device (10) updated - Name: Camera 8 / Icon: camera-video / Known: True
+2023-11-23 18:51:32 : INFO - Device (2) updated - Name: Server / Icon: server / Known: True
+2023-11-23 18:52:00 : INFO - Device (1) updated - Name: Tp-link M5 - First floor / Icon: router-fill / Known: True
