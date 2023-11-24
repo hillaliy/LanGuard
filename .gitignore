@@ -25,4 +25,4 @@ yarn-error.log*
 **/*.log
 **/migrations
 **/db.sqlite3
-**/**pycache**
+**/**pycache**.DS_Store
