@@ -1,5 +1,5 @@
 import React, { useContext } from 'react';
-import { Col, Container, Row } from 'react-bootstrap';
+import { Card, Col, Container, Row } from 'react-bootstrap';
 import { ExclamationTriangle, Plugin, Plus, Tv } from 'react-bootstrap-icons';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
@@ -13,8 +13,9 @@ const StatusBox = () => {
       <h2 class="text-center">Devices</h2>
       <Row className="justify-content-center">
         <Col xs={2}>
-          <div
-            className="card btn btn-primary position-relative"
+          <Card
+            bg="primary"
+            className="btn position-relative"
             onClick={() => {
               setSearchTerm('');
               nav('/');
@@ -23,15 +24,16 @@ const StatusBox = () => {
             <span class="card-icon">
               <Tv size={40} />
             </span>
-            <div class="card-body">
-              <h5 class="card-title">All Devices</h5>
-              <p class="card-text">{allDevices}</p>
-            </div>
-          </div>
+            <Card.Body>
+              <Card.Title>All Devices</Card.Title>
+              <Card.Text>{allDevices}</Card.Text>
+            </Card.Body>
+          </Card>
         </Col>
         <Col xs={2}>
-          <div
-            className="card btn btn-success position-relative"
+          <Card
+            bg="success"
+            className="btn position-relative"
             onClick={() => {
               setSearchTerm('');
               nav('/online');
@@ -40,15 +42,16 @@ const StatusBox = () => {
             <span class="card-icon">
               <Plugin size={40} />
             </span>
-            <div class="card-body">
-              <h5 class="card-title">Online</h5>
-              <p class="card-text">{online}</p>
-            </div>
-          </div>
+            <Card.Body>
+              <Card.Title>Online</Card.Title>
+              <Card.Text>{online}</Card.Text>
+            </Card.Body>
+          </Card>
         </Col>
         <Col xs={2}>
-          <div
-            className="card btn btn-warning position-relative"
+          <Card
+            bg="warning"
+            className="btn position-relative"
             onClick={() => {
               setSearchTerm('');
               nav('/offline');
@@ -57,31 +60,29 @@ const StatusBox = () => {
             <span class="card-icon">
               <ExclamationTriangle size={40} />
             </span>
-            <div class="card-body">
-              <h5 class="card-title">Offline</h5>
-              <p class="card-text">{offline}</p>
-            </div>
-          </div>
+            <Card.Body>
+              <Card.Title>Offline</Card.Title>
+              <Card.Text>{offline}</Card.Text>
+            </Card.Body>
+          </Card>
         </Col>
         <Col xs={2}>
-          <div
-            className="card btn btn-danger position-relative"
+          <Card
+            bg="danger"
+            className="btn position-relative"
             onClick={() => {
               setSearchTerm('');
               nav('/new-devices');
             }}
           >
-            <span
-              class="card-icon
-            "
-            >
+            <span class="card-icon">
               <Plus size={40} />
             </span>
-            <div class="card-body">
-              <h5 class="card-title">New Devices</h5>
-              <p class="card-text">{newDevices}</p>
-            </div>
-          </div>
+            <Card.Body>
+              <Card.Title>New Devices</Card.Title>
+              <Card.Text>{newDevices}</Card.Text>
+            </Card.Body>
+          </Card>
         </Col>
       </Row>
     </Container>
