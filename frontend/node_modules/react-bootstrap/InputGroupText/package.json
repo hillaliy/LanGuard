@@ -1,7 +1,0 @@
-{
-  "name": "react-bootstrap/InputGroupText",
-  "private": true,
-  "main": "../cjs/InputGroupText.js",
-  "module": "../esm/InputGroupText.js",
-  "types": "../esm/InputGroupText.d.ts"
-}

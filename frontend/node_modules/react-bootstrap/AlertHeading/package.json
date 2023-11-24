@@ -1,7 +1,0 @@
-{
-  "name": "react-bootstrap/AlertHeading",
-  "private": true,
-  "main": "../cjs/AlertHeading.js",
-  "module": "../esm/AlertHeading.js",
-  "types": "../esm/AlertHeading.d.ts"
-}
