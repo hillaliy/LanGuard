@@ -1,0 +1,16 @@
+export type Handler = (value: any, ...args: any[]) => any;
+export declare function defaultKey(key: string): string;
+declare function useUncontrolledProp<TProp, THandler extends Handler = Handler>(propValue: TProp | undefined, defaultValue: TProp, handler?: THandler): readonly [TProp, THandler];
+declare function useUncontrolledProp<TProp, THandler extends Handler = Handler>(propValue: TProp | undefined, defaultValue?: TProp | undefined, handler?: THandler): readonly [
+    TProp | undefined,
+    (...args: Parameters<THandler>) => ReturnType<THandler> | void
+];
+export { useUncontrolledProp };
+type FilterFlags<Base, Condition> = {
+    [Key in keyof Base]: NonNullable<Base[Key]> extends Condition ? Key : never;
+};
+type AllowedNames<Base, Condition> = FilterFlags<Base, Condition>[keyof Base];
+type ConfigMap<TProps extends object> = {
+    [p in keyof TProps]?: AllowedNames<TProps, Function>;
+};
+export declare function useUncontrolled<TProps extends object, TDefaults extends string = never>(props: TProps, config: ConfigMap<TProps>): Omit<TProps, TDefaults>;
