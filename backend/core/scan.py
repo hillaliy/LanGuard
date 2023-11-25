@@ -1,5 +1,6 @@
 from django.utils import timezone
 from django.conf import settings
+import socket
 
 import logging
 
@@ -11,6 +12,15 @@ from .models import Device
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+def get_hostname(ip):
+    try:
+        hostname = socket.gethostbyaddr(ip)
+        return hostname
+    except socket.herror as e:
+        print(f"Error: {e}")
+        return "Device"
 
 
 def scan(IP_RANGE):
@@ -36,9 +46,10 @@ def scan(IP_RANGE):
             device.online = True
             device.lastseen = timezone.now()
         except Device.DoesNotExist:
+            name = get_hostname(ip=ip)
             device = Device(
                 icon="plus",
-                name="device",
+                name=name,
                 ip=ip,
                 mac=mac,
                 vendor=vendor[1],

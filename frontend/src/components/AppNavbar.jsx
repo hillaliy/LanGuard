@@ -5,18 +5,26 @@ import {
   Container,
   Form,
   InputGroup,
+  Button,
 } from 'react-bootstrap';
 
 import DateTime from './DateTime';
 import { MoonStars, Search, Sun } from 'react-bootstrap-icons';
-import { useContext, useState } from 'react';
+import { useContext } from 'react';
 import { AppContext } from '../App';
 import OffCanvas from './Offcanvas';
 
 function AppNavbar() {
-  const { darkMode, setDarkMode, currentUser } = useContext(AppContext);
-  const { setCurrentUser, devices, setSearchTerm } = useContext(AppContext);
-  const [searchQuery, setSearchQuery] = useState('');
+  const {
+    darkMode,
+    setDarkMode,
+    currentUser,
+    setCurrentUser,
+    devices,
+    searchQuery,
+    setSearchQuery,
+    setSearchTerm,
+  } = useContext(AppContext);
 
   const toggleDarkMode = () => {
     setDarkMode(prevDarkMode => !prevDarkMode);
@@ -75,6 +83,16 @@ function AppNavbar() {
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                 />
+                {searchQuery && (
+                  <Button
+                    variant="outline-secondary"
+                    onClick={() => {
+                      setSearchQuery('');
+                    }}
+                  >
+                    X
+                  </Button>
+                )}
               </InputGroup>
             </Form>
           </Nav>

@@ -76,7 +76,10 @@ const DeviceModal = ({ show, setShow, device }) => {
             <Modal.Body>
               <Form>
                 <FormGroup className="mb-3">
-                  <FormLabel>Type device name. cannot be empty</FormLabel>
+                  <FormLabel>
+                    Type device name{' '}
+                    <small className="text-muted">(cannot be empty)</small>
+                  </FormLabel>
                   <FormControl
                     type="text"
                     defaultValue={device.name}

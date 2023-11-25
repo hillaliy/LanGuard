@@ -15,6 +15,7 @@ function App() {
   const [online, setOnline] = useState(0);
   const [offline, setOffline] = useState(0);
   const [newDevices, setNewDevices] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
 
   const [currentUser, setCurrentUser] = useState('');
@@ -71,6 +72,8 @@ function App() {
           online,
           offline,
           newDevices,
+          searchQuery,
+          setSearchQuery,
           searchTerm,
           setSearchTerm,
           currentUser,
