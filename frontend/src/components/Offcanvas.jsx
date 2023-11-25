@@ -3,12 +3,13 @@ import Button from 'react-bootstrap/Button';
 import Offcanvas from 'react-bootstrap/Offcanvas';
 import ListGroup from 'react-bootstrap/ListGroup';
 import {
-  Bank,
+  CurrencyExchange,
   DatabaseDown,
   DatabaseUp,
   Gear,
   GearWideConnected,
   HeartFill,
+  Rss,
   Sliders,
 } from 'react-bootstrap-icons';
 import { toast } from 'react-toastify';
@@ -101,15 +102,26 @@ const OffCanvas = variant => {
               <Gear size={30} /> Admin Site
             </ListGroup.Item>
           </ListGroup>
-          <ListGroup style={{ textAlign: 'center' }}>
-            <ListGroup.Item>📌 Version {packageJson.version}</ListGroup.Item>
+          <ListGroup>
+            <ListGroup.Item
+              action
+              href="https://github.com/hillaliy/LanGuard/releases"
+              target="_blank"
+            >
+              <Rss size={25} /> Version {packageJson.version}
+            </ListGroup.Item>
             <ListGroup.Item
               action
               href="https://www.paypal.com/paypalme/hillaliy"
+              target="_blank"
             >
-              <Bank size={25} /> Donation
+              <CurrencyExchange size={25} /> Donation
             </ListGroup.Item>
-            <ListGroup.Item action href="https://github.com/hillaliy/hillaliy">
+            <ListGroup.Item
+              action
+              href="https://github.com/hillaliy/hillaliy"
+              target="_blank"
+            >
               Made with <HeartFill size={20} /> by @hillaliy!
             </ListGroup.Item>
           </ListGroup>

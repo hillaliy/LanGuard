@@ -1,6 +1,11 @@
 import React, { useContext } from 'react';
 import { Card, Col, Container, Row } from 'react-bootstrap';
-import { ExclamationTriangle, Plugin, Plus, Tv } from 'react-bootstrap-icons';
+import {
+  Display,
+  ExclamationTriangle,
+  Plugin,
+  Plus,
+} from 'react-bootstrap-icons';
 import { useNavigate } from 'react-router-dom';
 import { AppContext } from '../App';
 
@@ -22,7 +27,7 @@ const StatusBox = () => {
             }}
           >
             <span class="card-icon">
-              <Tv size={40} />
+              <Display size={40} />
             </span>
             <Card.Body>
               <Card.Title>All Devices</Card.Title>

@@ -9,7 +9,14 @@ import {
 } from 'react-bootstrap';
 
 import DateTime from './DateTime';
-import { MoonStars, Search, Sun } from 'react-bootstrap-icons';
+import {
+  BoxArrowLeft,
+  MoonStars,
+  PenFill,
+  PersonFill,
+  Search,
+  Sun,
+} from 'react-bootstrap-icons';
 import { useContext } from 'react';
 import { AppContext } from '../App';
 import OffCanvas from './Offcanvas';
@@ -125,13 +132,15 @@ function AppNavbar() {
               id="collapsible-nav-dropdown"
             >
               <NavDropdown.ItemText>
-                👤 {currentUser.username}
+                <PersonFill size={25} /> {currentUser.username}
               </NavDropdown.ItemText>
               <NavDropdown.Divider />
               <NavDropdown.Item href="#action/3.1">
-                ✏️ User editing
+                <PenFill size={20} /> User editing
               </NavDropdown.Item>
-              <NavDropdown.Item onClick={signOut}>🔚 Sign out</NavDropdown.Item>
+              <NavDropdown.Item onClick={signOut}>
+                <BoxArrowLeft size={20} /> Sign out
+              </NavDropdown.Item>
             </NavDropdown>
           </Nav>
           <Nav>
