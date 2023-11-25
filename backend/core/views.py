@@ -4,8 +4,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.models import User
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from django.http import JsonResponse
+from rest_framework.permissions import AllowAny
 
 import logging
 import threading
@@ -32,6 +33,7 @@ def set_interval(func, sec, *args, **kwargs):
 set_interval(scan, int(settings.INTERVAL) * 60, settings.IP_RANGE)
 
 
+@permission_classes([AllowAny])
 class UserRegistrationView(generics.CreateAPIView):
     serializer_class = UserSerializer
 
@@ -51,6 +53,7 @@ class UserRegistrationView(generics.CreateAPIView):
         )
 
 
+@permission_classes([AllowAny])
 class UserLoginView(APIView):
     def post(self, request, *args, **kwargs):
         username = request.data.get("username")
@@ -103,7 +106,7 @@ def device(request):
                     "data": serializer.data,
                     "counters": counters,
                 },
-                status=200,
+                status=status.HTTP_200_OK,
             )
         else:
             device = Device.objects.get(pk=id_)
@@ -112,7 +115,7 @@ def device(request):
                 {
                     "data": serializer.data,
                 },
-                status=200,
+                status=status.HTTP_200_OK,
             )
 
     # Handle PUT request to update device
@@ -124,7 +127,7 @@ def device(request):
                     "status": "Error",
                     "info": "Id is missing",
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
         device = Device.objects.get(pk=id_)
         serializer = DeviceSerializer(device, data=request.data, partial=True)
@@ -135,7 +138,7 @@ def device(request):
             )
             return Response(
                 {"status": "OK", "info": f"Device ({device.id}) updated seccessfully"},
-                status=200,
+                status=status.HTTP_202_ACCEPTED,
             )
         else:
             return Response(
@@ -143,7 +146,7 @@ def device(request):
                     "status": "Error",
                     "info": serializer.errors,
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
     # Handle DELETE request to delete device
@@ -155,7 +158,7 @@ def device(request):
                     "status": "Error",
                     "info": "Id is missing",
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
         device = Device.objects.get(pk=id_)
         LOGGER.warning(
@@ -165,7 +168,28 @@ def device(request):
         return Response(
             {
                 "status": "OK",
-                "info": f"Device deleted successfully",
+                "info": "Device deleted successfully",
             },
-            status=200,
+            status=status.HTTP_202_ACCEPTED,
         )
+
+
+@api_view(["GET"])
+def export_db(request):
+    data = DeviceSerializer(Device.objects.all(), many=True).data
+    return JsonResponse(data, safe=False)
+
+
+@api_view(["POST"])
+def import_db(request):
+    data = request.data
+    serializer = DeviceSerializer(data=data, many=True)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {"status": "OK", "info": "Import successful"},
+            status=status.HTTP_201_CREATED,
+        )
+
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
