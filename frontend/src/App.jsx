@@ -60,7 +60,7 @@ function App() {
     }
   }, []);
 
-  if (currentUser) {
+  if (currentUser && devices) {
     return (
       <AppContext.Provider
         value={{

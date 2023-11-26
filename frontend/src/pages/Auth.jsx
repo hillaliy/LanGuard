@@ -8,6 +8,7 @@ import axios from 'axios';
 import { SERVER_URL } from '../config';
 import { toast } from 'react-toastify';
 import { InputGroup } from 'react-bootstrap';
+import { Key, Person } from 'react-bootstrap-icons';
 
 const Auth = () => {
   const { setCurrentUser } = useContext(AppContext);
@@ -90,7 +91,9 @@ const Auth = () => {
         <Container className="d-flex mt-5 justify-content-center vh-100">
           <Form onSubmit={e => submitRegistration(e)}>
             <InputGroup className="mb-3" size="lg">
-              <InputGroup.Text id="username">👤</InputGroup.Text>
+              <InputGroup.Text id="username">
+                <Person />
+              </InputGroup.Text>
               <Form.Control
                 type="text"
                 placeholder="Username"
@@ -99,7 +102,9 @@ const Auth = () => {
               />
             </InputGroup>
             <InputGroup className="mb-3" size="lg">
-              <InputGroup.Text id="password">🔑</InputGroup.Text>
+              <InputGroup.Text id="password">
+                <Key />
+              </InputGroup.Text>
               <Form.Control
                 type="password"
                 placeholder="Password"
@@ -108,7 +113,9 @@ const Auth = () => {
               />
             </InputGroup>
             <InputGroup className="mb-3" size="lg">
-              <InputGroup.Text id="password-confirm">🔑</InputGroup.Text>
+              <InputGroup.Text id="password-confirm">
+                <Key />
+              </InputGroup.Text>
               <Form.Control
                 type="password"
                 placeholder="Password confirm"
@@ -125,7 +132,9 @@ const Auth = () => {
         <Container className="d-flex mt-5 justify-content-center vh-100">
           <Form onSubmit={e => submitLogin(e)}>
             <InputGroup className="mb-3" size="lg">
-              <InputGroup.Text id="username">👤</InputGroup.Text>
+              <InputGroup.Text id="username">
+                <Person />
+              </InputGroup.Text>
               <Form.Control
                 type="text"
                 placeholder="Username"
@@ -134,7 +143,9 @@ const Auth = () => {
               />
             </InputGroup>
             <InputGroup className="mb-3" size="lg">
-              <InputGroup.Text id="password">🔑</InputGroup.Text>
+              <InputGroup.Text id="password">
+                <Key />
+              </InputGroup.Text>
               <Form.Control
                 type="password"
                 placeholder="Password"
