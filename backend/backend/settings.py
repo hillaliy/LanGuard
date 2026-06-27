@@ -237,8 +237,6 @@ STORAGES = {
     },
 }
 
-MANUF_FILE = os.path.join(BASE_DIR, "manuf")
-
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
@@ -290,7 +288,7 @@ LOGGING = {
 
 # Scan settings
 IP_RANGE = os.getenv("IP_RANGE", "192.168.1.0/24")
-INTERVAL = int(os.getenv("INTERVAL", "5"))
+INTERVAL = int(os.getenv("INTERVAL", "10"))
 PORT_SCAN_ENABLED = env_bool("PORT_SCAN_ENABLED", default=True)
 PORT_SCAN_PORTS = env_list(
     "PORT_SCAN_PORTS",
@@ -315,6 +313,10 @@ PORT_SCAN_PORTS = env_list(
     cast=int,
 )
 PORT_SCAN_TIMEOUT = float(os.getenv("PORT_SCAN_TIMEOUT", "0.5"))
+PORT_SCAN_INTERVAL = int(os.getenv("PORT_SCAN_INTERVAL", "30"))
+SCAN_ARP_TIMEOUT = float(os.getenv("SCAN_ARP_TIMEOUT", "2"))
+SCAN_ARP_RETRIES = int(os.getenv("SCAN_ARP_RETRIES", "2"))
+SCAN_OFFLINE_AFTER_MISSES = int(os.getenv("SCAN_OFFLINE_AFTER_MISSES", "3"))
 SCAN_MAX_HOSTS = int(os.getenv("SCAN_MAX_HOSTS", "256"))
 SCAN_ALLOW_PUBLIC_RANGES = env_bool("SCAN_ALLOW_PUBLIC_RANGES", default=False)
 PORT_SCAN_MAX_PORTS = int(os.getenv("PORT_SCAN_MAX_PORTS", "64"))
@@ -324,6 +326,7 @@ NOTIFICATIONS_ENABLED = env_bool("NOTIFICATIONS_ENABLED", default=True)
 NOTIFICATION_TIMEOUT = float(os.getenv("NOTIFICATION_TIMEOUT", "5"))
 NOTIFICATION_RETRY_INTERVAL = int(os.getenv("NOTIFICATION_RETRY_INTERVAL", "15"))
 NOTIFICATION_MAX_ATTEMPTS = int(os.getenv("NOTIFICATION_MAX_ATTEMPTS", "3"))
+NOTIFICATION_EVENT_TYPES = env_list("NOTIFICATION_EVENT_TYPES", default=["new_device"])
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_USERID = os.getenv("TELEGRAM_USERID")

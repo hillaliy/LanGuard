@@ -5,7 +5,7 @@ import socket
 from django.conf import settings
 from django.utils import timezone
 import scapy.all as scapy
-from scapy.data import ManufDA, load_manuf
+from scapy.data import ManufDA
 
 from .models import Device, DevicePort, NetworkEvent, ScanRun
 from .notifications import notify_event
@@ -97,16 +97,38 @@ def scan_open_ports(ip, ports=None, timeout=None):
     return open_ports
 
 
+def should_scan_ports(device, now=None):
+    if not settings.PORT_SCAN_ENABLED:
+        return False
+
+    interval = settings.PORT_SCAN_INTERVAL
+    if interval <= 0 or not device.last_port_scan:
+        return True
+
+    now = now or timezone.now()
+    elapsed = now - device.last_port_scan
+    return elapsed.total_seconds() >= interval * 60
+
+
 def create_event(event_type, device, message, scan_run=None, device_port=None, metadata=None):
+    metadata = metadata or {}
     event = NetworkEvent.objects.create(
         scan_run=scan_run,
         device=device,
         device_port=device_port,
         event_type=event_type,
         message=message,
-        metadata=metadata or {},
+        metadata=metadata,
     )
-    notify_event(event)
+    if device.known:
+        event.notified = True
+        event.metadata = {
+            **metadata,
+            "notification_skipped": "known_device",
+        }
+        event.save(update_fields=["notified", "metadata"])
+    else:
+        notify_event(event)
     return event
 
 
@@ -182,10 +204,23 @@ def sync_device_ports(device, open_ports, scan_run=None):
 
 def discover_devices(ip_range):
     ip_range = validate_ip_range(ip_range)
-    arp_request = scapy.ARP(pdst=ip_range)
-    broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
-    arp_request_broadcast = broadcast / arp_request
-    return scapy.srp(arp_request_broadcast, timeout=1, verbose=False)[0]
+    discovered = {}
+
+    for _ in range(max(1, settings.SCAN_ARP_RETRIES)):
+        arp_request = scapy.ARP(pdst=ip_range)
+        broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
+        arp_request_broadcast = broadcast / arp_request
+        answered = scapy.srp(
+            arp_request_broadcast,
+            timeout=settings.SCAN_ARP_TIMEOUT,
+            verbose=False,
+        )[0]
+
+        for element in answered:
+            mac = element[1].hwsrc.lower()
+            discovered[mac] = element
+
+    return list(discovered.values())
 
 
 def scan(ip_range, scan_run=None):
@@ -197,10 +232,16 @@ def scan(ip_range, scan_run=None):
 
     try:
         answered_list = discover_devices(ip_range)
-        oui = load_manuf(settings.MANUF_FILE)
+        scan_started_at = timezone.now()
+        oui = scapy.MANUFDB
 
         for element in answered_list:
-            stats = sync_discovered_device(element, oui=oui, scan_run=scan_run)
+            stats = sync_discovered_device(
+                element,
+                oui=oui,
+                scan_run=scan_run,
+                scan_started_at=scan_started_at,
+            )
             new_devices += stats["new_devices"]
             ports_opened += stats["ports_opened"]
             ports_closed += stats["ports_closed"]
@@ -237,7 +278,8 @@ def scan(ip_range, scan_run=None):
     return scan_run
 
 
-def sync_discovered_device(element, oui=None, scan_run=None):
+def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=None):
+    scan_started_at = scan_started_at or timezone.now()
     ip = element[1].psrc
     mac = element[1].hwsrc.lower()
     vendor = ManufDA.lookup(oui, mac) if oui else None
@@ -250,8 +292,9 @@ def sync_discovered_device(element, oui=None, scan_run=None):
         was_online = device.online
         device.ip = ip
         device.online = True
-        device.lastseen = timezone.now()
-        device.save(update_fields=["ip", "online", "lastseen"])
+        device.lastseen = scan_started_at
+        device.missed_scans = 0
+        device.save(update_fields=["ip", "online", "lastseen", "missed_scans"])
 
         if not was_online:
             create_event(
@@ -267,7 +310,7 @@ def sync_discovered_device(element, oui=None, scan_run=None):
             ip=ip,
             mac=mac,
             vendor=vendor[1] if vendor else "",
-            lastseen=timezone.now(),
+            lastseen=scan_started_at,
         )
         new_devices = 1
         LOGGER.info(
@@ -288,10 +331,12 @@ def sync_discovered_device(element, oui=None, scan_run=None):
             },
         )
 
-    if settings.PORT_SCAN_ENABLED:
+    if should_scan_ports(device, now=scan_started_at):
         port_stats = sync_device_ports(device, scan_open_ports(ip), scan_run=scan_run)
         ports_opened += port_stats["ports_opened"]
         ports_closed += port_stats["ports_closed"]
+        device.last_port_scan = scan_started_at
+        device.save(update_fields=["last_port_scan"])
 
     return {
         "new_devices": new_devices,
@@ -303,8 +348,13 @@ def sync_discovered_device(element, oui=None, scan_run=None):
 def mark_missing_devices_offline(online_macs, scan_run=None):
     offline_devices = Device.objects.exclude(mac__in=online_macs).filter(online=True)
     for device in offline_devices:
+        device.missed_scans += 1
+        if device.missed_scans < settings.SCAN_OFFLINE_AFTER_MISSES:
+            device.save(update_fields=["missed_scans"])
+            continue
+
         device.online = False
-        device.save(update_fields=["online"])
+        device.save(update_fields=["online", "missed_scans"])
         create_event(
             NetworkEvent.EventType.DEVICE_OFFLINE,
             device=device,

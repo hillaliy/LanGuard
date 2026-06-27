@@ -19,8 +19,30 @@ def configured_channels():
     return channels
 
 
+def notification_event_types():
+    return set(settings.NOTIFICATION_EVENT_TYPES or [])
+
+
+def notification_event_allowed(event):
+    return event.event_type in notification_event_types()
+
+
+def mark_notification_skipped(event, reason):
+    metadata = event.metadata or {}
+    event.notified = True
+    event.metadata = {
+        **metadata,
+        "notification_skipped": reason,
+    }
+    event.save(update_fields=["notified", "metadata"])
+
+
 def notify_event(event):
     if not settings.NOTIFICATIONS_ENABLED:
+        return []
+
+    if not notification_event_allowed(event):
+        mark_notification_skipped(event, "event_type_not_enabled")
         return []
 
     deliveries = []
@@ -53,6 +75,12 @@ def retry_failed_notifications(limit=50, max_attempts=None):
 
     retried = []
     for delivery in deliveries:
+        if not notification_event_allowed(delivery.event):
+            delivery.status = NotificationDelivery.Status.SKIPPED
+            delivery.error = "Event type is not enabled for external notifications."
+            delivery.save(update_fields=["status", "error"])
+            mark_notification_skipped(delivery.event, "event_type_not_enabled")
+            continue
         send_delivery(delivery)
         retried.append(delivery)
 

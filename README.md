@@ -54,7 +54,7 @@ cp .env.example .env
 
 ```env
 IP_RANGE=192.168.1.0/24
-INTERVAL=5
+INTERVAL=10
 TIME_ZONE=UTC
 ```
 
@@ -135,10 +135,15 @@ Scan safety limits are enforced by both the API and scheduler:
 ```env
 SCAN_MAX_HOSTS=256
 SCAN_ALLOW_PUBLIC_RANGES=false
+SCAN_ARP_TIMEOUT=2
+SCAN_ARP_RETRIES=2
+SCAN_OFFLINE_AFTER_MISSES=3
 PORT_SCAN_MAX_PORTS=64
+PORT_SCAN_INTERVAL=30
 ```
 
 By default, LanGuard only scans IPv4 private, loopback, or link-local ranges and rejects large CIDR ranges.
+Devices are only marked offline after repeated missed scans, and port scanning runs less frequently than device discovery by default. Vendor names use Scapy's built-in manufacturer database.
 
 ## API Filtering
 
@@ -175,6 +180,7 @@ If you put LanGuard behind HTTPS, keep secure cookies enabled and set `CSRF_TRUS
 ## Notifications
 
 LanGuard supports Discord and Telegram notifications.
+Events for devices marked as known are still saved in history, but they are not sent to Discord or Telegram.
 
 Discord:
 
@@ -193,10 +199,13 @@ Notification settings:
 
 ```env
 NOTIFICATIONS_ENABLED=true
+NOTIFICATION_EVENT_TYPES=new_device
 NOTIFICATION_TIMEOUT=5
 NOTIFICATION_RETRY_INTERVAL=15
 NOTIFICATION_MAX_ATTEMPTS=3
 ```
+
+By default, external notifications are sent only for newly discovered devices. Other events, such as online/offline changes and port changes, are still saved in the event history.
 
 Manual retry:
 
@@ -210,10 +219,14 @@ python backend/manage.py retry_notifications
 | --- | --- | --- |
 | `ENVIRONMENT` | Runtime mode, use `production` for strict config checks | `development` |
 | `IP_RANGE` | CIDR range to scan | `192.168.1.0/24` |
-| `INTERVAL` | Scan interval in minutes | `5` |
+| `INTERVAL` | Scan interval in minutes | `10` |
 | `PORT_SCAN_ENABLED` | Enable TCP port scanning | `true` |
 | `PORT_SCAN_PORTS` | Comma-separated TCP ports | common LAN/service ports |
 | `PORT_SCAN_TIMEOUT` | Per-port socket timeout | `0.5` |
+| `PORT_SCAN_INTERVAL` | Minutes between port scans for each device | `30` |
+| `SCAN_ARP_TIMEOUT` | ARP discovery timeout in seconds | `2` |
+| `SCAN_ARP_RETRIES` | ARP discovery attempts per scan | `2` |
+| `SCAN_OFFLINE_AFTER_MISSES` | Missed scans before a device is marked offline | `3` |
 | `SCAN_MAX_HOSTS` | Maximum addresses allowed in one scan range | `256` |
 | `SCAN_ALLOW_PUBLIC_RANGES` | Allow scanning public IPv4 ranges | `false` |
 | `PORT_SCAN_MAX_PORTS` | Maximum ports scanned per device | `64` |

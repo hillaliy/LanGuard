@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -10,14 +10,13 @@ import {
   Card,
   Container,
   Divider,
-  Grid,
   Group,
   Image,
   LoadingOverlay,
   Modal,
+  Pagination,
   Paper,
   PasswordInput,
-  ScrollArea,
   Select,
   SimpleGrid,
   Stack,
@@ -60,6 +59,14 @@ const eventTypeOptions = [
   { value: 'device_offline', label: 'Offline events' },
   { value: 'port_opened', label: 'Opened ports' },
   { value: 'port_closed', label: 'Closed ports' },
+];
+
+const devicePageSizeOptions = ['10', '25', '50', '100'];
+
+const deviceStatusOptions = [
+  { value: 'online', label: 'Online' },
+  { value: 'offline', label: 'Offline' },
+  { value: 'new', label: 'New devices' },
 ];
 
 function formatDate(value) {
@@ -209,6 +216,43 @@ function ThemeIconLike({ children, color }) {
   );
 }
 
+function PortSummary({ ports = [] }) {
+  const visiblePorts = ports.slice(0, 2);
+  const hiddenPortCount = Math.max(0, ports.length - visiblePorts.length);
+  const portLabel = ports
+    .map((port) => `${port.protocol || 'tcp'}/${port.port}`)
+    .join(', ');
+
+  if (!ports.length) {
+    return (
+      <Text size="sm" c="dimmed">
+        -
+      </Text>
+    );
+  }
+
+  return (
+    <Tooltip label={portLabel} disabled={!portLabel}>
+      <div className="ports-list">
+        {visiblePorts.map((port) => (
+          <Badge
+            className="port-badge"
+            key={`${port.protocol}-${port.port}`}
+            variant="light"
+          >
+            {port.port}
+          </Badge>
+        ))}
+        {hiddenPortCount > 0 && (
+          <Badge className="port-badge port-overflow-badge" color="gray" variant="light">
+            +{hiddenPortCount}
+          </Badge>
+        )}
+      </div>
+    </Tooltip>
+  );
+}
+
 function DeviceModal({ device, opened, onClose, onSaved }) {
   const [name, setName] = useState('');
   const [known, setKnown] = useState(false);
@@ -289,6 +333,13 @@ function Dashboard({ user, onLogout }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [devices, setDevices] = useState([]);
+  const [devicePagination, setDevicePagination] = useState({
+    count: 0,
+    limit: 10,
+    offset: 0,
+    next_offset: null,
+    previous_offset: null,
+  });
   const [counters, setCounters] = useState({});
   const [scanStatus, setScanStatus] = useState(null);
   const [scanRuns, setScanRuns] = useState([]);
@@ -296,12 +347,42 @@ function Dashboard({ user, onLogout }) {
   const [notifications, setNotifications] = useState([]);
   const [search, setSearch] = useState('');
   const [deviceStatus, setDeviceStatus] = useState('');
+  const [devicePage, setDevicePage] = useState(1);
+  const [devicePageSize, setDevicePageSize] = useState('10');
   const [eventType, setEventType] = useState('');
   const [scanRange, setScanRange] = useState('');
   const [activeDevice, setActiveDevice] = useState(null);
   const [modalOpened, modal] = useDisclosure(false);
+  const [logoutModalOpened, logoutModal] = useDisclosure(false);
+  const tableStateRef = useRef({
+    search: '',
+    deviceStatus: '',
+    eventType: '',
+    deviceLimit: 10,
+    deviceOffset: 0,
+  });
 
   const filteredDevices = useMemo(() => devices, [devices]);
+  const deviceLimit = Number(devicePageSize);
+  const devicePageCount = Math.max(
+    1,
+    Math.ceil((devicePagination.count || 0) / deviceLimit)
+  );
+  const deviceOffset = (devicePage - 1) * deviceLimit;
+  const deviceStart = devicePagination.count === 0 ? 0 : deviceOffset + 1;
+  const deviceEnd = Math.min(deviceOffset + devices.length, devicePagination.count);
+  const selectedDeviceStatus =
+    deviceStatusOptions.find((option) => option.value === deviceStatus) || null;
+
+  useEffect(() => {
+    tableStateRef.current = {
+      search,
+      deviceStatus,
+      eventType,
+      deviceLimit,
+      deviceOffset,
+    };
+  }, [search, deviceStatus, eventType, deviceLimit, deviceOffset]);
 
   async function loadData({ quiet = false } = {}) {
     if (quiet) {
@@ -312,13 +393,21 @@ function Dashboard({ user, onLogout }) {
     setError('');
 
     try {
+      const currentTableState = tableStateRef.current;
       const deviceParams = {
-        search,
-        online: deviceStatus || undefined,
-        limit: 100,
+        search: currentTableState.search,
+        online:
+          currentTableState.deviceStatus === 'online'
+            ? 'true'
+            : currentTableState.deviceStatus === 'offline'
+              ? 'false'
+              : undefined,
+        known: currentTableState.deviceStatus === 'new' ? 'false' : undefined,
+        limit: currentTableState.deviceLimit,
+        offset: currentTableState.deviceOffset,
       };
       const eventParams = {
-        event_type: eventType || undefined,
+        event_type: currentTableState.eventType || undefined,
         limit: 12,
       };
 
@@ -332,8 +421,17 @@ function Dashboard({ user, onLogout }) {
         ]);
 
       setDevices(deviceData.data || []);
+      setDevicePagination(
+        deviceData.pagination || {
+          count: 0,
+          limit: currentTableState.deviceLimit,
+          offset: currentTableState.deviceOffset,
+          next_offset: null,
+          previous_offset: null,
+        }
+      );
       setCounters(deviceData.counters || {});
-      setScanStatus(statusData.data);
+      setScanStatus((previous) => statusData.data || previous);
       setScanRuns(runData.data || []);
       setEvents(eventData.data || []);
       setNotifications(notificationData.data || []);
@@ -358,7 +456,11 @@ function Dashboard({ user, onLogout }) {
   useEffect(() => {
     const timer = window.setTimeout(() => loadData({ quiet: true }), 250);
     return () => window.clearTimeout(timer);
-  }, [search, deviceStatus, eventType]);
+  }, [search, deviceStatus, eventType, devicePage, devicePageSize]);
+
+  useEffect(() => {
+    setDevicePage(1);
+  }, [search, deviceStatus, devicePageSize]);
 
   async function runScan() {
     setRefreshing(true);
@@ -402,7 +504,7 @@ function Dashboard({ user, onLogout }) {
                 </ActionIcon>
               </Tooltip>
               <Tooltip label="Sign out">
-                <ActionIcon variant="light" color="gray" size="lg" onClick={logout}>
+                <ActionIcon variant="light" color="gray" size="lg" onClick={logoutModal.open}>
                   <IconLogout size={19} />
                 </ActionIcon>
               </Tooltip>
@@ -421,54 +523,56 @@ function Dashboard({ user, onLogout }) {
           )}
 
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-            <MetricCard icon={<IconDeviceDesktop size={24} />} label="All devices" value={counters.all_devices} color="indigo" />
+            <MetricCard icon={<IconDeviceDesktop size={24} />} label="Inventory devices" value={counters.all_devices} color="indigo" />
             <MetricCard icon={<IconWifi size={24} />} label="Online" value={counters.online_devices} color="teal" />
             <MetricCard icon={<IconWifiOff size={24} />} label="Offline" value={counters.offline_devices} color="gray" />
-            <MetricCard icon={<IconPlugConnected size={24} />} label="Open ports" value={scanStatus ? scanStatus.ports_opened : counters.open_ports} color="orange" />
+            <MetricCard icon={<IconPlugConnected size={24} />} label="Open ports now" value={counters.open_ports} color="orange" />
           </SimpleGrid>
 
-          <Grid>
-            <Grid.Col span={{ base: 12, lg: 8 }}>
-              <Paper className="content-panel" radius="md">
-                <Stack gap={0}>
-                  <Group justify="space-between" p="md">
-                    <Group>
-                      <IconNetwork size={22} />
-                      <Title order={4}>Devices</Title>
-                    </Group>
-                    <Group>
-                      <Select
-                        w={140}
-                        placeholder="Status"
-                        clearable
-                        data={[
-                          { value: 'true', label: 'Online' },
-                          { value: 'false', label: 'Offline' },
-                        ]}
-                        value={deviceStatus}
-                        onChange={(value) => setDeviceStatus(value || '')}
-                      />
-                      <TextInput
-                        w={{ base: 180, sm: 260 }}
-                        placeholder="Search"
-                        leftSection={<IconSearch size={17} />}
-                        value={search}
-                        onChange={(event) => setSearch(event.currentTarget.value)}
-                      />
-                    </Group>
-                  </Group>
-                  <Divider />
-                  <ScrollArea>
-                    <Table highlightOnHover verticalSpacing="sm" miw={760}>
+          <Paper className="content-panel" radius="md">
+            <Stack gap={0}>
+              <Group justify="space-between" p="md">
+                <Group>
+                  <IconNetwork size={22} />
+                  <Title order={4}>Devices</Title>
+                </Group>
+                <Group>
+                  <Select
+                    w={140}
+                    placeholder="Status"
+                    clearable
+                    data={deviceStatusOptions}
+                    value={deviceStatus}
+                    aria-label={selectedDeviceStatus?.label || 'Status'}
+                    onChange={(value) => setDeviceStatus(value || '')}
+                  />
+                  <Select
+                    w={115}
+                    aria-label="Rows per page"
+                    data={devicePageSizeOptions}
+                    value={devicePageSize}
+                    onChange={(value) => setDevicePageSize(value || '10')}
+                  />
+                  <TextInput
+                    w={{ base: 180, sm: 260 }}
+                    placeholder="Search"
+                    leftSection={<IconSearch size={17} />}
+                    value={search}
+                    onChange={(event) => setSearch(event.currentTarget.value)}
+                  />
+                </Group>
+              </Group>
+              <Divider />
+              <Table className="devices-table" highlightOnHover verticalSpacing="sm">
                       <Table.Thead>
                         <Table.Tr>
-                          <Table.Th>Status</Table.Th>
-                          <Table.Th>Name</Table.Th>
-                          <Table.Th>IP</Table.Th>
-                          <Table.Th>MAC</Table.Th>
-                          <Table.Th>Ports</Table.Th>
-                          <Table.Th>Last seen</Table.Th>
-                          <Table.Th>Known</Table.Th>
+                          <Table.Th className="device-status-cell">Status</Table.Th>
+                          <Table.Th className="device-name-cell">Name</Table.Th>
+                          <Table.Th className="device-ip-cell">IP</Table.Th>
+                          <Table.Th className="device-mac-cell">MAC</Table.Th>
+                          <Table.Th className="device-ports-cell">Ports</Table.Th>
+                          <Table.Th className="device-lastseen-cell">Last seen</Table.Th>
+                          <Table.Th className="device-known-cell">Known</Table.Th>
                         </Table.Tr>
                       </Table.Thead>
                       <Table.Tbody>
@@ -482,82 +586,87 @@ function Dashboard({ user, onLogout }) {
                             }}
                             style={{ cursor: 'pointer' }}
                           >
-                            <Table.Td>
+                            <Table.Td className="device-status-cell">
                               <Group gap="xs">
                                 <span className={`status-dot ${device.online ? 'online' : 'offline'}`} />
                                 {device.online ? 'Online' : 'Offline'}
                               </Group>
                             </Table.Td>
-                            <Table.Td fw={600}>{device.name}</Table.Td>
-                            <Table.Td>{device.ip}</Table.Td>
-                            <Table.Td>{device.mac}</Table.Td>
-                            <Table.Td>
-                              <Group gap={4}>
-                                {(device.open_ports || []).slice(0, 4).map((port) => (
-                                  <Badge key={`${port.protocol}-${port.port}`} variant="light">
-                                    {port.port}
-                                  </Badge>
-                                ))}
-                                {(device.open_ports || []).length > 4 && (
-                                  <Badge color="gray" variant="light">
-                                    +{device.open_ports.length - 4}
-                                  </Badge>
-                                )}
-                              </Group>
+                            <Table.Td className="device-name-cell" fw={600}>
+                              <span className="truncate-cell" title={device.name}>
+                                {device.name}
+                              </span>
                             </Table.Td>
-                            <Table.Td>{formatDate(device.lastseen)}</Table.Td>
-                            <Table.Td>
-                              <Badge color={device.known ? 'teal' : 'yellow'} variant="light">
+                            <Table.Td className="device-ip-cell">{device.ip}</Table.Td>
+                            <Table.Td className="device-mac-cell">{device.mac}</Table.Td>
+                            <Table.Td className="device-ports-cell">
+                              <PortSummary ports={device.open_ports || []} />
+                            </Table.Td>
+                            <Table.Td className="device-lastseen-cell">{formatDate(device.lastseen)}</Table.Td>
+                            <Table.Td className="device-known-cell">
+                              <Badge
+                                className="device-known-badge"
+                                color={device.known ? 'teal' : 'yellow'}
+                                variant="light"
+                              >
                                 {device.known ? 'Known' : 'New'}
                               </Badge>
                             </Table.Td>
                           </Table.Tr>
                         ))}
                       </Table.Tbody>
-                    </Table>
-                  </ScrollArea>
-                </Stack>
-              </Paper>
-            </Grid.Col>
+              </Table>
+              <Divider />
+              <Group justify="space-between" p="md">
+                <Text size="sm" c="dimmed">
+                  Showing {deviceStart}-{deviceEnd} of {devicePagination.count} devices
+                </Text>
+                <Pagination
+                  total={devicePageCount}
+                  value={devicePage}
+                  onChange={setDevicePage}
+                  size="sm"
+                  withEdges
+                />
+              </Group>
+            </Stack>
+          </Paper>
 
-            <Grid.Col span={{ base: 12, lg: 4 }}>
+          <SimpleGrid cols={{ base: 1, md: 2 }}>
+            <Paper className="content-panel" radius="md" p="md">
               <Stack>
-                <Paper className="content-panel" radius="md" p="md">
-                  <Stack>
-                    <Group>
-                      <IconShieldCheck size={22} />
-                      <Title order={4}>Scan control</Title>
-                    </Group>
-                    <Text size="sm" c="dimmed">
-                      Last scan: {scanStatus ? formatDate(scanStatus.finished_at || scanStatus.started_at) : '-'}
-                    </Text>
-                    <TextInput
-                      label="CIDR range"
-                      placeholder="Use backend default"
-                      value={scanRange}
-                      onChange={(event) => setScanRange(event.currentTarget.value)}
-                    />
-                    <Button leftSection={<IconRefresh size={18} />} onClick={runScan} loading={refreshing}>
-                      Run scan
-                    </Button>
-                  </Stack>
-                </Paper>
-
-                <Paper className="content-panel" radius="md" p="md">
-                  <Group mb="sm">
-                    <IconClock size={22} />
-                    <Title order={4}>Latest scan</Title>
-                  </Group>
-                  <SimpleGrid cols={2}>
-                    <NumberReadout label="Seen" value={scanStatus?.devices_seen} />
-                    <NumberReadout label="New" value={scanStatus?.new_devices} />
-                    <NumberReadout label="Opened" value={scanStatus?.ports_opened} />
-                    <NumberReadout label="Closed" value={scanStatus?.ports_closed} />
-                  </SimpleGrid>
-                </Paper>
+                <Group>
+                  <IconShieldCheck size={22} />
+                  <Title order={4}>Scan control</Title>
+                </Group>
+                <Text size="sm" c="dimmed">
+                  Last scan: {scanStatus ? formatDate(scanStatus.finished_at || scanStatus.started_at) : '-'}
+                </Text>
+                <TextInput
+                  label="CIDR range"
+                  placeholder="Use backend default"
+                  value={scanRange}
+                  onChange={(event) => setScanRange(event.currentTarget.value)}
+                />
+                <Button leftSection={<IconRefresh size={18} />} onClick={runScan} loading={refreshing}>
+                  Run scan
+                </Button>
               </Stack>
-            </Grid.Col>
-          </Grid>
+            </Paper>
+
+            <Paper className="content-panel" radius="md" p="md">
+              <Group mb="sm">
+                <IconClock size={22} />
+                <Title order={4}>Latest scan</Title>
+              </Group>
+              <SimpleGrid cols={2}>
+                <NumberReadout label="Seen" value={scanStatus?.devices_seen} />
+                <NumberReadout label="New" value={scanStatus?.new_devices} />
+                <NumberReadout label="Opened" value={scanStatus?.ports_opened} />
+                <NumberReadout label="Closed" value={scanStatus?.ports_closed} />
+              </SimpleGrid>
+            </Paper>
+          </SimpleGrid>
 
           <Tabs defaultValue="events">
             <Tabs.List>
@@ -656,6 +765,19 @@ function Dashboard({ user, onLogout }) {
         onClose={modal.close}
         onSaved={() => loadData({ quiet: true })}
       />
+      <Modal opened={logoutModalOpened} onClose={logoutModal.close} title="Log off" centered>
+        <Stack>
+          <Text>Are you sure you want to log off?</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={logoutModal.close}>
+              Cancel
+            </Button>
+            <Button color="red" leftSection={<IconLogout size={18} />} onClick={logout}>
+              Log off
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </main>
   );
 }

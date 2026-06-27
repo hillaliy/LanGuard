@@ -73,6 +73,82 @@ textarea {
   background: #f8faff;
 }
 
+.devices-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.devices-table th,
+.devices-table td {
+  vertical-align: middle;
+}
+
+.device-status-cell {
+  width: 9%;
+}
+
+.device-name-cell {
+  width: 22%;
+}
+
+.device-ip-cell {
+  width: 13%;
+  white-space: nowrap;
+}
+
+.device-mac-cell {
+  width: 16%;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.device-ports-cell {
+  width: 15%;
+}
+
+.device-lastseen-cell {
+  width: 15%;
+  white-space: nowrap;
+}
+
+.device-known-cell {
+  width: 10%;
+  white-space: nowrap;
+}
+
+.device-known-badge {
+  min-width: 76px;
+  justify-content: center;
+}
+
+.ports-list {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.port-badge {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  justify-content: center;
+  min-width: 42px;
+}
+
+.port-overflow-badge {
+  min-width: 40px;
+}
+
+.truncate-cell {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-dot {
   width: 10px;
   height: 10px;
