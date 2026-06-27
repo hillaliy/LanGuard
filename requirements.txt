@@ -1,7 +1,8 @@
+APScheduler==3.11.2
 Django==6.0.6
 djangorestframework==3.17.1
 django-cors-headers==4.9.0
 gunicorn==26.0.0
-onepush==1.9.0
 python-dotenv==1.2.2
+requests==2.34.2
 scapy==2.7.0

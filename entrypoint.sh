@@ -1,15 +1,16 @@
 #!/bin/sh
+set -e
 
 python manage.py migrate --fake-initial --no-input
 python manage.py collectstatic --no-input
-python manage.py createcachetable
+python manage.py createcachetable || true
 if [ "$DJANGO_SUPERUSER_USERNAME" ]
 then
-    python manage.py createsuperuser \
-        --noinput \
-        --username $DJANGO_SUPERUSER_USERNAME \
-        --email $DJANGO_SUPERUSER_USERNAME
+    python manage.py ensure_superuser
 fi
-$@
 
-gunicorn backend.wsgi:application --bind 0.0.0.0:8000
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+fi
+
+exec gunicorn backend.wsgi:application --bind 0.0.0.0:8000

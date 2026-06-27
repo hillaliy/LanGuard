@@ -1,16 +1,31 @@
-version: '3.9'
-
 services:
   backend:
     volumes:
       - static:/static
+      - database:/data
     env_file:
       - .env
+    environment:
+      DB_PATH: /data/db.sqlite3
     build:
       context: .
     ports:
       - '8000:8000'
     privileged: true
+  scanner:
+    volumes:
+      - static:/static
+      - database:/data
+    env_file:
+      - .env
+    environment:
+      DB_PATH: /data/db.sqlite3
+    build:
+      context: .
+    command: ["python", "manage.py", "run_scheduler"]
+    privileged: true
+    depends_on:
+      - backend
   frontend:
     build:
       context: ./frontend
@@ -30,4 +45,5 @@ services:
 
 volumes:
   static:
+  database:
   frontend:
