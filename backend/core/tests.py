@@ -16,6 +16,7 @@ from .notifications import notify_event, retry_failed_notifications
 from .scan import (
     create_event,
     discover_devices,
+    guess_device_identity,
     mark_missing_devices_offline,
     normalize_scan_ports,
     sync_discovered_device,
@@ -194,6 +195,59 @@ class ScanStabilityTests(TestCase):
         scan_open_ports.assert_called_once_with(device.ip)
         device.refresh_from_db()
         self.assertIsNotNone(device.last_port_scan)
+
+    def test_guess_device_identity_uses_hostname_before_vendor(self):
+        identity = guess_device_identity(
+            hostname="apple-tv-livingroom",
+            vendor="Apple, Inc.",
+            mac="aa:bb:cc:dd:ee:ff",
+        )
+
+        self.assertEqual(identity["name"], "apple-tv-livingroom")
+        self.assertEqual(identity["icon"], "streamer")
+
+    def test_guess_device_identity_uses_vendor_fallback_name(self):
+        identity = guess_device_identity(
+            hostname="Device",
+            vendor="TP-Link Technologies Co., Ltd.",
+            mac="aa:bb:cc:dd:ee:ff",
+        )
+
+        self.assertEqual(identity["name"], "TP-Link device EEFF")
+        self.assertEqual(identity["icon"], "router")
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname")
+    def test_new_discovered_device_gets_guessed_name_and_icon(self, get_hostname):
+        get_hostname.return_value = "livingroom-camera"
+
+        sync_discovered_device(
+            self.scan_element("192.168.1.25", "aa:bb:cc:dd:ee:ff"),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device = Device.objects.get(mac="aa:bb:cc:dd:ee:ff")
+        self.assertEqual(device.name, "livingroom-camera")
+        self.assertEqual(device.icon, "security-camera")
+
+    def test_guess_device_identity_detects_shutter(self):
+        identity = guess_device_identity(
+            hostname="bedroom-shutter",
+            vendor="Aqara",
+            mac="aa:bb:cc:dd:ee:ff",
+        )
+
+        self.assertEqual(identity["icon"], "shutter")
+
+    def test_guess_device_identity_detects_air_conditioner(self):
+        identity = guess_device_identity(
+            hostname="bedroom-air-conditioner",
+            vendor="GD Midea Air-Conditioning Equipment Co.,Ltd.",
+            mac="aa:bb:cc:dd:ee:ff",
+        )
+
+        self.assertEqual(identity["icon"], "air-conditioner")
 
 
 class NotificationTests(TestCase):
@@ -475,6 +529,46 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["pagination"]["limit"], 2)
         self.assertEqual(response.data["pagination"]["offset"], 0)
         self.assertEqual(response.data["pagination"]["next_offset"], 2)
+
+    def test_device_endpoint_sorts_by_name(self):
+        Device.objects.create(
+            name="Access point",
+            ip="192.168.1.30",
+            mac="bb:bb:bb:bb:bb:bb",
+        )
+        Device.objects.create(
+            name="Camera",
+            ip="192.168.1.40",
+            mac="cc:cc:cc:cc:cc:cc",
+        )
+
+        response = self.client.get("/api/v1/device/", {"ordering": "name"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [device["name"] for device in response.data["data"]],
+            ["Access point", "Camera", "Laptop"],
+        )
+
+    def test_device_endpoint_sorts_by_ip_naturally(self):
+        Device.objects.create(
+            name="Low IP",
+            ip="192.168.1.2",
+            mac="bb:bb:bb:bb:bb:bb",
+        )
+        Device.objects.create(
+            name="High IP",
+            ip="192.168.1.100",
+            mac="cc:cc:cc:cc:cc:cc",
+        )
+
+        response = self.client.get("/api/v1/device/", {"ordering": "ip"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [device["ip"] for device in response.data["data"]],
+            ["192.168.1.2", "192.168.1.20", "192.168.1.100"],
+        )
 
     def test_device_endpoint_counters_include_current_open_ports(self):
         DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
