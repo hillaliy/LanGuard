@@ -66,11 +66,24 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework.authtoken",
     "corsheaders",
+    "drf_spectacular",
 ]
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "LanGuard API",
+    "DESCRIPTION": (
+        "API documentation for LanGuard device discovery, port scanning, "
+        "scan history, network events, and notification workflows."
+    ),
+    "VERSION": "v1",
+    "SCHEMA_PATH_PREFIX": "/api/v1",
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
+}
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -84,7 +97,7 @@ ROOT_URLCONF = "backend.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -119,6 +132,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 # Password validation
@@ -156,7 +170,15 @@ USE_TZ = False
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = "/static/"
-STATIC_ROOT = "/static/"
+STATIC_ROOT = os.getenv("STATIC_ROOT", BASE_DIR / "staticfiles")
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
 
 MANUF_FILE = os.path.join(BASE_DIR, "manuf")
 

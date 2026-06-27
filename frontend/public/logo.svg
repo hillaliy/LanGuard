@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">LanGuard logo</title>
+  <desc id="desc">A protective shield containing three connected computer screens.</desc>
+  <defs>
+    <linearGradient id="shieldEdge" x1="126" y1="70" x2="877" y2="934" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7890e6"/>
+      <stop offset=".5" stop-color="#546fc8"/>
+      <stop offset="1" stop-color="#344ea9"/>
+    </linearGradient>
+    <linearGradient id="shieldCore" x1="266" y1="187" x2="755" y2="852" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#596779"/>
+      <stop offset="1" stop-color="#3f5060"/>
+    </linearGradient>
+    <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#142238" flood-opacity=".22"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" rx="128" fill="#eef2f7"/>
+
+  <g filter="url(#softShadow)">
+    <path fill="url(#shieldEdge)" d="M512 32 978 162v271c0 253-148 455-466 559C194 888 46 686 46 433V162L512 32Z"/>
+    <path fill="#f4f6f9" d="M512 66 940 185v249c0 231-130 415-428 516C214 849 84 665 84 434V185L512 66Z"/>
+    <path fill="url(#shieldEdge)" d="M512 126 872 232v196c0 194-97 337-360 430C249 765 152 622 152 428V232l360-106Z"/>
+    <path fill="url(#shieldCore)" d="M512 154 838 251v178c0 177-85 304-326 391-241-87-326-214-326-391V251l326-97Z"/>
+  </g>
+
+  <g fill="none" stroke="#6578d2" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M316 497c-7-28-4-57 9-83 32-66 117-93 187-93s155 27 187 93c13 26 16 55 9 83"/>
+    <path d="M376 574c81 43 191 43 272 0"/>
+  </g>
+
+  <g fill="#05070b">
+    <rect x="374" y="185" width="276" height="198" rx="31"/>
+    <rect x="200" y="484" width="276" height="198" rx="31"/>
+    <rect x="548" y="484" width="276" height="198" rx="31"/>
+  </g>
+
+  <g fill="#ffffff">
+    <rect x="400" y="217" width="224" height="114" rx="9"/>
+    <rect x="226" y="516" width="224" height="114" rx="9"/>
+    <rect x="574" y="516" width="224" height="114" rx="9"/>
+  </g>
+
+  <g fill="#05070b">
+    <circle cx="512" cy="347" r="13"/>
+    <path d="M398 337h63a12 12 0 0 1 0 24h-51a12 12 0 0 1-12-12v-12Zm165 0h63v12a12 12 0 0 1-12 12h-51a12 12 0 0 1 0-24ZM226 638h224v13a14 14 0 0 1-14 14H240a14 14 0 0 1-14-14v-13Zm348 0h224v13a14 14 0 0 1-14 14H588a14 14 0 0 1-14-14v-13Z"/>
+    <path d="M493 383h38l9 47h-56l9-47Zm-174 299h38l9 47h-56l9-47Zm348 0h38l9 47h-56l9-47Z"/>
+    <rect x="438" y="430" width="148" height="24" rx="12"/>
+    <rect x="254" y="729" width="166" height="24" rx="12"/>
+    <rect x="604" y="729" width="166" height="24" rx="12"/>
+  </g>
+</svg>
