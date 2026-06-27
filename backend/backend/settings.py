@@ -16,6 +16,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def env_list(name, default=None, cast=str):
+    value = os.getenv(name)
+    if not value:
+        return default or []
+    return [cast(item.strip()) for item in value.split(",") if item.strip()]
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -24,18 +38,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY", "unsafe-dev-secret-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG")
+DEBUG = env_bool("DEBUG", default=False)
 
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
-CORS_ALLOWED_ORIGINS = [
-    "http://127.0.0.1:3000",
-    "http://localhost:3000",
-    "http://0.0.0.0:3000",
-]
+CORS_ALLOWED_ORIGINS = env_list(
+    "CORS_ALLOWED_ORIGINS",
+    default=["http://127.0.0.1:3000", "http://localhost:3000"],
+)
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -97,9 +110,8 @@ DATABASES = {
     }
 }
 
-## User model
+# User model and authentication
 AUTH_USER_MODEL = "auth.User"
-
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.TokenAuthentication",
@@ -133,7 +145,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = os.getenv("TIME_ZONE")
+TIME_ZONE = os.getenv("TIME_ZONE", "UTC")
 
 USE_I18N = True
 
@@ -143,7 +155,7 @@ USE_TZ = False
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATIC_ROOT = "/static/"
 
 MANUF_FILE = os.path.join(BASE_DIR, "manuf")
@@ -198,8 +210,32 @@ LOGGING = {
 
 
 # Scan settings
-IP_RANGE = os.getenv("IP_RANGE")
-INTERVAL = os.getenv("INTERVAL")
+IP_RANGE = os.getenv("IP_RANGE", "192.168.1.0/24")
+INTERVAL = int(os.getenv("INTERVAL", "5"))
+PORT_SCAN_ENABLED = env_bool("PORT_SCAN_ENABLED", default=True)
+PORT_SCAN_PORTS = env_list(
+    "PORT_SCAN_PORTS",
+    default=[
+        21,
+        22,
+        23,
+        25,
+        53,
+        80,
+        110,
+        139,
+        143,
+        443,
+        445,
+        554,
+        631,
+        8080,
+        8443,
+        9100,
+    ],
+    cast=int,
+)
+PORT_SCAN_TIMEOUT = float(os.getenv("PORT_SCAN_TIMEOUT", "0.5"))
 
 # Notifications
 # Discord

@@ -1,4 +1,4 @@
-version: '3.7'
+version: '3.9'
 
 services:
   backend:
@@ -7,7 +7,7 @@ services:
     env_file:
       - .env
     build:
-      context: ./backend
+      context: .
     ports:
       - '8000:8000'
     privileged: true
