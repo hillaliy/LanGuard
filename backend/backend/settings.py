@@ -106,7 +106,7 @@ WSGI_APPLICATION = "backend.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "NAME": os.getenv("DB_PATH", BASE_DIR / "db.sqlite3"),
     }
 }
 
@@ -238,8 +238,10 @@ PORT_SCAN_PORTS = env_list(
 PORT_SCAN_TIMEOUT = float(os.getenv("PORT_SCAN_TIMEOUT", "0.5"))
 
 # Notifications
-# Discord
+NOTIFICATIONS_ENABLED = env_bool("NOTIFICATIONS_ENABLED", default=True)
+NOTIFICATION_TIMEOUT = float(os.getenv("NOTIFICATION_TIMEOUT", "5"))
+NOTIFICATION_RETRY_INTERVAL = int(os.getenv("NOTIFICATION_RETRY_INTERVAL", "15"))
+NOTIFICATION_MAX_ATTEMPTS = int(os.getenv("NOTIFICATION_MAX_ATTEMPTS", "3"))
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
-# Telegram
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_USERID = os.getenv("TELEGRAM_USERID")

@@ -1,29 +1,50 @@
-# dependencies
+# Environment
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Django runtime files
+*.log
+*.sqlite3
+db.sqlite3
+/static/
+/media/
+
+# Frontend dependencies and build output
 frontend/node_modules/
-/.pnp
-.pnp.js
+frontend/build/
+frontend/dist/
+frontend/.cache/
+node_modules/
+build/
+dist/
+coverage/
 
-# testing
-/coverage
-
-# production
-/build
-
-# misc
-**/.DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-/.env
+# Package manager logs
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
-# Django
-**/.venv
-**/*.log
-**/migrations
-**/db.sqlite3
-/backend/**/__pycache__
-**.DS_Store
+# OS and editor files
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+
+# Generated Docker/runtime files
+*.pid

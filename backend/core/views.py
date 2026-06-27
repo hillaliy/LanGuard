@@ -12,8 +12,14 @@ from django.shortcuts import get_object_or_404
 
 import logging
 
-from .serializers import UserSerializer, DeviceSerializer
-from .models import Device
+from .serializers import (
+    DeviceSerializer,
+    NetworkEventSerializer,
+    NotificationDeliverySerializer,
+    ScanRunSerializer,
+    UserSerializer,
+)
+from .models import Device, DevicePort, NetworkEvent, NotificationDelivery, ScanRun
 from .scan import scan
 
 LOGGER = logging.getLogger(__name__)
@@ -180,10 +186,66 @@ def device(request):
 @api_view(["POST"])
 def scan_now(request):
     ip_range = request.data.get("ip_range") or settings.IP_RANGE
-    scan(ip_range)
+    scan_run = scan(ip_range)
     return Response(
-        {"status": "OK", "info": f"Scan completed for {ip_range}"},
+        {
+            "status": "OK",
+            "info": f"Scan completed for {ip_range}",
+            "data": ScanRunSerializer(scan_run).data,
+        },
         status=status.HTTP_202_ACCEPTED,
+    )
+
+
+@api_view(["GET"])
+def scan_runs(request):
+    limit = int(request.query_params.get("limit", 25))
+    runs = ScanRun.objects.all()[: min(limit, 100)]
+    return Response(
+        {"data": ScanRunSerializer(runs, many=True).data},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def scan_status(request):
+    latest_scan = ScanRun.objects.first()
+    return Response(
+        {
+            "data": ScanRunSerializer(latest_scan).data if latest_scan else None,
+            "counters": {
+                "all_devices": Device.objects.count(),
+                "online_devices": Device.objects.filter(online=True).count(),
+                "offline_devices": Device.objects.filter(online=False).count(),
+                "open_ports": DevicePort.objects.filter(open=True).count(),
+                "unnotified_events": NetworkEvent.objects.filter(notified=False).count(),
+            },
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def events(request):
+    limit = int(request.query_params.get("limit", 50))
+    event_type = request.query_params.get("event_type")
+    queryset = NetworkEvent.objects.all()
+    if event_type:
+        queryset = queryset.filter(event_type=event_type)
+    queryset = queryset[: min(limit, 200)]
+    return Response(
+        {"data": NetworkEventSerializer(queryset, many=True).data},
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["GET"])
+def notifications(request):
+    limit = int(request.query_params.get("limit", 50))
+    queryset = NotificationDelivery.objects.all()[: min(limit, 200)]
+    return Response(
+        {"data": NotificationDeliverySerializer(queryset, many=True).data},
+        status=status.HTTP_200_OK,
     )
 
 

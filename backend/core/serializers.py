@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Device, DevicePort
+from .models import Device, DevicePort, NetworkEvent, NotificationDelivery, ScanRun
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -41,3 +41,35 @@ class DeviceSerializer(serializers.ModelSerializer):
 
     def get_open_ports(self, obj):
         return DevicePortSerializer(obj.ports.filter(open=True), many=True).data
+
+
+class ScanRunSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ScanRun
+        fields = "__all__"
+
+
+class NetworkEventSerializer(serializers.ModelSerializer):
+    event_type_display = serializers.CharField(
+        source="get_event_type_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = NetworkEvent
+        fields = "__all__"
+
+
+class NotificationDeliverySerializer(serializers.ModelSerializer):
+    channel_display = serializers.CharField(
+        source="get_channel_display",
+        read_only=True,
+    )
+    status_display = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = NotificationDelivery
+        fields = "__all__"
