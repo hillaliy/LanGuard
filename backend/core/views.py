@@ -6,10 +6,12 @@ from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
+from rest_framework.exceptions import ValidationError
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.http import JsonResponse
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 
 import logging
@@ -22,7 +24,13 @@ from .serializers import (
     UserSerializer,
 )
 from .models import Device, DevicePort, NetworkEvent, NotificationDelivery, ScanRun
-from .scan import scan
+from .api import (
+    paginated_response,
+    parse_bool_param,
+    parse_datetime_param,
+    parse_int_param,
+)
+from .scan import scan, validate_ip_range
 
 LOGGER = logging.getLogger(__name__)
 
@@ -130,6 +138,7 @@ class UserLogoutView(APIView):
     responses=OpenApiTypes.OBJECT,
 )
 @api_view(["GET", "PUT", "DELETE"])
+@permission_classes([permissions.IsAuthenticated])
 def device(request):
     all_devices = Device.objects.all().count()
     online_devices = Device.objects.filter(online=True).count()
@@ -146,12 +155,48 @@ def device(request):
     if request.method == "GET":
         id_ = request.query_params.get("id", None)
         if not id_:
-            devices = Device.objects.all()
+            devices = Device.objects.prefetch_related("ports").all()
+            online = parse_bool_param(request.query_params, "online")
+            known = parse_bool_param(request.query_params, "known")
+            search = request.query_params.get("search")
+            open_port = request.query_params.get("open_port")
+
+            if online is not None:
+                devices = devices.filter(online=online)
+            if known is not None:
+                devices = devices.filter(known=known)
+            if search:
+                devices = devices.filter(
+                    Q(name__icontains=search)
+                    | Q(ip__icontains=search)
+                    | Q(mac__icontains=search)
+                )
+            if open_port:
+                port = parse_int_param(
+                    request.query_params,
+                    "open_port",
+                    default=open_port,
+                    minimum=1,
+                    maximum=65535,
+                )
+                devices = devices.filter(ports__port=port, ports__open=True).distinct()
+
+            limit = parse_int_param(request.query_params, "limit", 50, 1, 200)
+            offset = parse_int_param(request.query_params, "offset", 0, 0)
+            total = devices.count()
+            devices = devices[offset : offset + limit]
             serializer = DeviceSerializer(devices, many=True)
             return Response(
                 {
                     "data": serializer.data,
                     "counters": counters,
+                    "pagination": {
+                        "count": total,
+                        "limit": limit,
+                        "offset": offset,
+                        "next_offset": offset + limit if offset + limit < total else None,
+                        "previous_offset": max(offset - limit, 0) if offset > 0 else None,
+                    },
                 },
                 status=status.HTTP_200_OK,
             )
@@ -231,8 +276,14 @@ def device(request):
     responses=OpenApiTypes.OBJECT,
 )
 @api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
 def scan_now(request):
     ip_range = request.data.get("ip_range") or settings.IP_RANGE
+    try:
+        ip_range = validate_ip_range(ip_range)
+    except ValueError as exc:
+        raise ValidationError({"ip_range": str(exc)}) from exc
+
     scan_run = scan(ip_range)
     return Response(
         {
@@ -246,17 +297,37 @@ def scan_now(request):
 
 @extend_schema(responses=ScanRunSerializer(many=True))
 @api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
 def scan_runs(request):
-    limit = int(request.query_params.get("limit", 25))
-    runs = ScanRun.objects.all()[: min(limit, 100)]
-    return Response(
-        {"data": ScanRunSerializer(runs, many=True).data},
-        status=status.HTTP_200_OK,
+    runs = ScanRun.objects.all()
+    scan_status = request.query_params.get("status")
+    ip_range = request.query_params.get("ip_range")
+    started_after = parse_datetime_param(request.query_params, "started_after")
+    started_before = parse_datetime_param(request.query_params, "started_before")
+
+    if scan_status:
+        if scan_status not in ScanRun.Status.values:
+            raise ValidationError({"status": "Invalid scan status."})
+        runs = runs.filter(status=scan_status)
+    if ip_range:
+        runs = runs.filter(ip_range=ip_range)
+    if started_after:
+        runs = runs.filter(started_at__gte=started_after)
+    if started_before:
+        runs = runs.filter(started_at__lte=started_before)
+
+    return paginated_response(
+        request,
+        runs,
+        ScanRunSerializer,
+        default_limit=25,
+        max_limit=100,
     )
 
 
 @extend_schema(responses=OpenApiTypes.OBJECT)
 @api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
 def scan_status(request):
     latest_scan = ScanRun.objects.first()
     return Response(
@@ -276,32 +347,84 @@ def scan_status(request):
 
 @extend_schema(responses=NetworkEventSerializer(many=True))
 @api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
 def events(request):
-    limit = int(request.query_params.get("limit", 50))
     event_type = request.query_params.get("event_type")
-    queryset = NetworkEvent.objects.all()
+    notified = parse_bool_param(request.query_params, "notified")
+    created_after = parse_datetime_param(request.query_params, "created_after")
+    created_before = parse_datetime_param(request.query_params, "created_before")
+    device_id = request.query_params.get("device")
+    scan_run_id = request.query_params.get("scan_run")
+
+    queryset = NetworkEvent.objects.select_related("device", "device_port", "scan_run")
     if event_type:
+        if event_type not in NetworkEvent.EventType.values:
+            raise ValidationError({"event_type": "Invalid event type."})
         queryset = queryset.filter(event_type=event_type)
-    queryset = queryset[: min(limit, 200)]
-    return Response(
-        {"data": NetworkEventSerializer(queryset, many=True).data},
-        status=status.HTTP_200_OK,
+    if notified is not None:
+        queryset = queryset.filter(notified=notified)
+    if created_after:
+        queryset = queryset.filter(created_at__gte=created_after)
+    if created_before:
+        queryset = queryset.filter(created_at__lte=created_before)
+    if device_id:
+        queryset = queryset.filter(
+            device_id=parse_int_param(request.query_params, "device", 0, 1)
+        )
+    if scan_run_id:
+        queryset = queryset.filter(
+            scan_run_id=parse_int_param(request.query_params, "scan_run", 0, 1)
+        )
+
+    return paginated_response(
+        request,
+        queryset,
+        NetworkEventSerializer,
+        default_limit=50,
+        max_limit=200,
     )
 
 
 @extend_schema(responses=NotificationDeliverySerializer(many=True))
 @api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
 def notifications(request):
-    limit = int(request.query_params.get("limit", 50))
-    queryset = NotificationDelivery.objects.all()[: min(limit, 200)]
-    return Response(
-        {"data": NotificationDeliverySerializer(queryset, many=True).data},
-        status=status.HTTP_200_OK,
+    channel = request.query_params.get("channel")
+    delivery_status = request.query_params.get("status")
+    event_id = request.query_params.get("event")
+    created_after = parse_datetime_param(request.query_params, "created_after")
+    created_before = parse_datetime_param(request.query_params, "created_before")
+
+    queryset = NotificationDelivery.objects.select_related("event")
+    if channel:
+        if channel not in NotificationDelivery.Channel.values:
+            raise ValidationError({"channel": "Invalid notification channel."})
+        queryset = queryset.filter(channel=channel)
+    if delivery_status:
+        if delivery_status not in NotificationDelivery.Status.values:
+            raise ValidationError({"status": "Invalid notification status."})
+        queryset = queryset.filter(status=delivery_status)
+    if event_id:
+        queryset = queryset.filter(
+            event_id=parse_int_param(request.query_params, "event", 0, 1)
+        )
+    if created_after:
+        queryset = queryset.filter(created_at__gte=created_after)
+    if created_before:
+        queryset = queryset.filter(created_at__lte=created_before)
+
+    return paginated_response(
+        request,
+        queryset,
+        NotificationDeliverySerializer,
+        default_limit=50,
+        max_limit=200,
     )
 
 
 @extend_schema(responses=DeviceSerializer(many=True))
 @api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
 def export_db(request):
     data = DeviceSerializer(Device.objects.all(), many=True).data
     return JsonResponse(data, safe=False)
@@ -312,6 +435,7 @@ def export_db(request):
     responses=OpenApiTypes.OBJECT,
 )
 @api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
 def import_db(request):
     data = request.data
     serializer = DeviceSerializer(data=data, many=True)

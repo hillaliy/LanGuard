@@ -12,9 +12,17 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+UNSAFE_SECRET_KEYS = {
+    "",
+    "change-me",
+    "unsafe-dev-secret-key",
+}
 
 
 def env_bool(name, default=False):
@@ -30,8 +38,35 @@ def env_list(name, default=None, cast=str):
         return default or []
     return [cast(item.strip()) for item in value.split(",") if item.strip()]
 
+
+def validate_production_settings(environment, secret_key, debug, allowed_hosts):
+    if environment != "production":
+        return
+
+    errors = []
+    if secret_key in UNSAFE_SECRET_KEYS or len(secret_key) < 32:
+        errors.append("SECRET_KEY must be set to a strong unique value.")
+    if debug:
+        errors.append("DEBUG must be false.")
+    if not allowed_hosts:
+        errors.append("ALLOWED_HOSTS must include at least one host.")
+    if "*" in allowed_hosts:
+        errors.append("ALLOWED_HOSTS must not contain '*'.")
+
+    localhost_hosts = {"localhost", "127.0.0.1", "[::1]"}
+    if set(allowed_hosts).issubset(localhost_hosts):
+        errors.append("ALLOWED_HOSTS must include the LAN IP, hostname, or domain.")
+
+    if errors:
+        raise ImproperlyConfigured(
+            "Invalid production configuration: " + " ".join(errors)
+        )
+
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
 
 
 # Quick-start development settings - unsuitable for production
@@ -51,6 +86,9 @@ CORS_ALLOWED_ORIGINS = env_list(
 )
 
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
+
+validate_production_settings(ENVIRONMENT, SECRET_KEY, DEBUG, ALLOWED_HOSTS)
 
 
 # Application definition
@@ -91,6 +129,25 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = os.getenv("SECURE_REFERRER_POLICY", "same-origin")
+SECURE_CROSS_ORIGIN_OPENER_POLICY = os.getenv(
+    "SECURE_CROSS_ORIGIN_OPENER_POLICY",
+    "same-origin",
+)
+SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", default=False)
+SESSION_COOKIE_SECURE = env_bool(
+    "SESSION_COOKIE_SECURE",
+    default=ENVIRONMENT == "production",
+)
+CSRF_COOKIE_SECURE = env_bool(
+    "CSRF_COOKIE_SECURE",
+    default=ENVIRONMENT == "production",
+)
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False
+X_FRAME_OPTIONS = "DENY"
 
 ROOT_URLCONF = "backend.urls"
 
@@ -258,6 +315,9 @@ PORT_SCAN_PORTS = env_list(
     cast=int,
 )
 PORT_SCAN_TIMEOUT = float(os.getenv("PORT_SCAN_TIMEOUT", "0.5"))
+SCAN_MAX_HOSTS = int(os.getenv("SCAN_MAX_HOSTS", "256"))
+SCAN_ALLOW_PUBLIC_RANGES = env_bool("SCAN_ALLOW_PUBLIC_RANGES", default=False)
+PORT_SCAN_MAX_PORTS = int(os.getenv("PORT_SCAN_MAX_PORTS", "64"))
 
 # Notifications
 NOTIFICATIONS_ENABLED = env_bool("NOTIFICATIONS_ENABLED", default=True)
