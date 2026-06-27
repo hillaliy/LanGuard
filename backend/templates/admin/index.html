@@ -1,0 +1,21 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+<div class="dashboard-modules">
+  <div class="module">
+    <h2>API Docs</h2>
+    <ul>
+      <li>
+        <a href="{% url 'api-schema-swagger-ui' %}" target="_blank">Swagger UI</a>
+      </li>
+      <li>
+        <a href="{% url 'api-schema-redoc' %}" target="_blank">ReDoc</a>
+      </li>
+      <li>
+        <a href="{% url 'api-schema' %}" target="_blank">Download OpenAPI schema</a>
+      </li>
+    </ul>
+  </div>
+</div>
+{{ block.super }}
+{% endblock %}

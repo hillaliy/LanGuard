@@ -13,4 +13,4 @@ if [ "$#" -gt 0 ]; then
     exec "$@"
 fi
 
-exec gunicorn backend.wsgi:application --bind 0.0.0.0:8000
+exec granian --interface wsgi --host 0.0.0.0 --port 8000 backend.wsgi:application

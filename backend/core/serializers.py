@@ -1,3 +1,4 @@
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from django.contrib.auth.models import User
 from .models import Device, DevicePort, NetworkEvent, NotificationDelivery, ScanRun
@@ -39,6 +40,7 @@ class DeviceSerializer(serializers.ModelSerializer):
         model = Device
         fields = "__all__"
 
+    @extend_schema_field(DevicePortSerializer(many=True))
     def get_open_ports(self, obj):
         return DevicePortSerializer(obj.ports.filter(open=True), many=True).data
 

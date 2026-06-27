@@ -32,6 +32,10 @@ jobs:
         working-directory: backend
         run: python manage.py makemigrations --check --dry-run
 
+      - name: Validate API schema
+        working-directory: backend
+        run: python manage.py spectacular --validate --file /tmp/languard-schema.yaml
+
       - name: Run tests
         working-directory: backend
         run: python manage.py test core

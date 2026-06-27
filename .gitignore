@@ -22,6 +22,7 @@ htmlcov/
 *.sqlite3
 db.sqlite3
 /static/
+/backend/staticfiles/
 /media/
 
 # Frontend dependencies and build output

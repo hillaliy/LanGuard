@@ -7,6 +7,7 @@ services:
       - .env
     environment:
       DB_PATH: /data/db.sqlite3
+      STATIC_ROOT: /static
     build:
       context: .
     ports:
@@ -20,6 +21,7 @@ services:
       - .env
     environment:
       DB_PATH: /data/db.sqlite3
+      STATIC_ROOT: /static
     build:
       context: .
     command: ["python", "manage.py", "run_scheduler"]
@@ -31,12 +33,11 @@ services:
       context: ./frontend
     volumes:
       - frontend:/app/build
-  nginx:
+  caddy:
     build:
-      context: ./nginx
+      context: ./caddy
     volumes:
-      - static:/static
-      - frontend:/var/www/frontend
+      - frontend:/srv/frontend:ro
     ports:
       - '80:80'
     depends_on:

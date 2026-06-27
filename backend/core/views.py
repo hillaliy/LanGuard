@@ -1,4 +1,6 @@
+from drf_spectacular.utils import OpenApiTypes, extend_schema, inline_serializer
 from rest_framework import status, generics, permissions
+from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
@@ -47,6 +49,22 @@ class UserRegistrationView(generics.CreateAPIView):
 
 @permission_classes([AllowAny])
 class UserLoginView(APIView):
+    @extend_schema(
+        request=inline_serializer(
+            name="UserLoginRequest",
+            fields={
+                "username": serializers.CharField(),
+                "password": serializers.CharField(write_only=True),
+            },
+        ),
+        responses=inline_serializer(
+            name="AuthTokenResponse",
+            fields={
+                "username": serializers.CharField(),
+                "token": serializers.CharField(),
+            },
+        ),
+    )
     def post(self, request, *args, **kwargs):
         username = request.data.get("username")
         password = request.data.get("password")
@@ -85,12 +103,32 @@ class UserEditView(generics.UpdateAPIView):
 class UserLogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
+    @extend_schema(
+        request=None,
+        responses=inline_serializer(
+            name="MessageResponse",
+            fields={"message": serializers.CharField()},
+        ),
+    )
     def post(self, request, *args, **kwargs):
         logout(request)
         return Response({"message": "User logged out"}, status=status.HTTP_200_OK)
 
 
 # Endpoint for managing devices (GET, PUT, DELETE)
+@extend_schema(
+    methods=["GET"],
+    responses=OpenApiTypes.OBJECT,
+)
+@extend_schema(
+    methods=["PUT"],
+    request=DeviceSerializer,
+    responses=OpenApiTypes.OBJECT,
+)
+@extend_schema(
+    methods=["DELETE"],
+    responses=OpenApiTypes.OBJECT,
+)
 @api_view(["GET", "PUT", "DELETE"])
 def device(request):
     all_devices = Device.objects.all().count()
@@ -183,6 +221,15 @@ def device(request):
         )
 
 
+@extend_schema(
+    request=inline_serializer(
+        name="ScanNowRequest",
+        fields={
+            "ip_range": serializers.CharField(required=False),
+        },
+    ),
+    responses=OpenApiTypes.OBJECT,
+)
 @api_view(["POST"])
 def scan_now(request):
     ip_range = request.data.get("ip_range") or settings.IP_RANGE
@@ -197,6 +244,7 @@ def scan_now(request):
     )
 
 
+@extend_schema(responses=ScanRunSerializer(many=True))
 @api_view(["GET"])
 def scan_runs(request):
     limit = int(request.query_params.get("limit", 25))
@@ -207,6 +255,7 @@ def scan_runs(request):
     )
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
 @api_view(["GET"])
 def scan_status(request):
     latest_scan = ScanRun.objects.first()
@@ -225,6 +274,7 @@ def scan_status(request):
     )
 
 
+@extend_schema(responses=NetworkEventSerializer(many=True))
 @api_view(["GET"])
 def events(request):
     limit = int(request.query_params.get("limit", 50))
@@ -239,6 +289,7 @@ def events(request):
     )
 
 
+@extend_schema(responses=NotificationDeliverySerializer(many=True))
 @api_view(["GET"])
 def notifications(request):
     limit = int(request.query_params.get("limit", 50))
@@ -249,12 +300,17 @@ def notifications(request):
     )
 
 
+@extend_schema(responses=DeviceSerializer(many=True))
 @api_view(["GET"])
 def export_db(request):
     data = DeviceSerializer(Device.objects.all(), many=True).data
     return JsonResponse(data, safe=False)
 
 
+@extend_schema(
+    request=DeviceSerializer(many=True),
+    responses=OpenApiTypes.OBJECT,
+)
 @api_view(["POST"])
 def import_db(request):
     data = request.data
