@@ -12,15 +12,123 @@ from .notifications import notify_event
 
 
 LOGGER = logging.getLogger(__name__)
+DEFAULT_DEVICE_NAME = "Device"
+DEFAULT_DEVICE_ICONS = {"", "plus", "unknown", "device", "desktop"}
 
 
 def get_hostname(ip):
     try:
         hostname, _, _ = socket.gethostbyaddr(ip)
-        return hostname
+        return clean_hostname(hostname)
     except socket.herror as e:
         LOGGER.debug("Hostname lookup failed for %s: %s", ip, e)
-        return "Device"
+        return DEFAULT_DEVICE_NAME
+
+
+def clean_hostname(hostname):
+    hostname = (hostname or "").strip().rstrip(".")
+    if not hostname:
+        return DEFAULT_DEVICE_NAME
+    return hostname.split(".")[0].replace("-", " ").strip() or DEFAULT_DEVICE_NAME
+
+
+def short_vendor(vendor):
+    vendor = (vendor or "").strip()
+    suffixes = [
+        " incorporated",
+        " corporation",
+        " equipment",
+        " technologies",
+        " technology",
+        " co.,ltd.",
+        " co., ltd.",
+        " co ltd",
+        " ltd.",
+        " inc.",
+        " llc",
+    ]
+    changed = True
+    while changed:
+        changed = False
+        lowered = vendor.lower()
+        for suffix in suffixes:
+            if lowered.endswith(suffix):
+                vendor = vendor[: -len(suffix)].strip(" ,.-") or vendor
+                changed = True
+                break
+    return vendor
+
+
+def device_mac_suffix(mac):
+    return (mac or "").replace(":", "")[-4:].upper()
+
+
+def is_default_device_name(name):
+    cleaned = (name or "").strip().lower()
+    return not cleaned or cleaned == DEFAULT_DEVICE_NAME.lower()
+
+
+def is_default_device_icon(icon):
+    return (icon or "").strip().lower() in DEFAULT_DEVICE_ICONS
+
+
+def guess_device_icon(hostname="", vendor="", open_ports=None):
+    text = f"{hostname} {vendor}".lower()
+    open_port_numbers = {int(port["port"]) for port in open_ports or []}
+
+    if any(
+        keyword in text
+        for keyword in ("router", "gateway", "tp-link", "tplink", "ubiquiti", "mikrotik", "deco")
+    ):
+        return "router"
+    if any(keyword in text for keyword in ("iphone", "android", "phone", "mobile", "oneplus", "pixel")):
+        return "phone"
+    if any(keyword in text for keyword in ("macbook", "laptop", "notebook")):
+        return "laptop"
+    if any(keyword in text for keyword in ("apple tv", "chromecast", "streamer", "streaming", "roku", "fire tv")):
+        return "streamer"
+    if any(keyword in text for keyword in ("tv", "television")):
+        return "tv"
+    if any(keyword in text for keyword in ("camera", "cam", "hikvision", "dahua")) or 554 in open_port_numbers:
+        return "security-camera"
+    if any(keyword in text for keyword in ("shutter", "blind", "blinds", "shade", "curtain")):
+        return "shutter"
+    if any(keyword in text for keyword in ("light", "bulb", "lamp")):
+        return "light"
+    if any(keyword in text for keyword in ("air conditioner", "air-conditioning", "aircon", "hvac")):
+        return "air-conditioner"
+    if any(keyword in text for keyword in ("thermostat", "heater")):
+        return "thermostat"
+    if any(keyword in text for keyword in ("speaker", "sonos", "homepod", "audio")):
+        return "speaker"
+    if (
+        any(keyword in text for keyword in ("printer", "canon", "brother", "epson", "hewlett", "hp"))
+        or 9100 in open_port_numbers
+    ):
+        return "printer"
+    if (
+        any(keyword in text for keyword in ("server", "nas", "casaos", "raspberry", "linux"))
+        or {22, 80, 443} & open_port_numbers
+    ):
+        return "server"
+    return "unknown"
+
+
+def guess_device_name(hostname, vendor, mac):
+    if hostname and not is_default_device_name(hostname):
+        return hostname
+    if vendor:
+        vendor_name = short_vendor(vendor)
+        suffix = device_mac_suffix(mac)
+        return f"{vendor_name} device {suffix}" if suffix else f"{vendor_name} device"
+    return DEFAULT_DEVICE_NAME
+
+
+def guess_device_identity(hostname="", vendor="", mac="", open_ports=None):
+    return {
+        "name": guess_device_name(hostname, vendor, mac),
+        "icon": guess_device_icon(hostname=hostname, vendor=vendor, open_ports=open_ports),
+    }
 
 
 def get_service_name(port, protocol="tcp"):
@@ -283,6 +391,8 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
     ip = element[1].psrc
     mac = element[1].hwsrc.lower()
     vendor = ManufDA.lookup(oui, mac) if oui else None
+    vendor_name = vendor[1] if vendor else ""
+    hostname = get_hostname(ip=ip)
     ports_opened = 0
     ports_closed = 0
     new_devices = 0
@@ -290,11 +400,20 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
     try:
         device = Device.objects.get(mac=mac)
         was_online = device.online
+        update_fields = ["ip", "online", "lastseen", "missed_scans"]
         device.ip = ip
         device.online = True
         device.lastseen = scan_started_at
         device.missed_scans = 0
-        device.save(update_fields=["ip", "online", "lastseen", "missed_scans"])
+        if is_default_device_name(device.name) or is_default_device_icon(device.icon):
+            identity = guess_device_identity(hostname, device.vendor or vendor_name, mac)
+            if is_default_device_name(device.name):
+                device.name = identity["name"]
+                update_fields.append("name")
+            if is_default_device_icon(device.icon):
+                device.icon = identity["icon"]
+                update_fields.append("icon")
+        device.save(update_fields=update_fields)
 
         if not was_online:
             create_event(
@@ -304,12 +423,13 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
                 message=f"{device.name} came online",
             )
     except Device.DoesNotExist:
+        identity = guess_device_identity(hostname, vendor_name, mac)
         device = Device.objects.create(
-            icon="plus",
-            name=get_hostname(ip=ip),
+            icon=identity["icon"],
+            name=identity["name"],
             ip=ip,
             mac=mac,
-            vendor=vendor[1] if vendor else "",
+            vendor=vendor_name,
             lastseen=scan_started_at,
         )
         new_devices = 1
@@ -332,7 +452,15 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
         )
 
     if should_scan_ports(device, now=scan_started_at):
-        port_stats = sync_device_ports(device, scan_open_ports(ip), scan_run=scan_run)
+        open_ports = scan_open_ports(ip)
+        if is_default_device_icon(device.icon):
+            device.icon = guess_device_icon(
+                hostname=device.name,
+                vendor=device.vendor,
+                open_ports=open_ports,
+            )
+            device.save(update_fields=["icon"])
+        port_stats = sync_device_ports(device, open_ports, scan_run=scan_run)
         ports_opened += port_stats["ports_opened"]
         ports_closed += port_stats["ports_closed"]
         device.last_port_scan = scan_started_at

@@ -1,3 +1,5 @@
+import ipaddress
+
 from drf_spectacular.utils import OpenApiTypes, extend_schema, inline_serializer
 from rest_framework import status, generics, permissions
 from rest_framework import serializers
@@ -34,6 +36,59 @@ from .api import (
 from .scan import scan, validate_ip_range
 
 LOGGER = logging.getLogger(__name__)
+
+
+DEVICE_ORDERING_FIELDS = {
+    "name": ("name", "ip", "id"),
+    "-name": ("-name", "ip", "id"),
+}
+
+
+def ip_sort_key(device):
+    try:
+        address = ipaddress.ip_address(device.ip)
+    except ValueError:
+        return (1, device.ip, device.name.lower(), device.id)
+    return (0, address.version, int(address), device.name.lower(), device.id)
+
+
+def paginated_device_payload(request, devices):
+    ordering = request.query_params.get("ordering")
+    if ordering in DEVICE_ORDERING_FIELDS:
+        devices = devices.order_by(*DEVICE_ORDERING_FIELDS[ordering])
+        return paginated_payload(
+            request,
+            devices,
+            DeviceSerializer,
+            default_limit=10,
+            max_limit=100,
+        )
+    if ordering in {"ip", "-ip"}:
+        limit = parse_int_param(request.query_params, "limit", default=10, minimum=1, maximum=100)
+        offset = parse_int_param(request.query_params, "offset", default=0, minimum=0)
+        sorted_devices = sorted(devices, key=ip_sort_key, reverse=ordering == "-ip")
+        total = len(sorted_devices)
+        next_offset = offset + limit if offset + limit < total else None
+        previous_offset = max(offset - limit, 0) if offset > 0 else None
+        return {
+            "data": DeviceSerializer(sorted_devices[offset : offset + limit], many=True).data,
+            "pagination": {
+                "count": total,
+                "limit": limit,
+                "offset": offset,
+                "next_offset": next_offset,
+                "previous_offset": previous_offset,
+            },
+        }
+    if ordering:
+        raise ValidationError({"ordering": "Must be one of: name, -name, ip, -ip."})
+    return paginated_payload(
+        request,
+        devices,
+        DeviceSerializer,
+        default_limit=10,
+        max_limit=100,
+    )
 
 
 @permission_classes([AllowAny])
@@ -184,13 +239,7 @@ def device(request):
                 )
                 devices = devices.filter(ports__port=port, ports__open=True).distinct()
 
-            payload = paginated_payload(
-                request,
-                devices,
-                DeviceSerializer,
-                default_limit=10,
-                max_limit=100,
-            )
+            payload = paginated_device_payload(request, devices)
             return Response(
                 {
                     "data": payload["data"],

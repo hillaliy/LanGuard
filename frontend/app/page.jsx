@@ -31,16 +31,31 @@ import {
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconAlertCircle,
+  IconAirConditioning,
+  IconArrowsSort,
   IconBell,
+  IconBlind,
+  IconBulb,
+  IconCast,
   IconClock,
+  IconDeviceCctv,
   IconDeviceDesktop,
+  IconDeviceLaptop,
+  IconDeviceMobile,
+  IconDeviceSpeaker,
+  IconDeviceTv,
   IconHistory,
   IconLogout,
   IconNetwork,
   IconPlugConnected,
+  IconPrinter,
+  IconQuestionMark,
   IconRefresh,
+  IconRouter,
   IconSearch,
+  IconServer,
   IconShieldCheck,
+  IconTemperature,
   IconTrash,
   IconUserPlus,
   IconWifi,
@@ -68,6 +83,99 @@ const deviceStatusOptions = [
   { value: 'offline', label: 'Offline' },
   { value: 'new', label: 'New devices' },
 ];
+
+const deviceIconOptions = [
+  { value: 'unknown', label: 'Unknown', icon: IconQuestionMark },
+  { value: 'desktop', label: 'Desktop', icon: IconDeviceDesktop },
+  { value: 'router', label: 'Router', icon: IconRouter },
+  { value: 'phone', label: 'Phone', icon: IconDeviceMobile },
+  { value: 'laptop', label: 'Laptop', icon: IconDeviceLaptop },
+  { value: 'tv', label: 'TV', icon: IconDeviceTv },
+  { value: 'streamer', label: 'Streamer', icon: IconCast },
+  { value: 'security-camera', label: 'Security camera', icon: IconDeviceCctv },
+  { value: 'shutter', label: 'Shutter', icon: IconBlind },
+  { value: 'light', label: 'Light', icon: IconBulb },
+  { value: 'air-conditioner', label: 'Air conditioner', icon: IconAirConditioning },
+  { value: 'thermostat', label: 'Thermostat', icon: IconTemperature },
+  { value: 'speaker', label: 'Speaker', icon: IconDeviceSpeaker },
+  { value: 'printer', label: 'Printer', icon: IconPrinter },
+  { value: 'server', label: 'Server', icon: IconServer },
+];
+
+function normalizeDeviceIcon(value) {
+  const aliases = {
+    plus: 'unknown',
+    device: 'desktop',
+    computer: 'desktop',
+    mobile: 'phone',
+    television: 'tv',
+    cast: 'streamer',
+    streaming: 'streamer',
+    camera: 'security-camera',
+    cctv: 'security-camera',
+    blind: 'shutter',
+    blinds: 'shutter',
+    shade: 'shutter',
+    curtain: 'shutter',
+    bulb: 'light',
+    aircon: 'air-conditioner',
+    ac: 'air-conditioner',
+    hvac: 'air-conditioner',
+    'thermometer-snow': 'thermostat',
+    temperature: 'thermostat',
+    audio: 'speaker',
+    nas: 'server',
+  };
+  const normalized = aliases[value] || value || 'unknown';
+  return deviceIconOptions.some((option) => option.value === normalized)
+    ? normalized
+    : 'unknown';
+}
+
+function DeviceIcon({ value, size = 18 }) {
+  const normalized = normalizeDeviceIcon(value);
+  const option =
+    deviceIconOptions.find((item) => item.value === normalized) ||
+    deviceIconOptions[0];
+  const Icon = option.icon;
+  return <Icon size={size} stroke={1.8} />;
+}
+
+function sortableOrdering(field, currentOrdering) {
+  if (currentOrdering === field) {
+    return `-${field}`;
+  }
+  if (currentOrdering === `-${field}`) {
+    return '';
+  }
+  return field;
+}
+
+function SortableHeader({ field, label, ordering, onChange, className }) {
+  const active = ordering === field || ordering === `-${field}`;
+  const direction = ordering === field ? 'asc' : ordering === `-${field}` ? 'desc' : '';
+  const title = active
+    ? `${label} sorted ${direction === 'asc' ? 'ascending' : 'descending'}`
+    : `Sort by ${label}`;
+
+  return (
+    <Table.Th className={className}>
+      <button
+        type="button"
+        className={`sortable-header ${active ? 'active' : ''}`}
+        onClick={() => onChange(sortableOrdering(field, ordering))}
+        aria-label={title}
+      >
+        <span>{label}</span>
+        <IconArrowsSort
+          size={15}
+          stroke={1.9}
+          className={direction ? `sort-icon ${direction}` : 'sort-icon'}
+        />
+      </button>
+    </Table.Th>
+  );
+}
 
 function formatDate(value) {
   if (!value) {
@@ -253,14 +361,66 @@ function PortSummary({ ports = [] }) {
   );
 }
 
+function DeviceField({ label, value, editable = false, required = false, onChange }) {
+  return (
+    <Box className={`device-field ${editable ? 'editable' : ''}`}>
+      <Group gap={4}>
+        <Text size="xs" c="dimmed">{label}</Text>
+        {required && <Text size="xs" c="red">*</Text>}
+      </Group>
+      {editable ? (
+        <input
+          className="device-field-input"
+          value={value}
+          onChange={(event) => onChange(event.currentTarget.value)}
+        />
+      ) : (
+        <Text size="sm" className="wrap-text">{value || '-'}</Text>
+      )}
+    </Box>
+  );
+}
+
+function DeviceIconPicker({ value, onChange }) {
+  const selectedIcon = normalizeDeviceIcon(value);
+
+  return (
+    <Box className="device-field icon-picker-field">
+      <Text size="xs" c="dimmed">Icon</Text>
+      <div className="icon-picker-grid">
+        {deviceIconOptions.map((option) => {
+          const Icon = option.icon;
+          const selected = option.value === selectedIcon;
+
+          return (
+            <Tooltip key={option.value} label={option.label}>
+              <button
+                type="button"
+                className={`icon-picker-button ${selected ? 'selected' : ''}`}
+                onClick={() => onChange(option.value)}
+                aria-label={option.label}
+              >
+                <Icon size={18} stroke={1.8} />
+              </button>
+            </Tooltip>
+          );
+        })}
+      </div>
+    </Box>
+  );
+}
+
 function DeviceModal({ device, opened, onClose, onSaved }) {
+  const [icon, setIcon] = useState('');
   const [name, setName] = useState('');
   const [known, setKnown] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [deleteConfirmOpened, deleteConfirm] = useDisclosure(false);
 
   useEffect(() => {
     if (device) {
+      setIcon(device.icon || '');
       setName(device.name || '');
       setKnown(Boolean(device.known));
       setError('');
@@ -276,7 +436,11 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
     try {
       await apiRequest(`device/?id=${device.id}`, {
         method: 'PUT',
-        body: { name, known },
+        body: {
+          icon,
+          name,
+          known,
+        },
       });
       await onSaved();
       onClose();
@@ -296,6 +460,7 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
     try {
       await apiRequest(`device/?id=${device.id}`, { method: 'DELETE' });
       await onSaved();
+      deleteConfirm.close();
       onClose();
     } catch (err) {
       setError(err.message);
@@ -304,19 +469,102 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
     }
   }
 
+  function closeModal() {
+    deleteConfirm.close();
+    onClose();
+  }
+
   return (
-    <Modal opened={opened} onClose={onClose} title={device?.name} centered>
+    <Modal
+      opened={opened}
+      onClose={closeModal}
+      title={device?.name || 'Device'}
+      centered
+      size="lg"
+    >
       <Stack>
         {error && (
           <Alert color="red" icon={<IconAlertCircle size={18} />}>
             {error}
           </Alert>
         )}
-        <TextInput label="Name" value={name} onChange={(e) => setName(e.currentTarget.value)} />
-        <Switch label="Known device" checked={known} onChange={(e) => setKnown(e.currentTarget.checked)} />
+
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <DeviceField
+            label="Name"
+            value={name}
+            editable
+            required
+            onChange={setName}
+          />
+          <DeviceField
+            label="Vendor"
+            value={device?.vendor || '-'}
+          />
+          <DeviceField
+            label="IP address"
+            value={device?.ip || '-'}
+          />
+          <DeviceField
+            label="MAC address"
+            value={device?.mac || '-'}
+          />
+          <DeviceIconPicker value={icon} onChange={setIcon} />
+        </SimpleGrid>
+
+        <Group>
+          <Switch
+            label="Known device"
+            checked={known}
+            onChange={(event) => setKnown(event.currentTarget.checked)}
+          />
+          <Group gap="xs">
+            <span className={`status-dot ${device?.online ? 'online' : 'offline'}`} />
+            <Text size="sm">{device?.online ? 'Online' : 'Offline'}</Text>
+            <Text size="sm" c="dimmed">Missed scans: {device?.missed_scans ?? 0}</Text>
+          </Group>
+        </Group>
+
+        <Divider />
+
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <Box>
+            <Text size="xs" c="dimmed">First seen</Text>
+            <Text size="sm">{formatDate(device?.firstseen)}</Text>
+          </Box>
+          <Box>
+            <Text size="xs" c="dimmed">Last seen</Text>
+            <Text size="sm">{formatDate(device?.lastseen)}</Text>
+          </Box>
+          <Box>
+            <Text size="xs" c="dimmed">Last port scan</Text>
+            <Text size="sm">{formatDate(device?.last_port_scan)}</Text>
+          </Box>
+          <Box>
+            <Text size="xs" c="dimmed">Open ports</Text>
+            <Group gap={4} mt={4}>
+              {(device?.open_ports || []).length ? (
+                (device?.open_ports || []).map((port) => (
+                  <Badge key={`${port.protocol}-${port.port}`} variant="light">
+                    {port.protocol}/{port.port}
+                  </Badge>
+                ))
+              ) : (
+                <Text size="sm">-</Text>
+              )}
+            </Group>
+          </Box>
+        </SimpleGrid>
+
         <Divider />
         <Group justify="space-between">
-          <Button color="red" variant="light" leftSection={<IconTrash size={18} />} onClick={remove} loading={saving}>
+          <Button
+            color="red"
+            variant="light"
+            leftSection={<IconTrash size={18} />}
+            onClick={deleteConfirm.open}
+            loading={saving}
+          >
             Delete
           </Button>
           <Button onClick={save} loading={saving}>
@@ -324,6 +572,32 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
           </Button>
         </Group>
       </Stack>
+      <Modal
+        opened={deleteConfirmOpened}
+        onClose={deleteConfirm.close}
+        title="Delete device"
+        centered
+      >
+        <Stack>
+          <Text>Are you sure you want to delete this device?</Text>
+          <Text size="sm" c="dimmed">
+            {device?.name} will be removed from the inventory.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={deleteConfirm.close}>
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconTrash size={18} />}
+              onClick={remove}
+              loading={saving}
+            >
+              Delete
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Modal>
   );
 }
@@ -349,6 +623,8 @@ function Dashboard({ user, onLogout }) {
   const [deviceStatus, setDeviceStatus] = useState('');
   const [devicePage, setDevicePage] = useState(1);
   const [devicePageSize, setDevicePageSize] = useState('10');
+  const [deviceOrdering, setDeviceOrdering] = useState('');
+  const [activeTab, setActiveTab] = useState('events');
   const [eventType, setEventType] = useState('');
   const [scanRange, setScanRange] = useState('');
   const [activeDevice, setActiveDevice] = useState(null);
@@ -360,6 +636,7 @@ function Dashboard({ user, onLogout }) {
     eventType: '',
     deviceLimit: 10,
     deviceOffset: 0,
+    deviceOrdering: '',
   });
 
   const filteredDevices = useMemo(() => devices, [devices]);
@@ -381,8 +658,9 @@ function Dashboard({ user, onLogout }) {
       eventType,
       deviceLimit,
       deviceOffset,
+      deviceOrdering,
     };
-  }, [search, deviceStatus, eventType, deviceLimit, deviceOffset]);
+  }, [search, deviceStatus, eventType, deviceLimit, deviceOffset, deviceOrdering]);
 
   async function loadData({ quiet = false } = {}) {
     if (quiet) {
@@ -405,10 +683,11 @@ function Dashboard({ user, onLogout }) {
         known: currentTableState.deviceStatus === 'new' ? 'false' : undefined,
         limit: currentTableState.deviceLimit,
         offset: currentTableState.deviceOffset,
+        ordering: currentTableState.deviceOrdering || undefined,
       };
       const eventParams = {
         event_type: currentTableState.eventType || undefined,
-        limit: 12,
+        limit: 8,
       };
 
       const [deviceData, statusData, runData, eventData, notificationData] =
@@ -456,11 +735,11 @@ function Dashboard({ user, onLogout }) {
   useEffect(() => {
     const timer = window.setTimeout(() => loadData({ quiet: true }), 250);
     return () => window.clearTimeout(timer);
-  }, [search, deviceStatus, eventType, devicePage, devicePageSize]);
+  }, [search, deviceStatus, eventType, devicePage, devicePageSize, deviceOrdering]);
 
   useEffect(() => {
     setDevicePage(1);
-  }, [search, deviceStatus, devicePageSize]);
+  }, [search, deviceStatus, devicePageSize, deviceOrdering]);
 
   async function runScan() {
     setRefreshing(true);
@@ -567,8 +846,20 @@ function Dashboard({ user, onLogout }) {
                       <Table.Thead>
                         <Table.Tr>
                           <Table.Th className="device-status-cell">Status</Table.Th>
-                          <Table.Th className="device-name-cell">Name</Table.Th>
-                          <Table.Th className="device-ip-cell">IP</Table.Th>
+                          <SortableHeader
+                            field="name"
+                            label="Name"
+                            ordering={deviceOrdering}
+                            onChange={setDeviceOrdering}
+                            className="device-name-cell"
+                          />
+                          <SortableHeader
+                            field="ip"
+                            label="IP"
+                            ordering={deviceOrdering}
+                            onChange={setDeviceOrdering}
+                            className="device-ip-cell"
+                          />
                           <Table.Th className="device-mac-cell">MAC</Table.Th>
                           <Table.Th className="device-ports-cell">Ports</Table.Th>
                           <Table.Th className="device-lastseen-cell">Last seen</Table.Th>
@@ -593,9 +884,14 @@ function Dashboard({ user, onLogout }) {
                               </Group>
                             </Table.Td>
                             <Table.Td className="device-name-cell" fw={600}>
-                              <span className="truncate-cell" title={device.name}>
-                                {device.name}
-                              </span>
+                              <Group gap="xs" wrap="nowrap">
+                                <span className="device-table-icon">
+                                  <DeviceIcon value={device.icon} size={17} />
+                                </span>
+                                <span className="truncate-cell" title={device.name}>
+                                  {device.name}
+                                </span>
+                              </Group>
                             </Table.Td>
                             <Table.Td className="device-ip-cell">{device.ip}</Table.Td>
                             <Table.Td className="device-mac-cell">{device.mac}</Table.Td>
@@ -668,31 +964,55 @@ function Dashboard({ user, onLogout }) {
             </Paper>
           </SimpleGrid>
 
-          <Tabs defaultValue="events">
-            <Tabs.List>
-              <Tabs.Tab value="events" leftSection={<IconBell size={16} />}>Events</Tabs.Tab>
-              <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>Scan history</Tabs.Tab>
-              <Tabs.Tab value="notifications" leftSection={<IconBell size={16} />}>Notifications</Tabs.Tab>
-            </Tabs.List>
+          <Tabs value={activeTab} onChange={(value) => setActiveTab(value || 'events')}>
+            <Group justify="space-between" align="flex-end">
+              <Tabs.List>
+                <Tabs.Tab value="events" leftSection={<IconBell size={16} />}>Events</Tabs.Tab>
+                <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>Scan history</Tabs.Tab>
+                <Tabs.Tab value="notifications" leftSection={<IconBell size={16} />}>Notifications</Tabs.Tab>
+              </Tabs.List>
+              {activeTab === 'events' && (
+                <Select
+                  w={210}
+                  placeholder="Event type"
+                  clearable
+                  data={eventTypeOptions}
+                  value={eventType}
+                  onChange={(value) => setEventType(value || '')}
+                />
+              )}
+            </Group>
 
             <Tabs.Panel value="events" pt="md">
-              <Paper className="content-panel" radius="md" p="md">
-                <Group justify="space-between" mb="md">
-                  <Title order={4}>Network events</Title>
-                  <Select
-                    w={210}
-                    placeholder="Event type"
-                    clearable
-                    data={eventTypeOptions}
-                    value={eventType}
-                    onChange={(value) => setEventType(value || '')}
-                  />
-                </Group>
-                <Stack gap="xs">
-                  {events.map((event) => (
-                    <EventItem key={event.id} event={event} />
-                  ))}
-                </Stack>
+              <Paper className="content-panel" radius="md">
+                <Table verticalSpacing="sm">
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Type</Table.Th>
+                      <Table.Th>Message</Table.Th>
+                      <Table.Th>Created</Table.Th>
+                      <Table.Th>Status</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {events.map((event) => (
+                      <Table.Tr key={event.id}>
+                        <Table.Td>
+                          <Badge variant="light">
+                            {event.event_type_display || event.event_type}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>{event.message}</Table.Td>
+                        <Table.Td>{formatDate(event.created_at)}</Table.Td>
+                        <Table.Td>
+                          <Badge color={event.notified ? 'teal' : 'gray'} variant="light">
+                            {event.notified ? 'Handled' : 'Pending'}
+                          </Badge>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
               </Paper>
             </Tabs.Panel>
 
@@ -792,24 +1112,6 @@ function NumberReadout({ label, value }) {
         {value ?? 0}
       </Text>
     </Box>
-  );
-}
-
-function EventItem({ event }) {
-  return (
-    <Paper withBorder radius="md" p="sm">
-      <Group justify="space-between" align="flex-start">
-        <Box>
-          <Text fw={600}>{event.message}</Text>
-          <Text size="xs" c="dimmed">
-            {event.event_type_display || event.event_type} · {formatDate(event.created_at)}
-          </Text>
-        </Box>
-        <Badge color={event.notified ? 'teal' : 'gray'} variant="light">
-          {event.notified ? 'Notified' : 'Pending'}
-        </Badge>
-      </Group>
-    </Paper>
   );
 }
 

@@ -121,6 +121,13 @@ textarea {
   justify-content: center;
 }
 
+.device-table-icon {
+  align-items: center;
+  color: #4c6ef5;
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
 .ports-list {
   align-items: center;
   display: flex;
@@ -139,6 +146,98 @@ textarea {
 
 .port-overflow-badge {
   min-width: 40px;
+}
+
+.sortable-header {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  gap: 6px;
+  padding: 0;
+}
+
+.sortable-header:hover,
+.sortable-header.active {
+  color: #3b5bdb;
+}
+
+.sort-icon {
+  color: #9aa4b2;
+  transition: color 120ms ease, transform 120ms ease;
+}
+
+.sortable-header.active .sort-icon {
+  color: #3b5bdb;
+}
+
+.sort-icon.desc {
+  transform: rotate(180deg);
+}
+
+.device-field {
+  background: #f8faff;
+  border: 1px solid #dfe5ef;
+  border-radius: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.device-field.editable {
+  background: #fff;
+}
+
+.device-field-input {
+  background: transparent;
+  border: 0;
+  color: #1f2937;
+  display: block;
+  font: inherit;
+  margin-top: 4px;
+  outline: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.icon-picker-field {
+  grid-column: 1 / -1;
+}
+
+.icon-picker-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  margin-top: 8px;
+}
+
+.icon-picker-button {
+  align-items: center;
+  aspect-ratio: 1;
+  background: #fff;
+  border: 1px solid #dfe5ef;
+  border-radius: 8px;
+  color: #4b5563;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 46px;
+  min-width: 0;
+}
+
+.icon-picker-button:hover,
+.icon-picker-button.selected {
+  background: #eef3ff;
+  border-color: #4c6ef5;
+  color: #3b5bdb;
+}
+
+.wrap-text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .truncate-cell {
