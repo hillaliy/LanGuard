@@ -1,36 +1,22 @@
-from django.conf import settings
 from rest_framework import status, generics, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
-from django.contrib.auth import authenticate, login, logout
 from rest_framework.decorators import api_view, permission_classes
-from django.http import JsonResponse
 from rest_framework.permissions import AllowAny
 
+from django.conf import settings
+from django.contrib.auth import authenticate, login, logout
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+
 import logging
-import threading
 
 from .serializers import UserSerializer, DeviceSerializer
-from .scan import scan
 from .models import Device
+from .scan import scan
 
 LOGGER = logging.getLogger(__name__)
-
-scan(settings.IP_RANGE)
-
-
-def set_interval(func, sec, *args, **kwargs):
-    def func_wrapper():
-        func(*args, **kwargs)
-        set_interval(func, sec, *args, **kwargs)
-
-    t = threading.Timer(sec, func_wrapper)
-    t.start()
-    return t
-
-
-set_interval(scan, int(settings.INTERVAL) * 60, settings.IP_RANGE)
 
 
 @permission_classes([AllowAny])
@@ -73,6 +59,23 @@ class UserLoginView(APIView):
             )
 
 
+@permission_classes([permissions.IsAuthenticated])
+class UserEditView(generics.UpdateAPIView):
+    serializer_class = UserSerializer
+
+    def get_object(self):
+        # Get the current authenticated user
+        return self.request.user
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
+
+
 class UserLogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -109,7 +112,7 @@ def device(request):
                 status=status.HTTP_200_OK,
             )
         else:
-            device = Device.objects.get(pk=id_)
+            device = get_object_or_404(Device, pk=id_)
             serializer = DeviceSerializer(device)
             return Response(
                 {
@@ -129,7 +132,7 @@ def device(request):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        device = Device.objects.get(pk=id_)
+        device = get_object_or_404(Device, pk=id_)
         serializer = DeviceSerializer(device, data=request.data, partial=True)
         if serializer.is_valid():
             device = serializer.save()
@@ -137,7 +140,7 @@ def device(request):
                 f"Device ({device.id}) updated - Name: {device.name} / Icon: {device.icon} / Known: {device.known}"
             )
             return Response(
-                {"status": "OK", "info": f"Device ({device.id}) updated seccessfully"},
+                {"status": "OK", "info": f"Device ({device.id}) updated successfully"},
                 status=status.HTTP_202_ACCEPTED,
             )
         else:
@@ -160,7 +163,7 @@ def device(request):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        device = Device.objects.get(pk=id_)
+        device = get_object_or_404(Device, pk=id_)
         LOGGER.warning(
             f"Device ({device.id}) {device.name} - deleted successfully",
         )
@@ -172,6 +175,16 @@ def device(request):
             },
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+@api_view(["POST"])
+def scan_now(request):
+    ip_range = request.data.get("ip_range") or settings.IP_RANGE
+    scan(ip_range)
+    return Response(
+        {"status": "OK", "info": f"Scan completed for {ip_range}"},
+        status=status.HTTP_202_ACCEPTED,
+    )
 
 
 @api_view(["GET"])

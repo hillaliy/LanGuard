@@ -8,7 +8,7 @@ import scapy.all as scapy
 from scapy.data import ManufDA, load_manuf
 from onepush import get_notifier
 
-from .models import Device
+from .models import Device, DevicePort
 
 
 LOGGER = logging.getLogger(__name__)
@@ -16,11 +16,71 @@ LOGGER = logging.getLogger(__name__)
 
 def get_hostname(ip):
     try:
-        hostname = socket.gethostbyaddr(ip)
+        hostname, _, _ = socket.gethostbyaddr(ip)
         return hostname
     except socket.herror as e:
-        print(f"Error: {e}")
+        LOGGER.debug("Hostname lookup failed for %s: %s", ip, e)
         return "Device"
+
+
+def get_service_name(port, protocol="tcp"):
+    try:
+        return socket.getservbyport(port, protocol)
+    except OSError:
+        return ""
+
+
+def scan_open_ports(ip, ports=None, timeout=None):
+    ports = ports or settings.PORT_SCAN_PORTS
+    timeout = timeout or settings.PORT_SCAN_TIMEOUT
+    open_ports = []
+
+    for port in ports:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            result = sock.connect_ex((ip, int(port)))
+            if result == 0:
+                open_ports.append(
+                    {
+                        "port": int(port),
+                        "protocol": "tcp",
+                        "service": get_service_name(int(port)),
+                    }
+                )
+
+    return open_ports
+
+
+def sync_device_ports(device, open_ports):
+    now = timezone.now()
+    seen_ports = set()
+
+    for port_data in open_ports:
+        port = port_data["port"]
+        protocol = port_data.get("protocol", "tcp")
+        seen_ports.add((port, protocol))
+        device_port, _ = DevicePort.objects.get_or_create(
+            device=device,
+            port=port,
+            protocol=protocol,
+            defaults={
+                "service": port_data.get("service", ""),
+                "open": True,
+                "firstseen": now,
+                "lastseen": now,
+            },
+        )
+        device_port.service = port_data.get("service", "")
+        device_port.open = True
+        device_port.lastseen = now
+        device_port.save(update_fields=["service", "open", "lastseen"])
+
+    for device_port in device.ports.filter(open=True):
+        key = (device_port.port, device_port.protocol)
+        if key not in seen_ports:
+            device_port.open = False
+            device_port.lastseen = now
+            device_port.save(update_fields=["open", "lastseen"])
 
 
 def scan(IP_RANGE):
@@ -38,7 +98,7 @@ def scan(IP_RANGE):
 
     for element in answered_list:
         ip = element[1].psrc
-        mac = element[1].hwsrc
+        mac = element[1].hwsrc.lower()
         vendor = ManufDA.lookup(oui, mac)  # Find OUI name matching to a MAC
         try:
             device = Device.objects.get(mac=mac)
@@ -52,36 +112,49 @@ def scan(IP_RANGE):
                 name=name,
                 ip=ip,
                 mac=mac,
-                vendor=vendor[1],
+                vendor=vendor[1] if vendor else "",
                 lastseen=timezone.now(),
             )
             LOGGER.info(
-                f"Create new device -  Mac address: {mac} / IP: {ip} / Vendor: {vendor[1]}"
+                "Create new device - Mac address: %s / IP: %s / Vendor: %s",
+                mac,
+                ip,
+                device.vendor,
             )
 
-            one_push(
-                notifier="discord",
-                webhook=settings.DISCORD_WEBHOOK,
-                content=f"""
-                Found a new device:
-                Mac: {device.mac}
-                IP: {device.ip}
-                Vendor: {device.vendor}
-                Date: {device.lastseen.strftime("%d, %B %Y")}
-                Time: {device.lastseen.strftime("%H:%M")}
-                """,
-            )
+            notify_new_device(device)
 
         device.save()
-    Device.objects.exclude(
-        mac__in=[element[1].hwsrc for element in answered_list]
-    ).update(online=False)
+
+        if settings.PORT_SCAN_ENABLED:
+            sync_device_ports(device, scan_open_ports(ip))
+
+    online_macs = [element[1].hwsrc.lower() for element in answered_list]
+    Device.objects.exclude(mac__in=online_macs).update(online=False)
+
+
+def notify_new_device(device):
+    if not settings.DISCORD_WEBHOOK:
+        return
+
+    one_push(
+        notifier="discord",
+        webhook=settings.DISCORD_WEBHOOK,
+        content=f"""
+        Found a new device:
+        Mac: {device.mac}
+        IP: {device.ip}
+        Vendor: {device.vendor}
+        Date: {device.lastseen.strftime("%d, %B %Y")}
+        Time: {device.lastseen.strftime("%H:%M")}
+        """,
+    )
 
 
 def one_push(notifier, webhook, content):
     n = get_notifier(notifier)
     title = "LanGuard"
-    response = n.notify(webhook=webhook, title=title, content=content)
+    return n.notify(webhook=webhook, title=title, content=content)
 
 
 #     print(n.params)

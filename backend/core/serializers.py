@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Device
+from .models import Device, DevicePort
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -25,7 +25,19 @@ class UserSerializer(serializers.ModelSerializer):
         return user
 
 
+class DevicePortSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DevicePort
+        fields = "__all__"
+        read_only_fields = ("device", "firstseen", "lastseen")
+
+
 class DeviceSerializer(serializers.ModelSerializer):
+    open_ports = serializers.SerializerMethodField()
+
     class Meta:
         model = Device
         fields = "__all__"
+
+    def get_open_ports(self, obj):
+        return DevicePortSerializer(obj.ports.filter(open=True), many=True).data
