@@ -16,7 +16,7 @@ LanGuard is a self-hosted LAN visibility and alerting tool for home networks and
 - Manual scan endpoint for "scan now" workflows
 - Admin dashboard
 - OpenAPI schema, Swagger UI, and ReDoc
-- Docker Compose stack with Django, scanner, React frontend, Caddy, and shared SQLite storage
+- Docker Compose stack with Django, scanner, Next.js frontend, Caddy, and shared SQLite storage
 
 ## Stack
 
@@ -32,8 +32,9 @@ Backend:
 
 Frontend:
 
-- React
-- Bootstrap / React Bootstrap
+- Next.js
+- Mantine
+- Tabler Icons
 
 Runtime:
 
@@ -101,7 +102,7 @@ python manage.py run_scheduler
 
 `frontend`
 
-Builds the React frontend into a shared volume.
+Builds the static Next.js frontend into a shared volume.
 
 `caddy`
 
@@ -243,7 +244,7 @@ Frontend:
 cd frontend
 npm ci
 npm run build
-npm test -- --watchAll=false --passWithNoTests
+npm run lint
 ```
 
 Docker Compose:
