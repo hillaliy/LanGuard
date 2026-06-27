@@ -1,4 +1,5 @@
 import logging
+import ipaddress
 import socket
 
 from django.conf import settings
@@ -29,8 +30,54 @@ def get_service_name(port, protocol="tcp"):
         return ""
 
 
-def scan_open_ports(ip, ports=None, timeout=None):
+def validate_ip_range(ip_range):
+    try:
+        network = ipaddress.ip_network(ip_range, strict=False)
+    except ValueError as exc:
+        raise ValueError("IP range must be a valid CIDR range or IP address.") from exc
+
+    if network.version != 4:
+        raise ValueError("Only IPv4 ranges are supported.")
+
+    if network.num_addresses > settings.SCAN_MAX_HOSTS:
+        raise ValueError(
+            f"IP range is too large. Maximum allowed hosts: {settings.SCAN_MAX_HOSTS}."
+        )
+
+    is_allowed_private_range = (
+        network.is_private or network.is_loopback or network.is_link_local
+    )
+    if not settings.SCAN_ALLOW_PUBLIC_RANGES and not is_allowed_private_range:
+        raise ValueError("Public IP ranges are disabled.")
+
+    return network.with_prefixlen
+
+
+def normalize_scan_ports(ports=None):
     ports = ports or settings.PORT_SCAN_PORTS
+    normalized_ports = []
+
+    for port in ports:
+        try:
+            normalized_port = int(port)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Port scan list must contain only integers.") from exc
+
+        if normalized_port < 1 or normalized_port > 65535:
+            raise ValueError("Port scan list must contain values from 1 to 65535.")
+        if normalized_port not in normalized_ports:
+            normalized_ports.append(normalized_port)
+
+    if len(normalized_ports) > settings.PORT_SCAN_MAX_PORTS:
+        raise ValueError(
+            f"Too many ports configured. Maximum allowed ports: {settings.PORT_SCAN_MAX_PORTS}."
+        )
+
+    return normalized_ports
+
+
+def scan_open_ports(ip, ports=None, timeout=None):
+    ports = normalize_scan_ports(ports)
     timeout = timeout or settings.PORT_SCAN_TIMEOUT
     open_ports = []
 
@@ -134,6 +181,7 @@ def sync_device_ports(device, open_ports, scan_run=None):
 
 
 def discover_devices(ip_range):
+    ip_range = validate_ip_range(ip_range)
     arp_request = scapy.ARP(pdst=ip_range)
     broadcast = scapy.Ether(dst="ff:ff:ff:ff:ff:ff")
     arp_request_broadcast = broadcast / arp_request
@@ -141,6 +189,7 @@ def discover_devices(ip_range):
 
 
 def scan(ip_range, scan_run=None):
+    ip_range = validate_ip_range(ip_range)
     scan_run = scan_run or ScanRun.objects.create(ip_range=ip_range)
     ports_opened = 0
     ports_closed = 0

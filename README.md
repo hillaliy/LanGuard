@@ -129,6 +129,48 @@ python backend/manage.py run_scheduler --run-now
 
 The scheduler also retries failed notification deliveries.
 
+Scan safety limits are enforced by both the API and scheduler:
+
+```env
+SCAN_MAX_HOSTS=256
+SCAN_ALLOW_PUBLIC_RANGES=false
+PORT_SCAN_MAX_PORTS=64
+```
+
+By default, LanGuard only scans IPv4 private, loopback, or link-local ranges and rejects large CIDR ranges.
+
+## API Filtering
+
+List endpoints return a `data` array and a `pagination` object. Use `limit` and `offset` to page through larger histories.
+
+Useful filters:
+
+- `/api/v1/device/?online=true&known=false&search=laptop&open_port=22`
+- `/api/v1/scan/runs/?status=success&ip_range=192.168.1.0/24`
+- `/api/v1/events/?event_type=port_opened&device=1&notified=false`
+- `/api/v1/notifications/?status=failed&channel=discord`
+
+## Production Settings
+
+For home use, the default `ENVIRONMENT=development` keeps local setup simple. When `ENVIRONMENT=production` is set, LanGuard fails startup if the configuration is unsafe.
+
+Production mode requires:
+
+- a strong `SECRET_KEY`
+- `DEBUG=false`
+- `ALLOWED_HOSTS` with a real LAN IP, hostname, or domain
+- no wildcard `ALLOWED_HOSTS=*`
+
+Cookie security defaults to enabled in production. If you serve LanGuard only over plain HTTP on a trusted home LAN, set these explicitly:
+
+```env
+SESSION_COOKIE_SECURE=false
+CSRF_COOKIE_SECURE=false
+SECURE_SSL_REDIRECT=false
+```
+
+If you put LanGuard behind HTTPS, keep secure cookies enabled and set `CSRF_TRUSTED_ORIGINS` to the HTTPS origin.
+
 ## Notifications
 
 LanGuard supports Discord and Telegram notifications.
@@ -165,15 +207,23 @@ python backend/manage.py retry_notifications
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
+| `ENVIRONMENT` | Runtime mode, use `production` for strict config checks | `development` |
 | `IP_RANGE` | CIDR range to scan | `192.168.1.0/24` |
 | `INTERVAL` | Scan interval in minutes | `5` |
 | `PORT_SCAN_ENABLED` | Enable TCP port scanning | `true` |
 | `PORT_SCAN_PORTS` | Comma-separated TCP ports | common LAN/service ports |
 | `PORT_SCAN_TIMEOUT` | Per-port socket timeout | `0.5` |
+| `SCAN_MAX_HOSTS` | Maximum addresses allowed in one scan range | `256` |
+| `SCAN_ALLOW_PUBLIC_RANGES` | Allow scanning public IPv4 ranges | `false` |
+| `PORT_SCAN_MAX_PORTS` | Maximum ports scanned per device | `64` |
 | `DB_PATH` | SQLite database path | `/data/db.sqlite3` in Docker |
 | `STATIC_ROOT` | Django static output path | `/static` in Docker |
 | `ALLOWED_HOSTS` | Django allowed hosts | `localhost,127.0.0.1` |
 | `CORS_ALLOWED_ORIGINS` | Frontend origins for API access | localhost origins |
+| `CSRF_TRUSTED_ORIGINS` | Trusted browser origins for HTTPS deployments | empty |
+| `SESSION_COOKIE_SECURE` | Send session cookies only over HTTPS | production defaults to `true` |
+| `CSRF_COOKIE_SECURE` | Send CSRF cookies only over HTTPS | production defaults to `true` |
+| `SECURE_SSL_REDIRECT` | Redirect HTTP to HTTPS in Django | `false` |
 
 ## Development Checks
 
