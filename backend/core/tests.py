@@ -1,16 +1,27 @@
+from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
 import requests
 from rest_framework.test import APIClient
 
 from backend.settings import validate_production_settings
 from .models import Device, DevicePort, NetworkEvent, NotificationDelivery, ScanRun
 from .notifications import notify_event, retry_failed_notifications
-from .scan import normalize_scan_ports, sync_device_ports, validate_ip_range
+from .scan import (
+    create_event,
+    discover_devices,
+    mark_missing_devices_offline,
+    normalize_scan_ports,
+    sync_discovered_device,
+    sync_device_ports,
+    validate_ip_range,
+)
 
 
 class ProductionSettingsTests(SimpleTestCase):
@@ -88,6 +99,103 @@ class PortEventTests(TestCase):
         )
 
 
+@override_settings(NOTIFICATIONS_ENABLED=False)
+class ScanStabilityTests(TestCase):
+    def scan_element(self, ip, mac):
+        return (None, SimpleNamespace(psrc=ip, hwsrc=mac))
+
+    @override_settings(SCAN_ARP_RETRIES=2, SCAN_ARP_TIMEOUT=2)
+    @patch("core.scan.scapy.srp")
+    def test_discover_devices_retries_and_deduplicates_by_mac(self, srp):
+        first = self.scan_element("192.168.1.10", "AA:BB:CC:DD:EE:01")
+        second = self.scan_element("192.168.1.11", "AA:BB:CC:DD:EE:02")
+        duplicate = self.scan_element("192.168.1.10", "aa:bb:cc:dd:ee:01")
+        srp.side_effect = [([first], None), ([duplicate, second], None)]
+
+        devices = discover_devices("192.168.1.0/24")
+
+        self.assertEqual(len(devices), 2)
+        self.assertEqual(srp.call_count, 2)
+
+    @override_settings(SCAN_OFFLINE_AFTER_MISSES=3)
+    def test_missing_device_is_not_marked_offline_until_grace_limit(self):
+        device = Device.objects.create(
+            name="Router",
+            ip="192.168.1.1",
+            mac="aa:bb:cc:dd:ee:ff",
+            online=True,
+        )
+
+        mark_missing_devices_offline(
+            [],
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+        device.refresh_from_db()
+        self.assertTrue(device.online)
+        self.assertEqual(device.missed_scans, 1)
+
+        mark_missing_devices_offline(
+            [],
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+        device.refresh_from_db()
+        self.assertTrue(device.online)
+        self.assertEqual(device.missed_scans, 2)
+
+        mark_missing_devices_offline(
+            [],
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+        device.refresh_from_db()
+        self.assertFalse(device.online)
+        self.assertEqual(device.missed_scans, 3)
+        self.assertTrue(
+            NetworkEvent.objects.filter(
+                device=device,
+                event_type=NetworkEvent.EventType.DEVICE_OFFLINE,
+            ).exists()
+        )
+
+    @override_settings(PORT_SCAN_ENABLED=True, PORT_SCAN_INTERVAL=30)
+    @patch("core.scan.scan_open_ports")
+    def test_recently_port_scanned_device_skips_port_scan(self, scan_open_ports):
+        device = Device.objects.create(
+            name="Camera",
+            ip="192.168.1.10",
+            mac="aa:bb:cc:dd:ee:ff",
+            last_port_scan=timezone.now() - timedelta(minutes=10),
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        scan_open_ports.assert_not_called()
+        device.refresh_from_db()
+        self.assertEqual(device.missed_scans, 0)
+
+    @override_settings(PORT_SCAN_ENABLED=True, PORT_SCAN_INTERVAL=30)
+    @patch("core.scan.scan_open_ports")
+    def test_stale_port_scan_runs_and_updates_timestamp(self, scan_open_ports):
+        scan_open_ports.return_value = []
+        device = Device.objects.create(
+            name="Camera",
+            ip="192.168.1.10",
+            mac="aa:bb:cc:dd:ee:ff",
+            last_port_scan=timezone.now() - timedelta(minutes=31),
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        scan_open_ports.assert_called_once_with(device.ip)
+        device.refresh_from_db()
+        self.assertIsNotNone(device.last_port_scan)
+
+
 class NotificationTests(TestCase):
     def setUp(self):
         self.device = Device.objects.create(
@@ -121,6 +229,29 @@ class NotificationTests(TestCase):
         self.assertEqual(delivery.attempts, 1)
         self.event.refresh_from_db()
         self.assertTrue(self.event.notified)
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
+    def test_non_enabled_event_type_is_recorded_without_delivery(self, post):
+        event = NetworkEvent.objects.create(
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Camera came online",
+        )
+
+        deliveries = notify_event(event)
+
+        self.assertEqual(deliveries, [])
+        post.assert_not_called()
+        event.refresh_from_db()
+        self.assertTrue(event.notified)
+        self.assertEqual(event.metadata["notification_skipped"], "event_type_not_enabled")
 
     @override_settings(
         NOTIFICATIONS_ENABLED=True,
@@ -176,6 +307,97 @@ class NotificationTests(TestCase):
         self.assertEqual(delivery.attempts, 2)
 
 
+@override_settings(NOTIFICATIONS_ENABLED=True)
+class ScanNotificationTests(TestCase):
+    def setUp(self):
+        self.scan_run = ScanRun.objects.create(ip_range="192.168.1.0/24")
+
+    @patch("core.scan.notify_event")
+    def test_known_device_events_are_recorded_without_external_notification(
+        self, notify_event_mock
+    ):
+        device = Device.objects.create(
+            name="Known Camera",
+            ip="192.168.1.50",
+            mac="11:22:33:44:55:66",
+            known=True,
+        )
+
+        sync_device_ports(
+            device,
+            [{"port": 80, "protocol": "tcp", "service": "http"}],
+            scan_run=self.scan_run,
+        )
+
+        event = NetworkEvent.objects.get(
+            event_type=NetworkEvent.EventType.PORT_OPENED,
+            device=device,
+        )
+        self.assertTrue(event.notified)
+        self.assertEqual(event.metadata["notification_skipped"], "known_device")
+        notify_event_mock.assert_not_called()
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
+    def test_unknown_port_events_are_recorded_without_external_notification(
+        self, post
+    ):
+        device = Device.objects.create(
+            name="New Camera",
+            ip="192.168.1.51",
+            mac="22:33:44:55:66:77",
+            known=False,
+        )
+
+        sync_device_ports(
+            device,
+            [{"port": 80, "protocol": "tcp", "service": "http"}],
+            scan_run=self.scan_run,
+        )
+
+        event = NetworkEvent.objects.get(
+            event_type=NetworkEvent.EventType.PORT_OPENED,
+            device=device,
+        )
+        self.assertTrue(event.notified)
+        self.assertEqual(event.metadata["notification_skipped"], "event_type_not_enabled")
+        post.assert_not_called()
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
+    def test_unknown_new_device_events_send_external_notification(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        device = Device.objects.create(
+            name="New Camera",
+            ip="192.168.1.51",
+            mac="22:33:44:55:66:77",
+            known=False,
+        )
+
+        event = create_event(
+            NetworkEvent.EventType.NEW_DEVICE,
+            device=device,
+            scan_run=self.scan_run,
+            message=f"Found new device {device.name} at {device.ip}",
+        )
+
+        delivery = NotificationDelivery.objects.get(event=event)
+        self.assertEqual(delivery.status, NotificationDelivery.Status.SENT)
+        post.assert_called_once()
+
+
 @override_settings(NOTIFICATIONS_ENABLED=False)
 class ScanApiTests(TestCase):
     def setUp(self):
@@ -220,6 +442,59 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["data"]["id"], self.scan_run.id)
         self.assertEqual(response.data["counters"]["all_devices"], 1)
         self.assertEqual(response.data["counters"]["unnotified_events"], 1)
+
+    def test_scan_status_endpoint_keeps_latest_completed_scan_during_running_scan(self):
+        running_scan = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            status=ScanRun.Status.RUNNING,
+        )
+
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["id"], self.scan_run.id)
+        self.assertEqual(response.data["active_scan"]["id"], running_scan.id)
+
+    def test_device_endpoint_paginates_devices(self):
+        Device.objects.create(
+            name="Tablet",
+            ip="192.168.1.21",
+            mac="bb:bb:bb:bb:bb:bb",
+        )
+        Device.objects.create(
+            name="Phone",
+            ip="192.168.1.22",
+            mac="cc:cc:cc:cc:cc:cc",
+        )
+
+        response = self.client.get("/api/v1/device/", {"limit": 2, "offset": 0})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["data"]), 2)
+        self.assertEqual(response.data["pagination"]["count"], 3)
+        self.assertEqual(response.data["pagination"]["limit"], 2)
+        self.assertEqual(response.data["pagination"]["offset"], 0)
+        self.assertEqual(response.data["pagination"]["next_offset"], 2)
+
+    def test_device_endpoint_counters_include_current_open_ports(self):
+        DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
+        DevicePort.objects.create(
+            device=self.device,
+            port=443,
+            protocol="tcp",
+            open=False,
+        )
+
+        response = self.client.get("/api/v1/device/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["counters"]["open_ports"], 1)
+
+    def test_device_endpoint_rejects_too_large_page_size(self):
+        response = self.client.get("/api/v1/device/", {"limit": 101})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("limit", response.data)
 
     def test_scan_runs_endpoint_returns_history(self):
         response = self.client.get("/api/v1/scan/runs/")
@@ -289,6 +564,23 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("ip_range", response.data)
+
+    @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
+    @patch("core.views.scan")
+    def test_scan_now_returns_json_when_scanner_lacks_permissions(self, scan_mock):
+        scan_mock.side_effect = Exception(
+            "Permission denied: could not open /dev/bpf0. Make sure to be running Scapy as root ! (sudo)"
+        )
+
+        response = self.client.post(
+            "/api/v1/scan/",
+            {"ip_range": "192.168.1.0/24"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data["status"], "Error")
+        self.assertIn("packet-capture permissions", response.data["info"])
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
     def test_validate_ip_range_rejects_large_ranges(self):

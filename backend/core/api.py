@@ -42,6 +42,18 @@ def parse_datetime_param(params, name):
 
 
 def paginated_response(request, queryset, serializer_class, default_limit=50, max_limit=200):
+    return Response(
+        paginated_payload(
+            request,
+            queryset,
+            serializer_class,
+            default_limit=default_limit,
+            max_limit=max_limit,
+        )
+    )
+
+
+def paginated_payload(request, queryset, serializer_class, default_limit=50, max_limit=200):
     limit = parse_int_param(
         request.query_params,
         "limit",
@@ -61,15 +73,13 @@ def paginated_response(request, queryset, serializer_class, default_limit=50, ma
     next_offset = offset + limit if offset + limit < total else None
     previous_offset = max(offset - limit, 0) if offset > 0 else None
 
-    return Response(
-        {
-            "data": serializer_class(items, many=True).data,
-            "pagination": {
-                "count": total,
-                "limit": limit,
-                "offset": offset,
-                "next_offset": next_offset,
-                "previous_offset": previous_offset,
-            },
-        }
-    )
+    return {
+        "data": serializer_class(items, many=True).data,
+        "pagination": {
+            "count": total,
+            "limit": limit,
+            "offset": offset,
+            "next_offset": next_offset,
+            "previous_offset": previous_offset,
+        },
+    }

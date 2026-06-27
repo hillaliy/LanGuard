@@ -11,6 +11,8 @@ class Device(models.Model):
     online = models.BooleanField(default=True)
     firstseen = models.DateTimeField(default=timezone.now)
     lastseen = models.DateTimeField(default=timezone.now)
+    last_port_scan = models.DateTimeField(blank=True, null=True)
+    missed_scans = models.PositiveIntegerField(default=0)
     known = models.BooleanField(default=False)
 
     class Meta:

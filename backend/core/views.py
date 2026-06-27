@@ -26,6 +26,7 @@ from .serializers import (
 from .models import Device, DevicePort, NetworkEvent, NotificationDelivery, ScanRun
 from .api import (
     paginated_response,
+    paginated_payload,
     parse_bool_param,
     parse_datetime_param,
     parse_int_param,
@@ -144,11 +145,13 @@ def device(request):
     online_devices = Device.objects.filter(online=True).count()
     offline_devices = Device.objects.filter(online=False).count()
     new_devices = Device.objects.filter(known=False).count()
+    open_ports = DevicePort.objects.filter(open=True).count()
     counters = {
         "all_devices": all_devices,
         "online_devices": online_devices,
         "offline_devices": offline_devices,
         "new_devices": new_devices,
+        "open_ports": open_ports,
     }
 
     # Handle GET request to retrieve devices
@@ -181,22 +184,18 @@ def device(request):
                 )
                 devices = devices.filter(ports__port=port, ports__open=True).distinct()
 
-            limit = parse_int_param(request.query_params, "limit", 50, 1, 200)
-            offset = parse_int_param(request.query_params, "offset", 0, 0)
-            total = devices.count()
-            devices = devices[offset : offset + limit]
-            serializer = DeviceSerializer(devices, many=True)
+            payload = paginated_payload(
+                request,
+                devices,
+                DeviceSerializer,
+                default_limit=10,
+                max_limit=100,
+            )
             return Response(
                 {
-                    "data": serializer.data,
+                    "data": payload["data"],
                     "counters": counters,
-                    "pagination": {
-                        "count": total,
-                        "limit": limit,
-                        "offset": offset,
-                        "next_offset": offset + limit if offset + limit < total else None,
-                        "previous_offset": max(offset - limit, 0) if offset > 0 else None,
-                    },
+                    "pagination": payload["pagination"],
                 },
                 status=status.HTTP_200_OK,
             )
@@ -284,7 +283,26 @@ def scan_now(request):
     except ValueError as exc:
         raise ValidationError({"ip_range": str(exc)}) from exc
 
-    scan_run = scan(ip_range)
+    try:
+        scan_run = scan(ip_range)
+    except Exception as exc:
+        LOGGER.exception("Scan failed for %s", ip_range)
+        failed_scan = ScanRun.objects.filter(ip_range=ip_range).first()
+        message = str(exc)
+        if "Permission denied" in message and "/dev/bpf" in message:
+            message = (
+                "Network scan needs packet-capture permissions. Run the scanner "
+                "with sudo locally or use the privileged Docker scanner service."
+            )
+        return Response(
+            {
+                "status": "Error",
+                "info": message,
+                "data": ScanRunSerializer(failed_scan).data if failed_scan else None,
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
     return Response(
         {
             "status": "OK",
@@ -329,10 +347,12 @@ def scan_runs(request):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def scan_status(request):
-    latest_scan = ScanRun.objects.first()
+    latest_scan = ScanRun.objects.exclude(status=ScanRun.Status.RUNNING).first()
+    active_scan = ScanRun.objects.filter(status=ScanRun.Status.RUNNING).first()
     return Response(
         {
             "data": ScanRunSerializer(latest_scan).data if latest_scan else None,
+            "active_scan": ScanRunSerializer(active_scan).data if active_scan else None,
             "counters": {
                 "all_devices": Device.objects.count(),
                 "online_devices": Device.objects.filter(online=True).count(),
