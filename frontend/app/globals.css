@@ -1,0 +1,96 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  min-width: 100vw;
+  background: #f5f7fb;
+  color: #192233;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.shell {
+  width: 100%;
+  min-width: 100vw;
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(237, 242, 255, 0.95), rgba(245, 247, 251, 0.95)),
+    radial-gradient(circle at top left, rgba(76, 110, 245, 0.14), transparent 36rem);
+}
+
+.auth-shell {
+  width: 100%;
+  min-width: 100vw;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(25, 34, 51, 0.94), rgba(31, 53, 85, 0.88)),
+    url('/logo.png') center / 460px no-repeat;
+}
+
+.auth-panel {
+  width: min(440px, 100%);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 24px 70px rgba(11, 18, 32, 0.26);
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid #dfe5ef;
+  backdrop-filter: blur(12px);
+}
+
+.metric-card,
+.content-panel {
+  border: 1px solid #dfe5ef;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.content-panel {
+  overflow: hidden;
+}
+
+.device-row:hover {
+  background: #f8faff;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.online {
+  background: #12b886;
+}
+
+.status-dot.offline {
+  background: #adb5bd;
+}
+
+@media (max-width: 720px) {
+  .auth-shell {
+    padding: 16px;
+    background-size: 320px;
+  }
+}
