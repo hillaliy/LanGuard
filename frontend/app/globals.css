@@ -50,6 +50,78 @@ textarea {
   box-shadow: 0 24px 70px rgba(11, 18, 32, 0.26);
 }
 
+.not-found-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 16px;
+  background:
+    radial-gradient(circle at 50% 22%, rgba(76, 110, 245, 0.15), transparent 28rem),
+    linear-gradient(180deg, rgba(237, 242, 255, 0.95), rgba(245, 247, 251, 0.98));
+}
+
+.not-found-visual {
+  position: relative;
+  width: min(440px, 88vw);
+  min-height: 230px;
+  display: grid;
+  place-items: center;
+}
+
+.not-found-code {
+  color: #4c6ef5;
+  font-size: clamp(7rem, 22vw, 13rem);
+  font-weight: 900;
+  line-height: 0.78;
+  opacity: 0.12;
+}
+
+.not-found-logo {
+  position: absolute;
+  width: 116px;
+  height: 116px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #dfe5ef;
+  border-radius: 50%;
+  box-shadow: 0 22px 60px rgba(31, 45, 78, 0.18);
+}
+
+.not-found-node {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  color: #3b5bdb;
+  background: #eef3ff;
+  border: 1px solid #d7e0ff;
+  border-radius: 50%;
+  box-shadow: 0 14px 34px rgba(76, 110, 245, 0.14);
+}
+
+.node-one {
+  top: 22px;
+  left: 46px;
+}
+
+.node-two {
+  right: 34px;
+  top: 54px;
+}
+
+.node-three {
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.not-found-title {
+  font-size: clamp(2.25rem, 6vw, 3.25rem);
+  line-height: 1;
+}
+
 .topbar {
   position: sticky;
   top: 0;
@@ -57,6 +129,19 @@ textarea {
   background: rgba(255, 255, 255, 0.9);
   border-bottom: 1px solid #dfe5ef;
   backdrop-filter: blur(12px);
+}
+
+.topbar-clock {
+  min-width: 154px;
+  padding: 6px 10px;
+  color: #4b5563;
+  border: 1px solid #dfe5ef;
+  border-radius: 8px;
+  background: #f8faff;
+}
+
+.topbar-admin-button {
+  flex: 0 0 auto;
 }
 
 .metric-card,
@@ -267,5 +352,13 @@ textarea {
   .auth-shell {
     padding: 16px;
     background-size: 320px;
+  }
+
+  .topbar-admin-button {
+    padding-inline: 10px;
+  }
+
+  .topbar-clock {
+    display: none;
   }
 }

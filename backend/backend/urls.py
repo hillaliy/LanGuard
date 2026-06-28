@@ -21,20 +21,20 @@ from drf_spectacular.views import (
     SpectacularRedocView,
     SpectacularSwaggerView,
 )
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import AllowAny
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path(
         "api/schema/",
-        SpectacularAPIView.as_view(permission_classes=[IsAdminUser]),
+        SpectacularAPIView.as_view(permission_classes=[AllowAny]),
         name="api-schema",
     ),
     path(
         "api/schema/swagger/",
         SpectacularSwaggerView.as_view(
             url_name="api-schema",
-            permission_classes=[IsAdminUser],
+            permission_classes=[AllowAny],
         ),
         name="api-schema-swagger-ui",
     ),
@@ -42,7 +42,7 @@ urlpatterns = [
         "api/schema/redoc/",
         SpectacularRedocView.as_view(
             url_name="api-schema",
-            permission_classes=[IsAdminUser],
+            permission_classes=[AllowAny],
         ),
         name="api-schema-redoc",
     ),

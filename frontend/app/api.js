@@ -12,6 +12,19 @@ function getApiBase() {
   return '/api/v1';
 }
 
+export function getAdminUrl() {
+  if (typeof window === 'undefined') {
+    return '/admin/';
+  }
+
+  const apiBase = getApiBase();
+  const adminUrl = new URL(apiBase, window.location.origin);
+  adminUrl.pathname = '/admin/';
+  adminUrl.search = '';
+  adminUrl.hash = '';
+  return adminUrl.toString();
+}
+
 function getToken() {
   if (typeof window === 'undefined') {
     return null;

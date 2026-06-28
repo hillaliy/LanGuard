@@ -29,6 +29,7 @@ import {
   Tooltip,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
 import {
   IconAlertCircle,
   IconAirConditioning,
@@ -55,15 +56,18 @@ import {
   IconSearch,
   IconServer,
   IconShieldCheck,
+  IconShieldLock,
   IconTemperature,
   IconTrash,
   IconUserPlus,
   IconWifi,
   IconWifiOff,
+  IconX,
 } from '@tabler/icons-react';
 import {
   apiRequest,
   clearStoredUser,
+  getAdminUrl,
   getStoredUser,
   storeUser,
 } from './api';
@@ -83,6 +87,24 @@ const deviceStatusOptions = [
   { value: 'offline', label: 'Offline' },
   { value: 'new', label: 'New devices' },
 ];
+
+function showSuccessNotification(title, message) {
+  notifications.show({
+    title,
+    message,
+    color: 'teal',
+    icon: <IconShieldCheck size={18} />,
+  });
+}
+
+function showErrorNotification(title, message) {
+  notifications.show({
+    title,
+    message,
+    color: 'red',
+    icon: <IconAlertCircle size={18} />,
+  });
+}
 
 const deviceIconOptions = [
   { value: 'unknown', label: 'Unknown', icon: IconQuestionMark },
@@ -187,6 +209,22 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function formatTopbarDate(value) {
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  }).format(value);
+}
+
+function formatTopbarTime(value) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(value);
+}
+
 function AuthScreen({ onLogin }) {
   const [mode, setMode] = useState('login');
   const [username, setUsername] = useState('');
@@ -217,9 +255,14 @@ function AuthScreen({ onLogin }) {
         body: { username, password },
       });
       storeUser(user);
+      showSuccessNotification(
+        mode === 'register' ? 'Account created' : 'Signed in',
+        `Welcome, ${user.username}.`
+      );
       onLogin(user);
     } catch (err) {
       setError(err.message);
+      showErrorNotification('Authentication failed', err.message);
     } finally {
       setLoading(false);
     }
@@ -443,9 +486,11 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
         },
       });
       await onSaved();
+      showSuccessNotification('Device saved', `${name || device.name} was updated.`);
       onClose();
     } catch (err) {
       setError(err.message);
+      showErrorNotification('Could not save device', err.message);
     } finally {
       setSaving(false);
     }
@@ -457,13 +502,16 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
     }
     setSaving(true);
     setError('');
+    const deletedName = device.name;
     try {
       await apiRequest(`device/?id=${device.id}`, { method: 'DELETE' });
       await onSaved();
+      showSuccessNotification('Device deleted', `${deletedName} was removed.`);
       deleteConfirm.close();
       onClose();
     } catch (err) {
       setError(err.message);
+      showErrorNotification('Could not delete device', err.message);
     } finally {
       setSaving(false);
     }
@@ -606,6 +654,7 @@ function Dashboard({ user, onLogout }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [currentTime, setCurrentTime] = useState(() => new Date());
   const [devices, setDevices] = useState([]);
   const [devicePagination, setDevicePagination] = useState({
     count: 0,
@@ -662,7 +711,7 @@ function Dashboard({ user, onLogout }) {
     };
   }, [search, deviceStatus, eventType, deviceLimit, deviceOffset, deviceOrdering]);
 
-  async function loadData({ quiet = false } = {}) {
+  async function loadData({ quiet = false, notifyOnError = false, notifyOnSuccess = false } = {}) {
     if (quiet) {
       setRefreshing(true);
     } else {
@@ -714,8 +763,14 @@ function Dashboard({ user, onLogout }) {
       setScanRuns(runData.data || []);
       setEvents(eventData.data || []);
       setNotifications(notificationData.data || []);
+      if (notifyOnSuccess) {
+        showSuccessNotification('Dashboard refreshed', 'Latest device and scan data loaded.');
+      }
     } catch (err) {
       setError(err.message);
+      if (notifyOnError) {
+        showErrorNotification('Refresh failed', err.message);
+      }
       if (err.message.toLowerCase().includes('credential')) {
         clearStoredUser();
         onLogout();
@@ -729,6 +784,11 @@ function Dashboard({ user, onLogout }) {
   useEffect(() => {
     loadData();
     const timer = window.setInterval(() => loadData({ quiet: true }), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(new Date()), 30000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -750,14 +810,17 @@ function Dashboard({ user, onLogout }) {
         body: scanRange ? { ip_range: scanRange } : {},
       });
       await loadData({ quiet: true });
+      showSuccessNotification('Scan started', 'LanGuard is scanning the selected network range.');
     } catch (err) {
       setError(err.message);
+      showErrorNotification('Scan failed', err.message);
     } finally {
       setRefreshing(false);
     }
   }
 
   function logout() {
+    showSuccessNotification('Signed out', 'Your LanGuard session has ended.');
     clearStoredUser();
     onLogout();
   }
@@ -777,8 +840,36 @@ function Dashboard({ user, onLogout }) {
               </Box>
             </Group>
             <Group gap="xs">
+              <Group className="topbar-clock" gap="xs" wrap="nowrap">
+                <IconClock size={18} />
+                <Box>
+                  <Text size="xs" c="dimmed" lh={1.1}>
+                    {formatTopbarDate(currentTime)}
+                  </Text>
+                  <Text size="sm" fw={700} lh={1.15}>
+                    {formatTopbarTime(currentTime)}
+                  </Text>
+                </Box>
+              </Group>
+              <Button
+                component="a"
+                href={getAdminUrl()}
+                target="_blank"
+                rel="noreferrer"
+                variant="light"
+                size="sm"
+                leftSection={<IconShieldLock size={17} />}
+                className="topbar-admin-button"
+              >
+                Admin
+              </Button>
               <Tooltip label="Refresh">
-                <ActionIcon variant="light" size="lg" onClick={() => loadData({ quiet: true })} loading={refreshing}>
+                <ActionIcon
+                  variant="light"
+                  size="lg"
+                  onClick={() => loadData({ quiet: true, notifyOnError: true, notifyOnSuccess: true })}
+                  loading={refreshing}
+                >
                   <IconRefresh size={19} />
                 </ActionIcon>
               </Tooltip>
@@ -836,6 +927,19 @@ function Dashboard({ user, onLogout }) {
                     w={{ base: 180, sm: 260 }}
                     placeholder="Search"
                     leftSection={<IconSearch size={17} />}
+                    rightSection={
+                      search ? (
+                        <ActionIcon
+                          aria-label="Clear device search"
+                          color="gray"
+                          size="sm"
+                          variant="subtle"
+                          onClick={() => setSearch('')}
+                        >
+                          <IconX size={16} />
+                        </ActionIcon>
+                      ) : null
+                    }
                     value={search}
                     onChange={(event) => setSearch(event.currentTarget.value)}
                   />
