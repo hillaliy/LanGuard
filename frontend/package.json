@@ -7,9 +7,13 @@
     "build": "next build",
     "lint": "eslint app"
   },
+  "engines": {
+    "node": ">=24"
+  },
   "dependencies": {
     "@mantine/core": "^9.4.0",
     "@mantine/hooks": "^9.4.0",
+    "@mantine/notifications": "^9.4.1",
     "@tabler/icons-react": "^3.44.0",
     "next": "^16.2.9",
     "react": "^19.2.7",

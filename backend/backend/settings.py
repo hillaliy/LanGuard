@@ -115,7 +115,7 @@ SPECTACULAR_SETTINGS = {
     ),
     "VERSION": "v1",
     "SCHEMA_PATH_PREFIX": "/api/v1",
-    "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"],
+    "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
 }
 
 MIDDLEWARE = [
@@ -328,5 +328,9 @@ NOTIFICATION_RETRY_INTERVAL = int(os.getenv("NOTIFICATION_RETRY_INTERVAL", "15")
 NOTIFICATION_MAX_ATTEMPTS = int(os.getenv("NOTIFICATION_MAX_ATTEMPTS", "3"))
 NOTIFICATION_EVENT_TYPES = env_list("NOTIFICATION_EVENT_TYPES", default=["new_device"])
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
+DISCORD_ICON_URL = os.getenv(
+    "DISCORD_ICON_URL",
+    "https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png",
+)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_USERID = os.getenv("TELEGRAM_USERID")

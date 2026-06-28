@@ -186,7 +186,10 @@ Discord:
 
 ```env
 DISCORD_WEBHOOK=https://discord.com/api/webhooks/...
+DISCORD_ICON_URL=https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png
 ```
+
+Discord notifications are sent as embeds with the LanGuard icon, a red alert bar, and device details.
 
 Telegram:
 

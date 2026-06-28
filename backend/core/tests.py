@@ -57,6 +57,26 @@ class ProductionSettingsTests(SimpleTestCase):
         )
 
 
+class ApiDocsAccessTests(SimpleTestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_openapi_schema_is_public(self):
+        response = self.client.get("/api/schema/")
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_swagger_ui_is_public(self):
+        response = self.client.get("/api/schema/swagger/")
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_redoc_is_public(self):
+        response = self.client.get("/api/schema/redoc/")
+
+        self.assertEqual(response.status_code, 200)
+
+
 @override_settings(NOTIFICATIONS_ENABLED=False)
 class PortEventTests(TestCase):
     def setUp(self):
@@ -266,6 +286,7 @@ class NotificationTests(TestCase):
     @override_settings(
         NOTIFICATIONS_ENABLED=True,
         DISCORD_WEBHOOK="https://discord.example/webhook",
+        DISCORD_ICON_URL="https://example.com/languard.png",
         TELEGRAM_TOKEN="",
         TELEGRAM_USERID="",
         NOTIFICATION_TIMEOUT=1,
@@ -281,6 +302,24 @@ class NotificationTests(TestCase):
         self.assertEqual(delivery.channel, NotificationDelivery.Channel.DISCORD)
         self.assertEqual(delivery.status, NotificationDelivery.Status.SENT)
         self.assertEqual(delivery.attempts, 1)
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["username"], "LanGuard")
+        self.assertEqual(payload["avatar_url"], "https://example.com/languard.png")
+        self.assertNotIn("content", payload)
+        embed = payload["embeds"][0]
+        self.assertEqual(embed["title"], "LanGuard: New device")
+        self.assertEqual(embed["description"], "Found new device Camera at 192.168.1.50")
+        self.assertEqual(embed["color"], 0xE03131)
+        self.assertEqual(embed["author"]["icon_url"], "https://example.com/languard.png")
+        self.assertEqual(embed["thumbnail"]["url"], "https://example.com/languard.png")
+        self.assertEqual(
+            {field["name"]: field["value"] for field in embed["fields"]},
+            {
+                "Device": "Camera",
+                "IP": "192.168.1.50",
+                "MAC": "11:22:33:44:55:66",
+            },
+        )
         self.event.refresh_from_db()
         self.assertTrue(self.event.notified)
 

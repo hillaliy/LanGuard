@@ -8,6 +8,7 @@ from .models import NetworkEvent, NotificationDelivery
 
 
 LOGGER = logging.getLogger(__name__)
+DISCORD_ALERT_COLOR = 0xE03131
 
 
 def configured_channels():
@@ -123,10 +124,7 @@ def send_delivery(delivery):
 def send_discord(event):
     response = requests.post(
         settings.DISCORD_WEBHOOK,
-        json={
-            "username": "LanGuard",
-            "content": format_event_message(event),
-        },
+        json=format_discord_payload(event),
         timeout=settings.NOTIFICATION_TIMEOUT,
     )
     response.raise_for_status()
@@ -157,3 +155,38 @@ def format_event_message(event):
     if device.vendor:
         lines.append(f"Vendor: {device.vendor}")
     return "\n".join(lines)
+
+
+def format_discord_payload(event):
+    device = event.device
+    icon_url = settings.DISCORD_ICON_URL
+    fields = [
+        {"name": "Device", "value": device.name or "-", "inline": True},
+        {"name": "IP", "value": device.ip or "-", "inline": True},
+        {"name": "MAC", "value": device.mac or "-", "inline": True},
+    ]
+    if device.vendor:
+        fields.append({"name": "Vendor", "value": device.vendor, "inline": False})
+
+    embed = {
+        "title": f"LanGuard: {event.get_event_type_display()}",
+        "description": event.message,
+        "color": DISCORD_ALERT_COLOR,
+        "fields": fields,
+        "timestamp": event.created_at.isoformat(),
+        "footer": {"text": "LanGuard"},
+    }
+    if icon_url:
+        embed["author"] = {
+            "name": "LanGuard",
+            "icon_url": icon_url,
+        }
+        embed["thumbnail"] = {"url": icon_url}
+
+    payload = {
+        "username": "LanGuard",
+        "embeds": [embed],
+    }
+    if icon_url:
+        payload["avatar_url"] = icon_url
+    return payload
