@@ -1,6 +1,19 @@
 # LanGuard
 
-![LanGuard logo](frontend/public/logo.png)
+<p align="center">
+  <img src="frontend/public/logo.png" alt="LanGuard logo" width="120">
+</p>
+
+<p align="center">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.0.1-blue">
+  <img alt="Release downloads" src="https://img.shields.io/github/downloads/hillaliy/LanGuard/total?label=downloads">
+  <a href="https://github.com/hillaliy/LanGuard/pkgs/container/languard-backend">
+    <img alt="Backend image" src="https://img.shields.io/badge/GHCR-backend-2ea44f">
+  </a>
+  <a href="https://github.com/hillaliy/LanGuard/pkgs/container/languard-frontend">
+    <img alt="Frontend image" src="https://img.shields.io/badge/GHCR-frontend-2ea44f">
+  </a>
+</p>
 
 LanGuard is a self-hosted LAN visibility tool for home networks. It finds devices, tracks online/offline state, scans common ports, keeps history, and can send Discord or Telegram alerts for new devices.
 

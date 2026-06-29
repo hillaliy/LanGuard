@@ -4,6 +4,14 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.1',
+    date: '2026-06-29',
+    items: [
+      'Added a container startup lock so backend and scanner migrations do not race on first deploy.',
+      'Improved README logo sizing and project badges.',
+    ],
+  },
+  {
     version: '1.0.0',
     date: '2026-06-29',
     items: [
