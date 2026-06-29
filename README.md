@@ -108,6 +108,31 @@ Builds the static Next.js frontend into a shared volume.
 
 Serves the frontend and proxies API, admin, schema, and static routes to Django.
 
+## Releases
+
+The app version is read from `frontend/package.json` and shown in the top bar.
+When the version changes, the frontend opens the changelog modal once per browser profile.
+
+Build and push backend/frontend Docker images to GHCR:
+
+```bash
+docker login ghcr.io
+./push_image.sh
+```
+
+Pass an explicit version when needed:
+
+```bash
+./push_image.sh 1.0.0
+```
+
+Default image names:
+
+- `ghcr.io/hillaliy/languard-backend`
+- `ghcr.io/hillaliy/languard-frontend`
+
+Set `BACKEND_IMAGE` or `FRONTEND_IMAGE` to override the target repository names.
+
 ## Scanning
 
 Manual one-off scan:

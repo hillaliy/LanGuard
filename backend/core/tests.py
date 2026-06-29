@@ -77,6 +77,77 @@ class ApiDocsAccessTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class AuthApiTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_first_registered_user_becomes_admin(self):
+        response = self.client.post(
+            "/api/v1/register/",
+            {
+                "username": "admin",
+                "password": "password",
+                "password_confirm": "password",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.data["is_staff"])
+        self.assertTrue(response.data["is_superuser"])
+        user = User.objects.get(username="admin")
+        self.assertTrue(user.is_staff)
+        self.assertTrue(user.is_superuser)
+
+    def test_registration_is_closed_after_first_user_exists(self):
+        User.objects.create_user(username="admin", password="password")
+
+        response = self.client.post(
+            "/api/v1/register/",
+            {
+                "username": "viewer",
+                "password": "password",
+                "password_confirm": "password",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(User.objects.filter(username="viewer").exists())
+
+    def test_setup_status_reports_registration_open(self):
+        response = self.client.get("/api/v1/setup/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["registration_open"])
+
+    def test_setup_status_reports_registration_closed_after_user_exists(self):
+        User.objects.create_user(username="admin", password="password")
+
+        response = self.client.get("/api/v1/setup/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["registration_open"])
+
+    def test_login_returns_role_flags(self):
+        User.objects.create_user(
+            username="admin",
+            password="password",
+            is_staff=True,
+            is_superuser=True,
+        )
+
+        response = self.client.post(
+            "/api/v1/login/",
+            {"username": "admin", "password": "password"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["is_staff"])
+        self.assertTrue(response.data["is_superuser"])
+
+
 @override_settings(NOTIFICATIONS_ENABLED=False)
 class PortEventTests(TestCase):
     def setUp(self):
@@ -494,7 +565,11 @@ class ScanNotificationTests(TestCase):
 @override_settings(NOTIFICATIONS_ENABLED=False)
 class ScanApiTests(TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(username="admin", password="password")
+        self.user = User.objects.create_user(
+            username="admin",
+            password="password",
+            is_staff=True,
+        )
         self.client = APIClient()
         self.client.force_authenticate(self.user)
         self.device = Device.objects.create(
@@ -527,6 +602,163 @@ class ScanApiTests(TestCase):
         response = client.get("/api/v1/scan/status/")
 
         self.assertEqual(response.status_code, 401)
+
+    def test_users_endpoint_lists_users(self):
+        response = self.client.get("/api/v1/users/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"][0]["username"], "admin")
+        self.assertNotIn("password", response.data["data"][0])
+
+    def test_users_endpoint_regular_user_lists_only_self(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.get("/api/v1/users/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["data"]), 1)
+        self.assertEqual(response.data["data"][0]["username"], "viewer")
+
+    def test_users_endpoint_regular_user_updates_self_only(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.put(
+            f"/api/v1/users/?id={regular_user.id}",
+            {
+                "username": "viewer-updated",
+                "first_name": "yossi",
+                "last_name": "user",
+                "is_staff": True,
+                "is_active": False,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        regular_user.refresh_from_db()
+        self.assertEqual(regular_user.username, "viewer-updated")
+        self.assertEqual(regular_user.first_name, "Yossi")
+        self.assertEqual(regular_user.last_name, "User")
+        self.assertFalse(regular_user.is_staff)
+        self.assertTrue(regular_user.is_active)
+
+    def test_users_endpoint_regular_user_cannot_edit_other_users(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.put(
+            f"/api/v1/users/?id={self.user.id}",
+            {"username": "admin-changed"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.username, "admin")
+
+    def test_users_endpoint_regular_user_cannot_create_or_delete_users(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        create_response = regular_client.post(
+            "/api/v1/users/",
+            {
+                "username": "other",
+                "password": "password",
+                "password_confirm": "password",
+            },
+            format="json",
+        )
+        delete_response = regular_client.delete(f"/api/v1/users/?id={self.user.id}")
+
+        self.assertEqual(create_response.status_code, 403)
+        self.assertEqual(delete_response.status_code, 403)
+
+    def test_users_endpoint_creates_user(self):
+        response = self.client.post(
+            "/api/v1/users/",
+            {
+                "username": "viewer",
+                "password": "secret-password",
+                "password_confirm": "secret-password",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(User.objects.filter(username="viewer").exists())
+        self.assertEqual(response.data["data"]["username"], "viewer")
+
+    def test_users_endpoint_updates_user(self):
+        user = User.objects.create_user(username="viewer", password="old-password")
+
+        response = self.client.put(
+            f"/api/v1/users/?id={user.id}",
+            {
+                "username": "viewer-updated",
+                "first_name": "view",
+                "last_name": "er",
+                "password": "new-password",
+                "password_confirm": "new-password",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertEqual(user.username, "viewer-updated")
+        self.assertEqual(user.first_name, "View")
+        self.assertEqual(user.last_name, "Er")
+        self.assertTrue(user.check_password("new-password"))
+
+    def test_users_endpoint_deletes_user(self):
+        user = User.objects.create_user(username="viewer", password="password")
+
+        response = self.client.delete(f"/api/v1/users/?id={user.id}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(id=user.id).exists())
+
+    def test_users_endpoint_rejects_deleting_last_user(self):
+        response = self.client.delete(f"/api/v1/users/?id={self.user.id}")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(User.objects.filter(id=self.user.id).exists())
+
+    def test_users_endpoint_rejects_deleting_last_admin(self):
+        User.objects.create_user(username="viewer", password="password")
+
+        response = self.client.delete(f"/api/v1/users/?id={self.user.id}")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(User.objects.filter(id=self.user.id).exists())
+
+    def test_users_endpoint_rejects_deleting_last_inactive_admin(self):
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        User.objects.create_user(username="viewer", password="password")
+
+        response = self.client.delete(f"/api/v1/users/?id={self.user.id}")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(User.objects.filter(id=self.user.id).exists())
+
+    def test_users_endpoint_rejects_demoting_last_admin(self):
+        response = self.client.put(
+            f"/api/v1/users/?id={self.user.id}",
+            {"is_staff": False},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.is_staff)
 
     def test_scan_status_endpoint_returns_latest_scan_and_counters(self):
         response = self.client.get("/api/v1/scan/status/")
