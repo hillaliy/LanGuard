@@ -1,7 +1,14 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Device, DevicePort, NetworkEvent, NotificationDelivery, ScanRun
+from .models import (
+    AppSettings,
+    Device,
+    DevicePort,
+    NetworkEvent,
+    NotificationDelivery,
+    ScanRun,
+)
 
 
 def capitalize_name(value):
@@ -136,3 +143,63 @@ class NotificationDeliverySerializer(serializers.ModelSerializer):
     class Meta:
         model = NotificationDelivery
         fields = "__all__"
+
+
+class AppSettingsSerializer(serializers.ModelSerializer):
+    discord_configured = serializers.SerializerMethodField()
+    telegram_configured = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AppSettings
+        fields = (
+            "ip_range",
+            "scan_interval",
+            "time_zone",
+            "notifications_enabled",
+            "discord_enabled",
+            "discord_webhook",
+            "discord_configured",
+            "telegram_enabled",
+            "telegram_token",
+            "telegram_user_id",
+            "telegram_configured",
+            "updated_at",
+        )
+        extra_kwargs = {
+            "discord_webhook": {"required": False, "allow_blank": True},
+            "telegram_token": {"required": False, "allow_blank": True},
+            "telegram_user_id": {"required": False, "allow_blank": True},
+            "updated_at": {"read_only": True},
+        }
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_discord_configured(self, obj):
+        return bool(obj.discord_webhook)
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_telegram_configured(self, obj):
+        return bool(obj.telegram_token and obj.telegram_user_id)
+
+    def validate_ip_range(self, value):
+        from .scan import validate_ip_range
+
+        try:
+            return validate_ip_range(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+    def validate_scan_interval(self, value):
+        if value < 1:
+            raise serializers.ValidationError("Scan interval must be at least 1 minute.")
+        if value > 1440:
+            raise serializers.ValidationError("Scan interval must be 1440 minutes or less.")
+        return value
+
+    def validate_time_zone(self, value):
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise serializers.ValidationError("Enter a valid IANA timezone.") from exc
+        return value

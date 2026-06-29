@@ -20,6 +20,7 @@ from django.shortcuts import get_object_or_404
 import logging
 
 from .serializers import (
+    AppSettingsSerializer,
     DeviceSerializer,
     NetworkEventSerializer,
     NotificationDeliverySerializer,
@@ -27,7 +28,14 @@ from .serializers import (
     UserManagementSerializer,
     UserSerializer,
 )
-from .models import Device, DevicePort, NetworkEvent, NotificationDelivery, ScanRun
+from .models import (
+    AppSettings,
+    Device,
+    DevicePort,
+    NetworkEvent,
+    NotificationDelivery,
+    ScanRun,
+)
 from .api import (
     paginated_response,
     paginated_payload,
@@ -111,6 +119,24 @@ def active_staff_count():
 
 def staff_count():
     return User.objects.filter(is_staff=True).count()
+
+
+@extend_schema(
+    request=AppSettingsSerializer,
+    responses=AppSettingsSerializer,
+)
+@api_view(["GET", "PUT"])
+@permission_classes([permissions.IsAdminUser])
+def app_settings(request):
+    config = AppSettings.load()
+
+    if request.method == "GET":
+        return Response({"data": AppSettingsSerializer(config).data})
+
+    serializer = AppSettingsSerializer(config, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    serializer.save()
+    return Response({"data": AppSettingsSerializer(config).data})
 
 
 @extend_schema(
@@ -472,7 +498,7 @@ def device(request):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated])
 def scan_now(request):
-    ip_range = request.data.get("ip_range") or settings.IP_RANGE
+    ip_range = request.data.get("ip_range") or AppSettings.load().ip_range
     try:
         ip_range = validate_ip_range(ip_range)
     except ValueError as exc:

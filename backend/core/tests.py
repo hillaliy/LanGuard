@@ -11,7 +11,14 @@ import requests
 from rest_framework.test import APIClient
 
 from backend.settings import validate_production_settings
-from .models import Device, DevicePort, NetworkEvent, NotificationDelivery, ScanRun
+from .models import (
+    AppSettings,
+    Device,
+    DevicePort,
+    NetworkEvent,
+    NotificationDelivery,
+    ScanRun,
+)
 from .notifications import notify_event, retry_failed_notifications
 from .scan import (
     create_event,
@@ -760,6 +767,72 @@ class ScanApiTests(TestCase):
         self.user.refresh_from_db()
         self.assertTrue(self.user.is_staff)
 
+    def test_settings_endpoint_requires_admin_user(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.get("/api/v1/settings/")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_settings_endpoint_updates_scan_and_notification_settings(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "ip_range": "192.168.1.0/24",
+                "scan_interval": 15,
+                "time_zone": "Asia/Jerusalem",
+                "discord_enabled": False,
+                "telegram_enabled": True,
+                "discord_webhook": "https://discord.example/webhook",
+                "telegram_token": "token",
+                "telegram_user_id": "123",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        config = AppSettings.load()
+        self.assertEqual(config.ip_range, "192.168.1.0/24")
+        self.assertEqual(config.scan_interval, 15)
+        self.assertEqual(config.time_zone, "Asia/Jerusalem")
+        self.assertFalse(config.discord_enabled)
+        self.assertTrue(config.telegram_enabled)
+        self.assertEqual(config.discord_webhook, "https://discord.example/webhook")
+        self.assertEqual(config.telegram_token, "token")
+        self.assertEqual(config.telegram_user_id, "123")
+        self.assertEqual(
+            response.data["data"]["discord_webhook"],
+            "https://discord.example/webhook",
+        )
+        self.assertEqual(response.data["data"]["telegram_token"], "token")
+        self.assertEqual(response.data["data"]["telegram_user_id"], "123")
+        self.assertFalse(response.data["data"]["discord_enabled"])
+        self.assertTrue(response.data["data"]["telegram_enabled"])
+        self.assertTrue(response.data["data"]["discord_configured"])
+
+    @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
+    def test_settings_endpoint_rejects_unsafe_scan_range(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"ip_range": "8.8.8.0/24"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("ip_range", response.data)
+
+    def test_settings_endpoint_rejects_bad_timezone(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"time_zone": "Bad/Timezone"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("time_zone", response.data)
+
     def test_scan_status_endpoint_returns_latest_scan_and_counters(self):
         response = self.client.get("/api/v1/scan/status/")
 
@@ -929,6 +1002,17 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("ip_range", response.data)
+
+    @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
+    @patch("core.views.scan")
+    def test_scan_now_uses_saved_default_range(self, scan_mock):
+        AppSettings.objects.create(ip_range="192.168.1.0/24", scan_interval=10)
+        scan_mock.return_value = self.scan_run
+
+        response = self.client.post("/api/v1/scan/", {}, format="json")
+
+        self.assertEqual(response.status_code, 202)
+        scan_mock.assert_called_once_with("192.168.1.0/24")
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
     @patch("core.views.scan")

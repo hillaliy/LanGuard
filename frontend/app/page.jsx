@@ -14,6 +14,7 @@ import {
   Image,
   LoadingOverlay,
   Modal,
+  NumberInput,
   Pagination,
   Paper,
   PasswordInput,
@@ -58,6 +59,7 @@ import {
   IconRouter,
   IconSearch,
   IconServer,
+  IconSettings,
   IconShieldCheck,
   IconShieldLock,
   IconSun,
@@ -96,6 +98,26 @@ const deviceStatusOptions = [
   { value: 'offline', label: 'Offline' },
   { value: 'new', label: 'New devices' },
 ];
+
+const fallbackTimeZoneOptions = [
+  'UTC',
+  'Asia/Jerusalem',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'Asia/Dubai',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+];
+
+const timeZoneOptions =
+  typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function'
+    ? Intl.supportedValuesOf('timeZone')
+    : fallbackTimeZoneOptions;
 
 function showSuccessNotification(title, message) {
   notifications.show({
@@ -1075,6 +1097,195 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
   );
 }
 
+function SettingsModal({ opened, onClose, onSaved }) {
+  const [ipRange, setIpRange] = useState('');
+  const [scanInterval, setScanInterval] = useState(10);
+  const [timeZone, setTimeZone] = useState('UTC');
+  const [discordEnabled, setDiscordEnabled] = useState(true);
+  const [telegramEnabled, setTelegramEnabled] = useState(true);
+  const [discordConfigured, setDiscordConfigured] = useState(false);
+  const [telegramConfigured, setTelegramConfigured] = useState(false);
+  const [discordWebhook, setDiscordWebhook] = useState('');
+  const [telegramToken, setTelegramToken] = useState('');
+  const [telegramUserId, setTelegramUserId] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function loadSettings() {
+    setLoading(true);
+    setError('');
+    try {
+      const payload = await apiRequest('settings/');
+      const data = payload.data || {};
+      setIpRange(data.ip_range || '');
+      setScanInterval(data.scan_interval || 10);
+      setTimeZone(data.time_zone || 'UTC');
+      setDiscordEnabled(Boolean(data.discord_enabled));
+      setTelegramEnabled(Boolean(data.telegram_enabled));
+      setDiscordConfigured(Boolean(data.discord_configured));
+      setTelegramConfigured(Boolean(data.telegram_configured));
+      setDiscordWebhook(data.discord_webhook || '');
+      setTelegramToken(data.telegram_token || '');
+      setTelegramUserId(data.telegram_user_id || '');
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('Could not load settings', err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (opened) {
+      loadSettings();
+    }
+  }, [opened]);
+
+  async function saveSettings() {
+    setSaving(true);
+    setError('');
+    try {
+      const body = {
+        ip_range: ipRange,
+        scan_interval: scanInterval,
+        time_zone: timeZone,
+        discord_enabled: discordEnabled,
+        telegram_enabled: telegramEnabled,
+      };
+      body.discord_webhook = discordWebhook;
+      body.telegram_token = telegramToken;
+      body.telegram_user_id = telegramUserId;
+
+      await apiRequest('settings/', { method: 'PUT', body });
+      await loadSettings();
+      await onSaved();
+      showSuccessNotification('Settings saved', 'Scanner and notification settings were updated.');
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('Could not save settings', err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Settings" centered size="lg">
+      <LoadingOverlay visible={loading} />
+      <Stack>
+        {error && (
+          <Alert color="red" icon={<IconAlertCircle size={18} />}>
+            {error}
+          </Alert>
+        )}
+
+        <SimpleGrid cols={{ base: 1, sm: 3 }}>
+          <TextInput
+            label="Default scan range"
+            value={ipRange}
+            onChange={(event) => setIpRange(event.currentTarget.value)}
+            placeholder="192.168.1.0/24"
+            required
+          />
+          <NumberInput
+            label="Scan interval"
+            value={scanInterval}
+            onChange={(value) => setScanInterval(Number(value) || 10)}
+            min={1}
+            max={1440}
+            suffix=" min"
+            required
+          />
+          <Select
+            label="Time zone"
+            data={timeZoneOptions}
+            value={timeZone}
+            onChange={(value) => setTimeZone(value || 'UTC')}
+            placeholder="Asia/Jerusalem"
+            searchable
+            maxDropdownHeight={260}
+            required
+          />
+        </SimpleGrid>
+
+        <Text size="xs" c="dimmed">
+          Restart the scanner container after changing scan interval or timezone.
+        </Text>
+
+        <Divider />
+
+        <Stack gap="sm">
+          <Group justify="space-between">
+            <Group gap="sm">
+              <Text fw={700}>Discord</Text>
+              <Switch
+                label="Enabled"
+                checked={discordEnabled}
+                onChange={(event) => setDiscordEnabled(event.currentTarget.checked)}
+              />
+            </Group>
+            <Badge color={discordConfigured && discordEnabled ? 'teal' : 'gray'} variant="light">
+              {discordConfigured ? 'Configured' : 'Not configured'}
+            </Badge>
+          </Group>
+          <TextInput
+            label="Discord webhook"
+            description={
+              discordConfigured
+                ? 'Discord messages are configured with this webhook.'
+                : 'Paste a Discord channel webhook URL to enable Discord messages.'
+            }
+            placeholder="https://discord.com/api/webhooks/..."
+            value={discordWebhook}
+            onChange={(event) => setDiscordWebhook(event.currentTarget.value)}
+          />
+        </Stack>
+
+        <Stack gap="sm">
+          <Group justify="space-between">
+            <Group gap="sm">
+              <Text fw={700}>Telegram</Text>
+              <Switch
+                label="Enabled"
+                checked={telegramEnabled}
+                onChange={(event) => setTelegramEnabled(event.currentTarget.checked)}
+              />
+            </Group>
+            <Badge color={telegramConfigured && telegramEnabled ? 'teal' : 'gray'} variant="light">
+              {telegramConfigured ? 'Configured' : 'Not configured'}
+            </Badge>
+          </Group>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+            <TextInput
+              label="Telegram bot token"
+              placeholder="123456:bot-token"
+              value={telegramToken}
+              onChange={(event) => setTelegramToken(event.currentTarget.value)}
+            />
+            <TextInput
+              label="Telegram user ID"
+              placeholder="123456789"
+              value={telegramUserId}
+              onChange={(event) => setTelegramUserId(event.currentTarget.value)}
+            />
+          </SimpleGrid>
+        </Stack>
+
+        <Divider />
+        <Group justify="flex-end">
+          <Button variant="default" onClick={onClose}>
+            Close
+          </Button>
+          <Button onClick={saveSettings} loading={saving}>
+            Save
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 function Dashboard({ user, onLogout, onUserUpdated }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -1093,6 +1304,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [scanRuns, setScanRuns] = useState([]);
   const [events, setEvents] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [appSettings, setAppSettings] = useState(null);
   const [search, setSearch] = useState('');
   const [deviceStatus, setDeviceStatus] = useState('');
   const [devicePage, setDevicePage] = useState(1);
@@ -1107,6 +1319,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [modalOpened, modal] = useDisclosure(false);
   const [logoutModalOpened, logoutModal] = useDisclosure(false);
   const [usersModalOpened, usersModal] = useDisclosure(false);
+  const [settingsModalOpened, settingsModal] = useDisclosure(false);
   const tableStateRef = useRef({
     search: '',
     deviceStatus: '',
@@ -1169,13 +1382,17 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         limit: 8,
       };
 
-      const [deviceData, statusData, runData, eventData, notificationData] =
+      const settingsRequest = canManageUsers
+        ? apiRequest('settings/')
+        : Promise.resolve({ data: null });
+      const [deviceData, statusData, runData, eventData, notificationData, settingsData] =
         await Promise.all([
           apiRequest('device/', { params: deviceParams }),
           apiRequest('scan/status/'),
           apiRequest('scan/runs/', { params: { limit: 8 } }),
           apiRequest('events/', { params: eventParams }),
           apiRequest('notifications/', { params: { limit: 8 } }),
+          settingsRequest,
         ]);
 
       setDevices(deviceData.data || []);
@@ -1193,13 +1410,18 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
       setScanRuns(runData.data || []);
       setEvents(eventData.data || []);
       setNotifications(notificationData.data || []);
+      if (settingsData.data) {
+        setAppSettings(settingsData.data);
+      }
       if (notifyOnSuccess) {
         showSuccessNotification('Dashboard refreshed', 'Latest device and scan data loaded.');
       }
     } catch (err) {
-      setError(err.message);
+      setError(quiet ? '' : err.message);
       if (notifyOnError) {
         showErrorNotification('Refresh failed', err.message);
+      } else if (quiet) {
+        showErrorNotification('Backend unavailable', err.message);
       }
       if (err.message.toLowerCase().includes('credential')) {
         clearStoredUser();
@@ -1342,6 +1564,18 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                   <IconRefresh size={19} />
                 </ActionIcon>
               </Tooltip>
+              {canManageUsers && (
+                <Tooltip label="Settings">
+                  <ActionIcon
+                    variant="light"
+                    size="lg"
+                    onClick={settingsModal.open}
+                    aria-label="Settings"
+                  >
+                    <IconSettings size={19} />
+                  </ActionIcon>
+                </Tooltip>
+              )}
               <Tooltip label={canManageUsers ? 'Manage users' : 'Edit account'}>
                 <ActionIcon
                   variant="light"
@@ -1524,7 +1758,11 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 </Text>
                 <TextInput
                   label="CIDR range"
-                  placeholder="Use backend default"
+                  placeholder={
+                    appSettings?.ip_range
+                      ? `Use saved default (${appSettings.ip_range})`
+                      : 'Use saved default'
+                  }
                   value={scanRange}
                   onChange={(event) => setScanRange(event.currentTarget.value)}
                 />
@@ -1675,6 +1913,13 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         currentUser={user}
         onCurrentUserUpdated={updateCurrentUser}
       />
+      {canManageUsers && (
+        <SettingsModal
+          opened={settingsModalOpened}
+          onClose={settingsModal.close}
+          onSaved={() => loadData({ quiet: true })}
+        />
+      )}
       <Modal opened={logoutModalOpened} onClose={logoutModal.close} title="Log off" centered>
         <Stack>
           <Text>Are you sure you want to log off?</Text>

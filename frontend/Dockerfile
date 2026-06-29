@@ -1,10 +1,18 @@
-FROM node:24-alpine
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci
 
-COPY . .
+COPY app ./app
+COPY public ./public
+COPY next.config.mjs eslint.config.mjs ./
+RUN npm run build
 
-CMD ["sh", "-c", "npm run build && rm -rf /app/build/* && cp -R out/. /app/build/"]
+FROM caddy:2-alpine
+
+COPY Caddyfile /etc/caddy/Caddyfile
+COPY --from=builder /app/out /srv/frontend
+
+EXPOSE 80

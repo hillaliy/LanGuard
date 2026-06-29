@@ -2,6 +2,7 @@ from django.urls import path
 
 from .views import (
     UserRegistrationView,
+    app_settings,
     UserLoginView,
     UserEditView,
     UserLogoutView,
@@ -24,6 +25,7 @@ urlpatterns = [
     path("edit/", UserEditView.as_view(), name="user-edit"),
     path("logout/", UserLogoutView.as_view(), name="logout"),
     path("users/", users, name="users"),
+    path("settings/", app_settings, name="app-settings"),
     path("device/", device, name="device"),
     path("scan/", scan_now, name="scan_now"),
     path("scan/status/", scan_status, name="scan_status"),

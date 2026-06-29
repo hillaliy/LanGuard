@@ -1,5 +1,12 @@
 from django.contrib import admin
-from .models import Device, DevicePort, NetworkEvent, NotificationDelivery, ScanRun
+from .models import (
+    AppSettings,
+    Device,
+    DevicePort,
+    NetworkEvent,
+    NotificationDelivery,
+    ScanRun,
+)
 
 
 class DevicePortInline(admin.TabularInline):
@@ -53,3 +60,15 @@ class NotificationDeliveryAdmin(admin.ModelAdmin):
     list_filter = ("channel", "status")
     search_fields = ("event__message", "error")
     readonly_fields = ("created_at", "sent_at")
+
+
+@admin.register(AppSettings)
+class AppSettingsAdmin(admin.ModelAdmin):
+    list_display = (
+        "ip_range",
+        "scan_interval",
+        "time_zone",
+        "notifications_enabled",
+        "updated_at",
+    )
+    readonly_fields = ("singleton_key", "updated_at")
