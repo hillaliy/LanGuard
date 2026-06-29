@@ -38,18 +38,43 @@ export function getStoredUser() {
   }
 
   const token = window.localStorage.getItem('token');
+  const id = window.localStorage.getItem('user_id');
   const username = window.localStorage.getItem('username');
-  return token && username ? { token, username } : null;
+  const firstName = window.localStorage.getItem('first_name') || '';
+  const lastName = window.localStorage.getItem('last_name') || '';
+  const isStaff = window.localStorage.getItem('is_staff') === 'true';
+  const isSuperuser = window.localStorage.getItem('is_superuser') === 'true';
+  return token && username
+    ? {
+        token,
+        id: id ? Number(id) : null,
+        username,
+        first_name: firstName,
+        last_name: lastName,
+        is_staff: isStaff,
+        is_superuser: isSuperuser,
+      }
+    : null;
 }
 
 export function storeUser(user) {
   window.localStorage.setItem('token', user.token);
+  window.localStorage.setItem('user_id', String(user.id || ''));
   window.localStorage.setItem('username', user.username);
+  window.localStorage.setItem('first_name', user.first_name || '');
+  window.localStorage.setItem('last_name', user.last_name || '');
+  window.localStorage.setItem('is_staff', String(Boolean(user.is_staff)));
+  window.localStorage.setItem('is_superuser', String(Boolean(user.is_superuser)));
 }
 
 export function clearStoredUser() {
   window.localStorage.removeItem('token');
+  window.localStorage.removeItem('user_id');
   window.localStorage.removeItem('username');
+  window.localStorage.removeItem('first_name');
+  window.localStorage.removeItem('last_name');
+  window.localStorage.removeItem('is_staff');
+  window.localStorage.removeItem('is_superuser');
 }
 
 function buildUrl(path, params = {}) {

@@ -18,6 +18,7 @@ import {
   Paper,
   PasswordInput,
   Select,
+  SegmentedControl,
   SimpleGrid,
   Stack,
   Switch,
@@ -27,6 +28,7 @@ import {
   TextInput,
   Title,
   Tooltip,
+  useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -47,6 +49,7 @@ import {
   IconDeviceTv,
   IconHistory,
   IconLogout,
+  IconMoon,
   IconNetwork,
   IconPlugConnected,
   IconPrinter,
@@ -57,9 +60,12 @@ import {
   IconServer,
   IconShieldCheck,
   IconShieldLock,
+  IconSun,
   IconTemperature,
   IconTrash,
   IconUserPlus,
+  IconUserMinus,
+  IconUserEdit,
   IconWifi,
   IconWifiOff,
   IconX,
@@ -71,6 +77,9 @@ import {
   getStoredUser,
   storeUser,
 } from './api';
+import { APP_VERSION, CHANGELOG_ENTRIES } from './version';
+
+const changelogSeenStorageKey = 'languard_changelog_seen_version';
 
 const eventTypeOptions = [
   { value: 'new_device', label: 'New devices' },
@@ -104,6 +113,16 @@ function showErrorNotification(title, message) {
     color: 'red',
     icon: <IconAlertCircle size={18} />,
   });
+}
+
+function useHydrated() {
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
+
+  return hydrated;
 }
 
 const deviceIconOptions = [
@@ -199,6 +218,49 @@ function SortableHeader({ field, label, ordering, onChange, className }) {
   );
 }
 
+function ColorSchemeControl() {
+  const hydrated = useHydrated();
+  const { colorScheme, setColorScheme } = useMantineColorScheme();
+
+  return (
+    <SegmentedControl
+      className="color-scheme-control"
+      size="xs"
+      value={hydrated ? colorScheme : 'auto'}
+      onChange={setColorScheme}
+      data={[
+        {
+          value: 'light',
+          label: (
+            <Group component="span" gap={4} wrap="nowrap">
+              <IconSun size={14} />
+              <Box component="span" visibleFrom="lg">Light</Box>
+            </Group>
+          ),
+        },
+        {
+          value: 'dark',
+          label: (
+            <Group component="span" gap={4} wrap="nowrap">
+              <IconMoon size={14} />
+              <Box component="span" visibleFrom="lg">Dark</Box>
+            </Group>
+          ),
+        },
+        {
+          value: 'auto',
+          label: (
+            <Group component="span" gap={4} wrap="nowrap">
+              <IconDeviceDesktop size={14} />
+              <Box component="span" visibleFrom="lg">Auto</Box>
+            </Group>
+          ),
+        },
+      ]}
+    />
+  );
+}
+
 function formatDate(value) {
   if (!value) {
     return '-';
@@ -225,6 +287,38 @@ function formatTopbarTime(value) {
   }).format(value);
 }
 
+function userDisplayName(user) {
+  const fullName = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
+  return fullName || user?.username || 'User';
+}
+
+function userInitials(user) {
+  const displayName = userDisplayName(user);
+  const parts = displayName.split(/\s+/).filter(Boolean);
+  const nameInitials =
+    parts.length > 1
+      ? `${parts[0][0]}${parts[parts.length - 1][0]}`
+      : '';
+
+  if (nameInitials) {
+    return nameInitials.toUpperCase();
+  }
+
+  return (user?.username || 'U').trim().slice(0, 2).toUpperCase();
+}
+
+function capitalizeName(value) {
+  return (value || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word
+      .split('-')
+      .map((part) => part ? `${part[0].toUpperCase()}${part.slice(1).toLowerCase()}` : part)
+      .join('-'))
+    .join(' ');
+}
+
 function AuthScreen({ onLogin }) {
   const [mode, setMode] = useState('login');
   const [username, setUsername] = useState('');
@@ -232,6 +326,33 @@ function AuthScreen({ onLogin }) {
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [registrationOpen, setRegistrationOpen] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadSetupStatus() {
+      try {
+        const payload = await apiRequest('setup/');
+        if (mounted) {
+          setRegistrationOpen(Boolean(payload.registration_open));
+          if (!payload.registration_open) {
+            setMode('login');
+          }
+        }
+      } catch {
+        if (mounted) {
+          setRegistrationOpen(false);
+          setMode('login');
+        }
+      }
+    }
+
+    loadSetupStatus();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   async function submit(event) {
     event.preventDefault();
@@ -320,13 +441,15 @@ function AuthScreen({ onLogin }) {
             </Stack>
           </form>
 
-          <Button
-            variant="subtle"
-            leftSection={<IconUserPlus size={18} />}
-            onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
-          >
-            {mode === 'login' ? 'Create first user' : 'Use existing account'}
-          </Button>
+          {registrationOpen && (
+            <Button
+              variant="subtle"
+              leftSection={<IconUserPlus size={18} />}
+              onClick={() => setMode(mode === 'login' ? 'register' : 'login')}
+            >
+              {mode === 'login' ? 'Create first user' : 'Use existing account'}
+            </Button>
+          )}
         </Stack>
       </Paper>
     </main>
@@ -650,7 +773,309 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
   );
 }
 
-function Dashboard({ user, onLogout }) {
+function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdated }) {
+  const [users, setUsers] = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState('new');
+  const [username, setUsername] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [isActive, setIsActive] = useState(true);
+  const [isStaff, setIsStaff] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const selectedUser = selectedUserId === 'new'
+    ? null
+    : users.find((item) => String(item.id) === String(selectedUserId));
+  const canManageUsers = Boolean(currentUser?.is_staff || currentUser?.is_superuser);
+  const adminUserCount = users.filter((item) => item.is_staff).length;
+  const selectedUserIsLastAdmin = Boolean(selectedUser?.is_staff && adminUserCount <= 1);
+
+  async function loadUsers() {
+    setLoading(true);
+    setError('');
+    try {
+      const payload = await apiRequest('users/');
+      const nextUsers = payload.data || [];
+      setUsers(nextUsers);
+      if (!canManageUsers && nextUsers[0]) {
+        setSelectedUserId(String(nextUsers[0].id));
+      } else if (selectedUserId !== 'new' && !nextUsers.some((item) => String(item.id) === String(selectedUserId))) {
+        setSelectedUserId('new');
+      }
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('Could not load users', err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (opened) {
+      loadUsers();
+    }
+  }, [opened]);
+
+  useEffect(() => {
+    if (selectedUser) {
+      setUsername(selectedUser.username || '');
+      setFirstName(selectedUser.first_name || '');
+      setLastName(selectedUser.last_name || '');
+      setIsActive(Boolean(selectedUser.is_active));
+      setIsStaff(Boolean(selectedUser.is_staff));
+    } else {
+      setUsername('');
+      setFirstName('');
+      setLastName('');
+      setIsActive(true);
+      setIsStaff(false);
+    }
+    setPassword('');
+    setPasswordConfirm('');
+    setError('');
+  }, [selectedUserId, selectedUser?.id]);
+
+  async function saveUser() {
+    setSaving(true);
+    setError('');
+    try {
+      const body = {
+        username,
+        first_name: capitalizeName(firstName),
+        last_name: capitalizeName(lastName),
+        is_active: isActive,
+        is_staff: isStaff,
+        ...(password ? { password, password_confirm: passwordConfirm } : {}),
+      };
+      const saved = selectedUser
+        ? await apiRequest(`users/?id=${selectedUser.id}`, { method: 'PUT', body })
+        : await apiRequest('users/', { method: 'POST', body });
+      const savedUser = saved.data;
+
+      await loadUsers();
+      setSelectedUserId(String(savedUser.id));
+      showSuccessNotification(
+        selectedUser ? 'User saved' : 'User created',
+        `${savedUser.username} was ${selectedUser ? 'updated' : 'created'}.`
+      );
+
+      if (currentUser?.username === selectedUser?.username) {
+        if (savedUser.is_active) {
+          onCurrentUserUpdated({
+            ...currentUser,
+            id: savedUser.id,
+            username: savedUser.username,
+            first_name: savedUser.first_name,
+            last_name: savedUser.last_name,
+            is_staff: savedUser.is_staff,
+          });
+        } else {
+          clearStoredUser();
+          onCurrentUserUpdated(null);
+        }
+      }
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('Could not save user', err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteUser() {
+    if (!deleteTarget) {
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      await apiRequest(`users/?id=${deleteTarget.id}`, { method: 'DELETE' });
+      await loadUsers();
+      setSelectedUserId('new');
+      showSuccessNotification('User deleted', `${deleteTarget.username} was removed.`);
+      if (currentUser?.username === deleteTarget.username) {
+        clearStoredUser();
+        onCurrentUserUpdated(null);
+      }
+      setDeleteTarget(null);
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('Could not delete user', err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function closeModal() {
+    setDeleteTarget(null);
+    onClose();
+  }
+
+  return (
+    <>
+      <Modal opened={opened} onClose={closeModal} title={canManageUsers ? 'Users' : 'My account'} centered size="lg">
+        <LoadingOverlay visible={loading} />
+        <Stack>
+          {error && (
+            <Alert color="red" icon={<IconAlertCircle size={18} />}>
+              {error}
+            </Alert>
+          )}
+          <SimpleGrid cols={{ base: 1, sm: canManageUsers ? 2 : 1 }}>
+            {canManageUsers && (
+              <Box className="user-list-panel">
+                <Group justify="space-between" mb="sm">
+                  <Text fw={700}>Accounts</Text>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    leftSection={<IconUserPlus size={15} />}
+                    onClick={() => setSelectedUserId('new')}
+                  >
+                    New
+                  </Button>
+                </Group>
+                <Stack gap="xs">
+                  {users.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      className={`user-list-button ${String(item.id) === String(selectedUserId) ? 'active' : ''}`}
+                      onClick={() => setSelectedUserId(String(item.id))}
+                    >
+                      <Group gap="xs" wrap="nowrap">
+                        <IconUserEdit size={17} />
+                        <Box ta="start" className="truncate-cell">
+                          <Text size="sm" fw={700}>{userDisplayName(item)}</Text>
+                          <Text size="xs" c="dimmed">
+                            {item.username} · {item.is_active ? 'Active' : 'Inactive'}{item.is_staff ? ' · Admin' : ''}
+                          </Text>
+                        </Box>
+                      </Group>
+                    </button>
+                  ))}
+                </Stack>
+              </Box>
+            )}
+
+            <Stack>
+              <Text fw={700}>{selectedUser ? (canManageUsers ? 'Edit user' : 'Edit account') : 'Create user'}</Text>
+              <TextInput
+                label="Username"
+                value={username}
+                onChange={(event) => setUsername(event.currentTarget.value)}
+                required
+              />
+              <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                <TextInput
+                  label="First name"
+                  value={firstName}
+                  onChange={(event) => setFirstName(event.currentTarget.value)}
+                />
+                <TextInput
+                  label="Last name"
+                  value={lastName}
+                  onChange={(event) => setLastName(event.currentTarget.value)}
+                />
+              </SimpleGrid>
+              <PasswordInput
+                label={selectedUser ? 'New password' : 'Password'}
+                description={selectedUser ? 'Leave blank to keep current password.' : undefined}
+                value={password}
+                onChange={(event) => setPassword(event.currentTarget.value)}
+                required={!selectedUser}
+              />
+              <PasswordInput
+                label="Confirm password"
+                value={passwordConfirm}
+                onChange={(event) => setPasswordConfirm(event.currentTarget.value)}
+                required={!selectedUser || Boolean(password)}
+              />
+              {canManageUsers && (
+                <>
+                  <Switch
+                    label="Active user"
+                    checked={isActive}
+                    onChange={(event) => setIsActive(event.currentTarget.checked)}
+                  />
+                  <Switch
+                    label="Admin/staff user"
+                    checked={isStaff}
+                    onChange={(event) => setIsStaff(event.currentTarget.checked)}
+                  />
+                </>
+              )}
+            </Stack>
+          </SimpleGrid>
+
+          <Divider />
+          <Group justify="space-between">
+            {canManageUsers ? (
+              <Stack gap={4}>
+                <Button
+                  color="red"
+                  variant="light"
+                  leftSection={<IconUserMinus size={18} />}
+                  disabled={!selectedUser || selectedUserIsLastAdmin}
+                  onClick={() => setDeleteTarget(selectedUser)}
+                >
+                  Delete
+                </Button>
+                {selectedUserIsLastAdmin && (
+                  <Text size="xs" c="dimmed">
+                    The only admin user cannot be deleted.
+                  </Text>
+                )}
+              </Stack>
+            ) : <Box />}
+            <Group>
+              <Button variant="default" onClick={closeModal}>
+                Close
+              </Button>
+              <Button onClick={saveUser} loading={saving} disabled={!selectedUser && !canManageUsers}>
+                Save
+              </Button>
+            </Group>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete user"
+        centered
+      >
+        <Stack>
+          <Text>Are you sure you want to delete this user?</Text>
+          <Text size="sm" c="dimmed">
+            {deleteTarget?.username} will no longer be able to sign in.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconUserMinus size={18} />}
+              onClick={deleteUser}
+              loading={saving}
+            >
+              Delete
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  );
+}
+
+function Dashboard({ user, onLogout, onUserUpdated }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -677,8 +1102,11 @@ function Dashboard({ user, onLogout }) {
   const [eventType, setEventType] = useState('');
   const [scanRange, setScanRange] = useState('');
   const [activeDevice, setActiveDevice] = useState(null);
+  const [changelogOpened, setChangelogOpened] = useState(false);
+  const [seenChangelogVersion, setSeenChangelogVersion] = useState(APP_VERSION);
   const [modalOpened, modal] = useDisclosure(false);
   const [logoutModalOpened, logoutModal] = useDisclosure(false);
+  const [usersModalOpened, usersModal] = useDisclosure(false);
   const tableStateRef = useRef({
     search: '',
     deviceStatus: '',
@@ -699,6 +1127,8 @@ function Dashboard({ user, onLogout }) {
   const deviceEnd = Math.min(deviceOffset + devices.length, devicePagination.count);
   const selectedDeviceStatus =
     deviceStatusOptions.find((option) => option.value === deviceStatus) || null;
+  const canManageUsers = Boolean(user?.is_staff || user?.is_superuser);
+  const hasUnreadChangelog = seenChangelogVersion !== APP_VERSION;
 
   useEffect(() => {
     tableStateRef.current = {
@@ -788,6 +1218,14 @@ function Dashboard({ user, onLogout }) {
   }, []);
 
   useEffect(() => {
+    const storedVersion = window.localStorage.getItem(changelogSeenStorageKey) || '';
+    setSeenChangelogVersion(storedVersion);
+    if (storedVersion !== APP_VERSION) {
+      setChangelogOpened(true);
+    }
+  }, []);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(new Date()), 30000);
     return () => window.clearInterval(timer);
   }, []);
@@ -825,6 +1263,21 @@ function Dashboard({ user, onLogout }) {
     onLogout();
   }
 
+  function updateCurrentUser(nextUser) {
+    if (!nextUser) {
+      onLogout();
+      return;
+    }
+    storeUser(nextUser);
+    onUserUpdated(nextUser);
+  }
+
+  function closeChangelog() {
+    window.localStorage.setItem(changelogSeenStorageKey, APP_VERSION);
+    setSeenChangelogVersion(APP_VERSION);
+    setChangelogOpened(false);
+  }
+
   return (
     <main className="shell">
       <header className="topbar">
@@ -833,9 +1286,22 @@ function Dashboard({ user, onLogout }) {
             <Group gap="sm">
               <Image src="/logo.png" alt="LanGuard" w={42} h={42} radius="sm" />
               <Box>
-                <Title order={3}>LanGuard</Title>
+                <Group gap="xs" wrap="nowrap">
+                  <Title order={3}>LanGuard</Title>
+                  <Tooltip label="Version history">
+                    <button
+                      type="button"
+                      className={`version-pill ${hasUnreadChangelog ? 'has-update' : ''}`}
+                      onClick={() => setChangelogOpened(true)}
+                      aria-label={`LanGuard version ${APP_VERSION}`}
+                    >
+                      v{APP_VERSION}
+                      {hasUnreadChangelog && <span className="version-dot" aria-hidden="true" />}
+                    </button>
+                  </Tooltip>
+                </Group>
                 <Text size="xs" c="dimmed">
-                  Signed in as {user.username}
+                  Signed in as {userDisplayName(user)}
                 </Text>
               </Box>
             </Group>
@@ -851,18 +1317,21 @@ function Dashboard({ user, onLogout }) {
                   </Text>
                 </Box>
               </Group>
-              <Button
-                component="a"
-                href={getAdminUrl()}
-                target="_blank"
-                rel="noreferrer"
-                variant="light"
-                size="sm"
-                leftSection={<IconShieldLock size={17} />}
-                className="topbar-admin-button"
-              >
-                Admin
-              </Button>
+              <ColorSchemeControl />
+              {canManageUsers && (
+                <Button
+                  component="a"
+                  href={getAdminUrl()}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="light"
+                  size="sm"
+                  leftSection={<IconShieldLock size={17} />}
+                  className="topbar-admin-button"
+                >
+                  Admin site
+                </Button>
+              )}
               <Tooltip label="Refresh">
                 <ActionIcon
                   variant="light"
@@ -871,6 +1340,17 @@ function Dashboard({ user, onLogout }) {
                   loading={refreshing}
                 >
                   <IconRefresh size={19} />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label={canManageUsers ? 'Manage users' : 'Edit account'}>
+                <ActionIcon
+                  variant="light"
+                  size="lg"
+                  className="user-initials-button"
+                  onClick={usersModal.open}
+                  aria-label={canManageUsers ? 'Manage users' : 'Edit account'}
+                >
+                  {userInitials(user)}
                 </ActionIcon>
               </Tooltip>
               <Tooltip label="Sign out">
@@ -1189,6 +1669,12 @@ function Dashboard({ user, onLogout }) {
         onClose={modal.close}
         onSaved={() => loadData({ quiet: true })}
       />
+      <UserManagementModal
+        opened={usersModalOpened}
+        onClose={usersModal.close}
+        currentUser={user}
+        onCurrentUserUpdated={updateCurrentUser}
+      />
       <Modal opened={logoutModalOpened} onClose={logoutModal.close} title="Log off" centered>
         <Stack>
           <Text>Are you sure you want to log off?</Text>
@@ -1199,6 +1685,29 @@ function Dashboard({ user, onLogout }) {
             <Button color="red" leftSection={<IconLogout size={18} />} onClick={logout}>
               Log off
             </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal opened={changelogOpened} onClose={closeChangelog} title={`What's new in v${APP_VERSION}`} centered>
+        <Stack>
+          {CHANGELOG_ENTRIES.map((entry) => (
+            <Box key={entry.version}>
+              <Group justify="space-between" mb="xs">
+                <Text fw={700}>Version {entry.version}</Text>
+                <Text size="sm" c="dimmed">{entry.date}</Text>
+              </Group>
+              <Stack gap={6}>
+                {entry.items.map((item) => (
+                  <Group key={item} gap="xs" align="flex-start" wrap="nowrap">
+                    <span className="changelog-bullet" />
+                    <Text size="sm">{item}</Text>
+                  </Group>
+                ))}
+              </Stack>
+            </Box>
+          ))}
+          <Group justify="flex-end">
+            <Button onClick={closeChangelog}>Done</Button>
           </Group>
         </Stack>
       </Modal>
@@ -1236,5 +1745,11 @@ export default function Home() {
     return <AuthScreen onLogin={setUser} />;
   }
 
-  return <Dashboard user={user} onLogout={() => setUser(null)} />;
+  return (
+    <Dashboard
+      user={user}
+      onLogout={() => setUser(null)}
+      onUserUpdated={setUser}
+    />
+  );
 }

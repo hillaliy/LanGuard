@@ -73,12 +73,12 @@ def is_default_device_icon(icon):
 
 
 def guess_device_icon(hostname="", vendor="", open_ports=None):
-    text = f"{hostname} {vendor}".lower()
+    text = f"{hostname} {vendor}".lower().replace("-", " ").replace("_", " ")
     open_port_numbers = {int(port["port"]) for port in open_ports or []}
 
     if any(
         keyword in text
-        for keyword in ("router", "gateway", "tp-link", "tplink", "ubiquiti", "mikrotik", "deco")
+        for keyword in ("router", "gateway", "tp link", "tp-link", "tplink", "ubiquiti", "mikrotik", "deco")
     ):
         return "router"
     if any(keyword in text for keyword in ("iphone", "android", "phone", "mobile", "oneplus", "pixel")):
