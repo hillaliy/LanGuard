@@ -91,6 +91,10 @@ function buildUrl(path, params = {}) {
   return url;
 }
 
+function apiConnectionMessage(url) {
+  return `Backend server is not reachable at ${url.origin}. Check that Django is running, then refresh.`;
+}
+
 export async function apiRequest(path, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -102,11 +106,18 @@ export async function apiRequest(path, options = {}) {
     headers.Authorization = `Token ${token}`;
   }
 
-  const response = await fetch(buildUrl(path, options.params), {
-    method: options.method || 'GET',
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  const url = buildUrl(path, options.params);
+  let response;
+
+  try {
+    response = await fetch(url, {
+      method: options.method || 'GET',
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  } catch (error) {
+    throw new Error(apiConnectionMessage(url));
+  }
 
   let payload = null;
   const text = await response.text();
@@ -114,9 +125,15 @@ export async function apiRequest(path, options = {}) {
     try {
       payload = JSON.parse(text);
     } catch (error) {
-      throw new Error(
-        `Expected JSON from ${response.url}, but received a non-JSON response.`
-      );
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html') || text.trim().startsWith('<')) {
+        throw new Error(
+          response.ok
+            ? `Backend returned an HTML page instead of API data from ${url.pathname}.`
+            : `Backend returned an HTML error page for ${url.pathname}. Check the Django server logs.`
+        );
+      }
+      throw new Error(`Backend returned an unreadable API response from ${url.pathname}.`);
     }
   }
 

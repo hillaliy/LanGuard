@@ -5,6 +5,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from core.models import AppSettings
 from core.notifications import retry_failed_notifications
 from core.scan import scan
 
@@ -18,14 +19,14 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "--ip-range",
-            default=settings.IP_RANGE,
-            help="CIDR range to scan. Defaults to IP_RANGE from settings.",
+            default=None,
+            help="CIDR range to scan. Defaults to saved app settings.",
         )
         parser.add_argument(
             "--interval",
             type=int,
-            default=settings.INTERVAL,
-            help="Scan interval in minutes. Defaults to INTERVAL from settings.",
+            default=None,
+            help="Scan interval in minutes. Defaults to saved app settings.",
         )
         parser.add_argument(
             "--run-now",
@@ -40,10 +41,11 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        ip_range = options["ip_range"]
-        interval = options["interval"]
+        app_config = AppSettings.load()
+        ip_range = options["ip_range"] or app_config.ip_range
+        interval = options["interval"] or app_config.scan_interval
         retry_interval = options["retry_interval"]
-        scheduler = BlockingScheduler(timezone=settings.TIME_ZONE)
+        scheduler = BlockingScheduler(timezone=app_config.time_zone)
 
         def scheduled_scan():
             LOGGER.info("Starting scheduled scan for %s", ip_range)

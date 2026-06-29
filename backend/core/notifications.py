@@ -4,18 +4,19 @@ import requests
 from django.conf import settings
 from django.utils import timezone
 
-from .models import NetworkEvent, NotificationDelivery
+from .models import AppSettings, NetworkEvent, NotificationDelivery
 
 
 LOGGER = logging.getLogger(__name__)
 DISCORD_ALERT_COLOR = 0xE03131
 
 
-def configured_channels():
+def configured_channels(app_config=None):
+    app_config = app_config or AppSettings.load()
     channels = []
-    if settings.DISCORD_WEBHOOK:
+    if app_config.discord_enabled and app_config.discord_webhook:
         channels.append(NotificationDelivery.Channel.DISCORD)
-    if settings.TELEGRAM_TOKEN and settings.TELEGRAM_USERID:
+    if app_config.telegram_enabled and app_config.telegram_token and app_config.telegram_user_id:
         channels.append(NotificationDelivery.Channel.TELEGRAM)
     return channels
 
@@ -39,20 +40,19 @@ def mark_notification_skipped(event, reason):
 
 
 def notify_event(event):
-    if not settings.NOTIFICATIONS_ENABLED:
-        return []
+    app_config = AppSettings.load()
 
     if not notification_event_allowed(event):
         mark_notification_skipped(event, "event_type_not_enabled")
         return []
 
     deliveries = []
-    for channel in configured_channels():
+    for channel in configured_channels(app_config):
         delivery = NotificationDelivery.objects.create(
             event=event,
             channel=channel,
         )
-        send_delivery(delivery)
+        send_delivery(delivery, app_config=app_config)
         deliveries.append(delivery)
 
     if deliveries and all(
@@ -65,8 +65,7 @@ def notify_event(event):
 
 
 def retry_failed_notifications(limit=50, max_attempts=None):
-    if not settings.NOTIFICATIONS_ENABLED:
-        return []
+    app_config = AppSettings.load()
 
     max_attempts = max_attempts or settings.NOTIFICATION_MAX_ATTEMPTS
     deliveries = NotificationDelivery.objects.filter(
@@ -82,7 +81,7 @@ def retry_failed_notifications(limit=50, max_attempts=None):
             delivery.save(update_fields=["status", "error"])
             mark_notification_skipped(delivery.event, "event_type_not_enabled")
             continue
-        send_delivery(delivery)
+        send_delivery(delivery, app_config=app_config)
         retried.append(delivery)
 
     events = {delivery.event for delivery in retried}
@@ -96,13 +95,14 @@ def retry_failed_notifications(limit=50, max_attempts=None):
     return retried
 
 
-def send_delivery(delivery):
+def send_delivery(delivery, app_config=None):
+    app_config = app_config or AppSettings.load()
     delivery.attempts += 1
     try:
         if delivery.channel == NotificationDelivery.Channel.DISCORD:
-            send_discord(delivery.event)
+            send_discord(delivery.event, app_config)
         elif delivery.channel == NotificationDelivery.Channel.TELEGRAM:
-            send_telegram(delivery.event)
+            send_telegram(delivery.event, app_config)
         else:
             delivery.status = NotificationDelivery.Status.SKIPPED
             delivery.error = f"Unsupported channel: {delivery.channel}"
@@ -121,20 +121,20 @@ def send_delivery(delivery):
     delivery.save(update_fields=["attempts", "status", "error", "sent_at"])
 
 
-def send_discord(event):
+def send_discord(event, app_config):
     response = requests.post(
-        settings.DISCORD_WEBHOOK,
+        app_config.discord_webhook,
         json=format_discord_payload(event),
         timeout=settings.NOTIFICATION_TIMEOUT,
     )
     response.raise_for_status()
 
 
-def send_telegram(event):
+def send_telegram(event, app_config):
     response = requests.post(
-        f"https://api.telegram.org/bot{settings.TELEGRAM_TOKEN}/sendMessage",
+        f"https://api.telegram.org/bot{app_config.telegram_token}/sendMessage",
         json={
-            "chat_id": settings.TELEGRAM_USERID,
+            "chat_id": app_config.telegram_user_id,
             "text": format_event_message(event),
             "disable_web_page_preview": True,
         },

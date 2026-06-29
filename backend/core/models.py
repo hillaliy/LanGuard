@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.utils import timezone
 
 
@@ -145,3 +146,40 @@ class NotificationDelivery(models.Model):
 
     def __str__(self):
         return f"{self.channel} {self.status} - {self.event_id}"
+
+
+class AppSettings(models.Model):
+    singleton_key = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
+    ip_range = models.CharField(max_length=64, default="192.168.1.0/24")
+    scan_interval = models.PositiveIntegerField(default=10)
+    time_zone = models.CharField(max_length=64, default="UTC")
+    notifications_enabled = models.BooleanField(default=True)
+    discord_enabled = models.BooleanField(default=True)
+    discord_webhook = models.URLField(blank=True, default="")
+    telegram_enabled = models.BooleanField(default=True)
+    telegram_token = models.CharField(max_length=255, blank=True, default="")
+    telegram_user_id = models.CharField(max_length=64, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "App settings"
+        verbose_name_plural = "App settings"
+
+    def __str__(self):
+        return "LanGuard settings"
+
+    @classmethod
+    def load(cls):
+        defaults = {
+            "ip_range": settings.IP_RANGE,
+            "scan_interval": settings.INTERVAL,
+            "time_zone": settings.TIME_ZONE,
+            "notifications_enabled": settings.NOTIFICATIONS_ENABLED,
+            "discord_enabled": settings.NOTIFICATIONS_ENABLED,
+            "discord_webhook": settings.DISCORD_WEBHOOK or "",
+            "telegram_enabled": settings.NOTIFICATIONS_ENABLED,
+            "telegram_token": settings.TELEGRAM_TOKEN or "",
+            "telegram_user_id": settings.TELEGRAM_USERID or "",
+        }
+        config, _ = cls.objects.get_or_create(singleton_key=1, defaults=defaults)
+        return config
