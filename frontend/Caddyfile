@@ -2,19 +2,19 @@
     encode zstd gzip
 
     handle /api/v1/* {
-        reverse_proxy backend:8000
+        reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
     }
 
     handle /api/schema/* {
-        reverse_proxy backend:8000
+        reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
     }
 
     handle /admin* {
-        reverse_proxy backend:8000
+        reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
     }
 
     handle /static/* {
-        reverse_proxy backend:8000
+        reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
     }
 
     handle {

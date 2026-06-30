@@ -10,8 +10,7 @@ services:
       STATIC_ROOT: /static
     build:
       context: .
-    ports:
-      - '8000:8000'
+    network_mode: host
     privileged: true
   scanner:
     volumes:
@@ -24,13 +23,18 @@ services:
       STATIC_ROOT: /static
     build:
       context: .
-    command: ["python", "manage.py", "run_scheduler"]
+    command: ["python", "-u", "manage.py", "run_scheduler", "--run-now"]
+    network_mode: host
     privileged: true
     depends_on:
       - backend
   frontend:
     build:
       context: ./frontend
+    environment:
+      BACKEND_UPSTREAM: host.docker.internal:8000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - '8080:80'
     depends_on:
