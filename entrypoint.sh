@@ -23,7 +23,17 @@ cleanup_lock
 trap - EXIT INT TERM
 
 if [ "$#" -gt 0 ]; then
+    echo "Starting command: $*"
     exec "$@"
 fi
 
-exec granian --interface wsgi --host 0.0.0.0 --port 8000 backend.wsgi:application
+echo "Starting backend web server..."
+exec granian \
+    --interface wsgi \
+    --host 0.0.0.0 \
+    --port 8000 \
+    --workers "${GRANIAN_WORKERS:-1}" \
+    --blocking-threads "${GRANIAN_BLOCKING_THREADS:-4}" \
+    --backpressure "${GRANIAN_BACKPRESSURE:-32}" \
+    --no-ws \
+    backend.wsgi:application

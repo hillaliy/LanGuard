@@ -4,6 +4,15 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.2',
+    date: '2026-06-30',
+    items: [
+      'Updated Docker networking so scans can see LAN devices instead of only the Docker host.',
+      'Added configurable frontend backend upstream for host-network deployments.',
+      'Tuned Granian backend concurrency for home use.',
+    ],
+  },
+  {
     version: '1.0.1',
     date: '2026-06-29',
     items: [
