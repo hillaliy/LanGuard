@@ -1,4 +1,7 @@
 import ipaddress
+import json
+import urllib.error
+import urllib.request
 
 from drf_spectacular.utils import OpenApiTypes, extend_schema, inline_serializer
 from rest_framework import status, generics, permissions
@@ -119,6 +122,66 @@ def active_staff_count():
 
 def staff_count():
     return User.objects.filter(is_staff=True).count()
+
+
+def fetch_latest_version():
+    if not settings.LATEST_VERSION_URL:
+        return None
+
+    request = urllib.request.Request(
+        settings.LATEST_VERSION_URL,
+        headers={"User-Agent": "LanGuard"},
+    )
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=settings.VERSION_CHECK_TIMEOUT,
+        ) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (
+        OSError,
+        TimeoutError,
+        urllib.error.URLError,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ) as exc:
+        LOGGER.info("Latest version check failed: %s", exc)
+        return None
+
+    latest_version = payload.get("version")
+    if isinstance(latest_version, str) and latest_version.strip():
+        return latest_version.strip()
+    return None
+
+
+@extend_schema(
+    responses=inline_serializer(
+        name="VersionStatusResponse",
+        fields={
+            "data": inline_serializer(
+                name="VersionStatus",
+                fields={
+                    "current_version": serializers.CharField(),
+                    "latest_version": serializers.CharField(allow_null=True),
+                    "check_interval_seconds": serializers.IntegerField(),
+                },
+            )
+        },
+    ),
+)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def version_status(request):
+    latest_version = fetch_latest_version()
+    return Response(
+        {
+            "data": {
+                "current_version": settings.APP_VERSION,
+                "latest_version": latest_version,
+                "check_interval_seconds": 21600,
+            }
+        }
+    )
 
 
 @extend_schema(

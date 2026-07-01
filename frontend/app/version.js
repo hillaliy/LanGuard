@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.3',
+    date: '2026-07-01',
+    items: [
+      'Added a new-version indicator that checks for published releases every 6 hours.',
+      'Improved the mobile device list so phone screens no longer squeeze table columns.',
+      'Added tablet, lock, and robot vacuum device icons.',
+      'Cleaned up frontend Caddyfile formatting for quieter container startup logs.',
+    ],
+  },
+  {
     version: '1.0.2',
     date: '2026-06-30',
     items: [

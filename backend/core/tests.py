@@ -84,6 +84,37 @@ class ApiDocsAccessTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class VersionStatusTests(SimpleTestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    @override_settings(
+        APP_VERSION="1.0.2",
+        LATEST_VERSION_URL="https://example.test/package.json",
+        VERSION_CHECK_TIMEOUT=1,
+    )
+    @patch("core.views.urllib.request.urlopen")
+    def test_version_endpoint_returns_latest_public_version(self, urlopen):
+        response_mock = Mock()
+        response_mock.read.return_value = b'{"version": "1.0.3"}'
+        urlopen.return_value.__enter__.return_value = response_mock
+
+        response = self.client.get("/api/v1/version/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["current_version"], "1.0.2")
+        self.assertEqual(response.data["data"]["latest_version"], "1.0.3")
+        self.assertEqual(response.data["data"]["check_interval_seconds"], 21600)
+
+    @override_settings(APP_VERSION="1.0.2", LATEST_VERSION_URL="")
+    def test_version_endpoint_falls_back_without_latest_source(self):
+        response = self.client.get("/api/v1/version/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["current_version"], "1.0.2")
+        self.assertIsNone(response.data["data"]["latest_version"])
+
+
 class AuthApiTests(TestCase):
     def setUp(self):
         self.client = APIClient()

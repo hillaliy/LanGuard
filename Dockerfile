@@ -1,6 +1,9 @@
 FROM python:3.14-slim
 
+ARG APP_VERSION=1.0.3
+
 ENV ENVIRONMENT=production \
+    APP_VERSION=${APP_VERSION} \
     DEBUG=false \
     DB_PATH=/data/db.sqlite3 \
     STATIC_ROOT=/static \

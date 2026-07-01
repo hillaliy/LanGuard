@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.3 - 2026-07-01
+
+- Added a new-version indicator that checks for published releases every 6 hours.
+- Improved the mobile device list so phone screens no longer squeeze table columns.
+- Added tablet, lock, and robot vacuum device icons.
+- Cleaned up frontend Caddyfile formatting for quieter container startup logs.
+
 ## 1.0.0 - 2026-06-29
 
 - Initial LanGuard release.
