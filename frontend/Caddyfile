@@ -1,25 +1,25 @@
 :80 {
-    encode zstd gzip
+	encode zstd gzip
 
-    handle /api/v1/* {
-        reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
-    }
+	handle /api/v1/* {
+		reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
+	}
 
-    handle /api/schema/* {
-        reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
-    }
+	handle /api/schema/* {
+		reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
+	}
 
-    handle /admin* {
-        reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
-    }
+	handle /admin* {
+		reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
+	}
 
-    handle /static/* {
-        reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
-    }
+	handle /static/* {
+		reverse_proxy {$BACKEND_UPSTREAM:backend:8000}
+	}
 
-    handle {
-        root * /srv/frontend
-        try_files {path} /index.html
-        file_server
-    }
+	handle {
+		root * /srv/frontend
+		try_files {path} /index.html
+		file_server
+	}
 }

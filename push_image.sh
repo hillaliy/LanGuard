@@ -45,7 +45,11 @@ echo "Backend image:  ${BACKEND_IMAGE}:${VERSION}"
 echo "Frontend image: ${FRONTEND_IMAGE}:${VERSION}"
 
 echo "Building backend image..."
-docker build -f "${ROOT_DIR}/Dockerfile" "${BACKEND_TAGS[@]}" "${ROOT_DIR}"
+docker build \
+  --build-arg "APP_VERSION=${VERSION}" \
+  -f "${ROOT_DIR}/Dockerfile" \
+  "${BACKEND_TAGS[@]}" \
+  "${ROOT_DIR}"
 
 echo "Building frontend image..."
 docker build -f "${ROOT_DIR}/frontend/Dockerfile" "${FRONTEND_TAGS[@]}" "${ROOT_DIR}/frontend"

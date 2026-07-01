@@ -67,6 +67,12 @@ def validate_production_settings(environment, secret_key, debug, allowed_hosts):
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
+APP_VERSION = os.getenv("APP_VERSION", "1.0.3")
+LATEST_VERSION_URL = os.getenv(
+    "LATEST_VERSION_URL",
+    "https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/package.json",
+)
+VERSION_CHECK_TIMEOUT = float(os.getenv("VERSION_CHECK_TIMEOUT", "3"))
 
 
 # Quick-start development settings - unsuitable for production

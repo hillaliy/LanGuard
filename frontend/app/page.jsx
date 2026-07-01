@@ -47,8 +47,10 @@ import {
   IconDeviceLaptop,
   IconDeviceMobile,
   IconDeviceSpeaker,
+  IconDeviceTablet,
   IconDeviceTv,
   IconHistory,
+  IconLock,
   IconLogout,
   IconMoon,
   IconNetwork,
@@ -68,6 +70,7 @@ import {
   IconUserPlus,
   IconUserMinus,
   IconUserEdit,
+  IconVacuumCleaner,
   IconWifi,
   IconWifiOff,
   IconX,
@@ -82,6 +85,7 @@ import {
 import { APP_VERSION, CHANGELOG_ENTRIES } from './version';
 
 const changelogSeenStorageKey = 'languard_changelog_seen_version';
+const versionCheckFallbackInterval = 6 * 60 * 60 * 1000;
 
 const eventTypeOptions = [
   { value: 'new_device', label: 'New devices' },
@@ -137,6 +141,32 @@ function showErrorNotification(title, message) {
   });
 }
 
+function parseVersionParts(version) {
+  return String(version || '')
+    .replace(/^v/i, '')
+    .split('.')
+    .map((part) => Number.parseInt(part, 10) || 0);
+}
+
+function isNewerVersion(candidate, current) {
+  const candidateParts = parseVersionParts(candidate);
+  const currentParts = parseVersionParts(current);
+  const length = Math.max(candidateParts.length, currentParts.length);
+
+  for (let index = 0; index < length; index += 1) {
+    const candidatePart = candidateParts[index] || 0;
+    const currentPart = currentParts[index] || 0;
+    if (candidatePart > currentPart) {
+      return true;
+    }
+    if (candidatePart < currentPart) {
+      return false;
+    }
+  }
+
+  return false;
+}
+
 function useHydrated() {
   const [hydrated, setHydrated] = useState(false);
 
@@ -152,6 +182,7 @@ const deviceIconOptions = [
   { value: 'desktop', label: 'Desktop', icon: IconDeviceDesktop },
   { value: 'router', label: 'Router', icon: IconRouter },
   { value: 'phone', label: 'Phone', icon: IconDeviceMobile },
+  { value: 'tablet', label: 'Tablet', icon: IconDeviceTablet },
   { value: 'laptop', label: 'Laptop', icon: IconDeviceLaptop },
   { value: 'tv', label: 'TV', icon: IconDeviceTv },
   { value: 'streamer', label: 'Streamer', icon: IconCast },
@@ -162,6 +193,8 @@ const deviceIconOptions = [
   { value: 'thermostat', label: 'Thermostat', icon: IconTemperature },
   { value: 'speaker', label: 'Speaker', icon: IconDeviceSpeaker },
   { value: 'printer', label: 'Printer', icon: IconPrinter },
+  { value: 'lock', label: 'Lock', icon: IconLock },
+  { value: 'robot-vacuum', label: 'Robot vacuum', icon: IconVacuumCleaner },
   { value: 'server', label: 'Server', icon: IconServer },
 ];
 
@@ -171,6 +204,8 @@ function normalizeDeviceIcon(value) {
     device: 'desktop',
     computer: 'desktop',
     mobile: 'phone',
+    ipad: 'tablet',
+    pad: 'tablet',
     television: 'tv',
     cast: 'streamer',
     streaming: 'streamer',
@@ -187,6 +222,13 @@ function normalizeDeviceIcon(value) {
     'thermometer-snow': 'thermostat',
     temperature: 'thermostat',
     audio: 'speaker',
+    security: 'lock',
+    smartlock: 'lock',
+    'smart-lock': 'lock',
+    vacuum: 'robot-vacuum',
+    roomba: 'robot-vacuum',
+    robot: 'robot-vacuum',
+    'vacuum-cleaner': 'robot-vacuum',
     nas: 'server',
   };
   const normalized = aliases[value] || value || 'unknown';
@@ -1316,6 +1358,10 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [activeDevice, setActiveDevice] = useState(null);
   const [changelogOpened, setChangelogOpened] = useState(false);
   const [seenChangelogVersion, setSeenChangelogVersion] = useState(APP_VERSION);
+  const [latestVersion, setLatestVersion] = useState(APP_VERSION);
+  const [versionCheckInterval, setVersionCheckInterval] = useState(
+    versionCheckFallbackInterval
+  );
   const [modalOpened, modal] = useDisclosure(false);
   const [logoutModalOpened, logoutModal] = useDisclosure(false);
   const [usersModalOpened, usersModal] = useDisclosure(false);
@@ -1342,6 +1388,11 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     deviceStatusOptions.find((option) => option.value === deviceStatus) || null;
   const canManageUsers = Boolean(user?.is_staff || user?.is_superuser);
   const hasUnreadChangelog = seenChangelogVersion !== APP_VERSION;
+  const hasVersionUpdate = isNewerVersion(latestVersion, APP_VERSION);
+  const hasVersionIndicator = hasUnreadChangelog || hasVersionUpdate;
+  const versionTooltip = hasVersionUpdate
+    ? `New version v${latestVersion} is available`
+    : 'Version history';
 
   useEffect(() => {
     tableStateRef.current = {
@@ -1448,6 +1499,27 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   }, []);
 
   useEffect(() => {
+    async function checkVersion() {
+      try {
+        const payload = await apiRequest('version/');
+        const versionData = payload.data || {};
+        if (versionData.latest_version) {
+          setLatestVersion(versionData.latest_version);
+        }
+        if (versionData.check_interval_seconds) {
+          setVersionCheckInterval(versionData.check_interval_seconds * 1000);
+        }
+      } catch (err) {
+        setLatestVersion(APP_VERSION);
+      }
+    }
+
+    checkVersion();
+    const timer = window.setInterval(checkVersion, versionCheckInterval);
+    return () => window.clearInterval(timer);
+  }, [versionCheckInterval]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(new Date()), 30000);
     return () => window.clearInterval(timer);
   }, []);
@@ -1510,15 +1582,15 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
               <Box>
                 <Group gap="xs" wrap="nowrap">
                   <Title order={3}>LanGuard</Title>
-                  <Tooltip label="Version history">
+                  <Tooltip label={versionTooltip}>
                     <button
                       type="button"
-                      className={`version-pill ${hasUnreadChangelog ? 'has-update' : ''}`}
+                      className={`version-pill ${hasVersionIndicator ? 'has-update' : ''}`}
                       onClick={() => setChangelogOpened(true)}
                       aria-label={`LanGuard version ${APP_VERSION}`}
                     >
                       v{APP_VERSION}
-                      {hasUnreadChangelog && <span className="version-dot" aria-hidden="true" />}
+                      {hasVersionIndicator && <span className="version-dot" aria-hidden="true" />}
                     </button>
                   </Tooltip>
                 </Group>
@@ -1615,12 +1687,12 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
 
           <Paper className="content-panel" radius="md">
             <Stack gap={0}>
-              <Group justify="space-between" p="md">
+              <Group className="devices-panel-header" justify="space-between" p="md">
                 <Group>
                   <IconNetwork size={22} />
                   <Title order={4}>Devices</Title>
                 </Group>
-                <Group>
+                <Group className="devices-panel-controls">
                   <Select
                     w={140}
                     placeholder="Status"
@@ -1661,77 +1733,130 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
               </Group>
               <Divider />
               <Table className="devices-table" highlightOnHover verticalSpacing="sm">
-                      <Table.Thead>
-                        <Table.Tr>
-                          <Table.Th className="device-status-cell">Status</Table.Th>
-                          <SortableHeader
-                            field="name"
-                            label="Name"
-                            ordering={deviceOrdering}
-                            onChange={setDeviceOrdering}
-                            className="device-name-cell"
-                          />
-                          <SortableHeader
-                            field="ip"
-                            label="IP"
-                            ordering={deviceOrdering}
-                            onChange={setDeviceOrdering}
-                            className="device-ip-cell"
-                          />
-                          <Table.Th className="device-mac-cell">MAC</Table.Th>
-                          <Table.Th className="device-ports-cell">Ports</Table.Th>
-                          <Table.Th className="device-lastseen-cell">Last seen</Table.Th>
-                          <Table.Th className="device-known-cell">Known</Table.Th>
-                        </Table.Tr>
-                      </Table.Thead>
-                      <Table.Tbody>
-                        {filteredDevices.map((device) => (
-                          <Table.Tr
-                            className="device-row"
-                            key={device.id}
-                            onClick={() => {
-                              setActiveDevice(device);
-                              modal.open();
-                            }}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            <Table.Td className="device-status-cell">
-                              <Group gap="xs">
-                                <span className={`status-dot ${device.online ? 'online' : 'offline'}`} />
-                                {device.online ? 'Online' : 'Offline'}
-                              </Group>
-                            </Table.Td>
-                            <Table.Td className="device-name-cell" fw={600}>
-                              <Group gap="xs" wrap="nowrap">
-                                <span className="device-table-icon">
-                                  <DeviceIcon value={device.icon} size={17} />
-                                </span>
-                                <span className="truncate-cell" title={device.name}>
-                                  {device.name}
-                                </span>
-                              </Group>
-                            </Table.Td>
-                            <Table.Td className="device-ip-cell">{device.ip}</Table.Td>
-                            <Table.Td className="device-mac-cell">{device.mac}</Table.Td>
-                            <Table.Td className="device-ports-cell">
-                              <PortSummary ports={device.open_ports || []} />
-                            </Table.Td>
-                            <Table.Td className="device-lastseen-cell">{formatDate(device.lastseen)}</Table.Td>
-                            <Table.Td className="device-known-cell">
-                              <Badge
-                                className="device-known-badge"
-                                color={device.known ? 'teal' : 'yellow'}
-                                variant="light"
-                              >
-                                {device.known ? 'Known' : 'New'}
-                              </Badge>
-                            </Table.Td>
-                          </Table.Tr>
-                        ))}
-                      </Table.Tbody>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th className="device-status-cell">Status</Table.Th>
+                    <SortableHeader
+                      field="name"
+                      label="Name"
+                      ordering={deviceOrdering}
+                      onChange={setDeviceOrdering}
+                      className="device-name-cell"
+                    />
+                    <SortableHeader
+                      field="ip"
+                      label="IP"
+                      ordering={deviceOrdering}
+                      onChange={setDeviceOrdering}
+                      className="device-ip-cell"
+                    />
+                    <Table.Th className="device-mac-cell">MAC</Table.Th>
+                    <Table.Th className="device-ports-cell">Ports</Table.Th>
+                    <Table.Th className="device-lastseen-cell">Last seen</Table.Th>
+                    <Table.Th className="device-known-cell">Known</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {filteredDevices.map((device) => (
+                    <Table.Tr
+                      className="device-row"
+                      key={device.id}
+                      onClick={() => {
+                        setActiveDevice(device);
+                        modal.open();
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <Table.Td className="device-status-cell">
+                        <Group gap="xs">
+                          <span className={`status-dot ${device.online ? 'online' : 'offline'}`} />
+                          {device.online ? 'Online' : 'Offline'}
+                        </Group>
+                      </Table.Td>
+                      <Table.Td className="device-name-cell" fw={600}>
+                        <Group gap="xs" wrap="nowrap">
+                          <span className="device-table-icon">
+                            <DeviceIcon value={device.icon} size={17} />
+                          </span>
+                          <span className="truncate-cell" title={device.name}>
+                            {device.name}
+                          </span>
+                        </Group>
+                      </Table.Td>
+                      <Table.Td className="device-ip-cell">{device.ip}</Table.Td>
+                      <Table.Td className="device-mac-cell">{device.mac}</Table.Td>
+                      <Table.Td className="device-ports-cell">
+                        <PortSummary ports={device.open_ports || []} />
+                      </Table.Td>
+                      <Table.Td className="device-lastseen-cell">{formatDate(device.lastseen)}</Table.Td>
+                      <Table.Td className="device-known-cell">
+                        <Badge
+                          className="device-known-badge"
+                          color={device.known ? 'teal' : 'yellow'}
+                          variant="light"
+                        >
+                          {device.known ? 'Known' : 'New'}
+                        </Badge>
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
               </Table>
+              <Stack className="device-mobile-list" gap={0}>
+                {filteredDevices.map((device) => (
+                  <button
+                    type="button"
+                    className="device-mobile-row"
+                    key={device.id}
+                    onClick={() => {
+                      setActiveDevice(device);
+                      modal.open();
+                    }}
+                  >
+                    <Group justify="space-between" align="flex-start" wrap="nowrap">
+                      <Group gap="sm" align="flex-start" wrap="nowrap" className="device-mobile-main">
+                        <span className="device-mobile-icon">
+                          <DeviceIcon value={device.icon} size={19} />
+                        </span>
+                        <Box className="device-mobile-title">
+                          <Text fw={700} className="truncate-cell">{device.name}</Text>
+                          <Group gap="xs" wrap="nowrap">
+                            <span className={`status-dot ${device.online ? 'online' : 'offline'}`} />
+                            <Text size="sm" c="dimmed">{device.online ? 'Online' : 'Offline'}</Text>
+                          </Group>
+                        </Box>
+                      </Group>
+                      <Badge
+                        className="device-known-badge"
+                        color={device.known ? 'teal' : 'yellow'}
+                        variant="light"
+                      >
+                        {device.known ? 'Known' : 'New'}
+                      </Badge>
+                    </Group>
+                    <SimpleGrid cols={2} spacing="xs" mt="sm">
+                      <Box>
+                        <Text size="xs" c="dimmed">IP</Text>
+                        <Text size="sm" className="mobile-mono-value">{device.ip}</Text>
+                      </Box>
+                      <Box>
+                        <Text size="xs" c="dimmed">Last seen</Text>
+                        <Text size="sm">{formatDate(device.lastseen)}</Text>
+                      </Box>
+                      <Box className="device-mobile-wide">
+                        <Text size="xs" c="dimmed">MAC</Text>
+                        <Text size="sm" className="mobile-mono-value">{device.mac}</Text>
+                      </Box>
+                      <Box className="device-mobile-wide">
+                        <Text size="xs" c="dimmed">Ports</Text>
+                        <PortSummary ports={device.open_ports || []} />
+                      </Box>
+                    </SimpleGrid>
+                  </button>
+                ))}
+              </Stack>
               <Divider />
-              <Group justify="space-between" p="md">
+              <Group className="devices-pagination" justify="space-between" p="md">
                 <Text size="sm" c="dimmed">
                   Showing {deviceStart}-{deviceEnd} of {devicePagination.count} devices
                 </Text>
@@ -1935,6 +2060,12 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
       </Modal>
       <Modal opened={changelogOpened} onClose={closeChangelog} title={`What's new in v${APP_VERSION}`} centered>
         <Stack>
+          {hasVersionUpdate && (
+            <Alert color="blue" icon={<IconRefresh size={18} />}>
+              Version v{latestVersion} is available. Pull the latest Docker images and restart
+              the containers to update.
+            </Alert>
+          )}
           {CHANGELOG_ENTRIES.map((entry) => (
             <Box key={entry.version}>
               <Group justify="space-between" mb="xs">

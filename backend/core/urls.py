@@ -7,6 +7,7 @@ from .views import (
     UserEditView,
     UserLogoutView,
     setup_status,
+    version_status,
     device,
     events,
     scan_now,
@@ -21,6 +22,7 @@ from .views import (
 urlpatterns = [
     path("register/", UserRegistrationView.as_view(), name="register"),
     path("setup/", setup_status, name="setup-status"),
+    path("version/", version_status, name="version-status"),
     path("login/", UserLoginView.as_view(), name="login"),
     path("edit/", UserEditView.as_view(), name="user-edit"),
     path("logout/", UserLogoutView.as_view(), name="logout"),
