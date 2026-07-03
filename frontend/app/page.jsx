@@ -39,6 +39,7 @@ import {
   IconArrowsSort,
   IconBell,
   IconBlind,
+  IconBrandGithub,
   IconBulb,
   IconCast,
   IconClock,
@@ -50,7 +51,11 @@ import {
   IconDeviceSpeaker,
   IconDeviceTablet,
   IconDeviceTv,
+  IconDeviceWatch,
   IconHistory,
+  IconLamp,
+  IconLamp2,
+  IconLine,
   IconLock,
   IconLogout,
   IconMoon,
@@ -67,6 +72,7 @@ import {
   IconSettings,
   IconShieldCheck,
   IconShieldLock,
+  IconSmartHome,
   IconSun,
   IconTemperature,
   IconTrash,
@@ -191,8 +197,10 @@ const deviceIconOptions = [
   { value: 'unknown', label: 'Unknown', icon: IconQuestionMark },
   { value: 'desktop', label: 'Desktop', icon: IconDeviceDesktop },
   { value: 'router', label: 'Router', icon: IconRouter },
+  { value: 'smart-hub', label: 'Smart hub', icon: IconSmartHome },
   { value: 'phone', label: 'Phone', icon: IconDeviceMobile },
   { value: 'tablet', label: 'Tablet', icon: IconDeviceTablet },
+  { value: 'smart-watch', label: 'Smart watch', icon: IconDeviceWatch },
   { value: 'laptop', label: 'Laptop', icon: IconDeviceLaptop },
   { value: 'tv', label: 'TV', icon: IconDeviceTv },
   { value: 'streamer', label: 'Streamer', icon: IconCast },
@@ -200,6 +208,9 @@ const deviceIconOptions = [
   { value: 'shutter', label: 'Shutter', icon: IconWindow },
   { value: 'blinds', label: 'Blinds', icon: IconBlind },
   { value: 'light', label: 'Light', icon: IconBulb },
+  { value: 'led-strip', label: 'LED strip', icon: IconLine },
+  { value: 'desk-lamp', label: 'Desk lamp', icon: IconLamp },
+  { value: 'ceiling-light', label: 'Ceiling light', icon: IconLamp2 },
   { value: 'air-conditioner', label: 'Air conditioner', icon: IconAirConditioning },
   { value: 'fan', label: 'Fan', icon: IconPropeller },
   { value: 'ceiling-fan', label: 'Ceiling fan', icon: IconWindmill },
@@ -217,9 +228,20 @@ function normalizeDeviceIcon(value) {
     plus: 'unknown',
     device: 'desktop',
     computer: 'desktop',
+    hub: 'smart-hub',
+    'smart-hub': 'smart-hub',
+    smarthub: 'smart-hub',
+    'smart-home': 'smart-hub',
+    smarthome: 'smart-hub',
+    aqara: 'smart-hub',
+    aqura: 'smart-hub',
     mobile: 'phone',
     ipad: 'tablet',
     pad: 'tablet',
+    watch: 'smart-watch',
+    smartwatch: 'smart-watch',
+    'smart-watch': 'smart-watch',
+    wearable: 'smart-watch',
     television: 'tv',
     cast: 'streamer',
     streaming: 'streamer',
@@ -232,6 +254,21 @@ function normalizeDeviceIcon(value) {
     'roller-shutter': 'shutter',
     rollershutter: 'shutter',
     bulb: 'light',
+    led: 'led-strip',
+    'led-strip': 'led-strip',
+    ledstrip: 'led-strip',
+    'light-strip': 'led-strip',
+    lightstrip: 'led-strip',
+    'strip-light': 'led-strip',
+    striplight: 'led-strip',
+    lamp: 'desk-lamp',
+    'desk-lamp': 'desk-lamp',
+    desklamp: 'desk-lamp',
+    'table-lamp': 'desk-lamp',
+    tablelamp: 'desk-lamp',
+    'ceiling-light': 'ceiling-light',
+    ceilinglight: 'ceiling-light',
+    downlight: 'ceiling-light',
     aircon: 'air-conditioner',
     ac: 'air-conditioner',
     hvac: 'air-conditioner',
@@ -285,7 +322,7 @@ function deviceMapShape(device) {
   if (icon === 'server') {
     return 'server';
   }
-  if (['phone', 'tablet', 'robot-vacuum', 'power-strip', 'lock'].includes(icon)) {
+  if (['smart-hub', 'phone', 'tablet', 'smart-watch', 'robot-vacuum', 'power-strip', 'lock'].includes(icon)) {
     return 'compact';
   }
   if (['tv', 'streamer', 'security-camera'].includes(icon)) {
@@ -297,6 +334,9 @@ function deviceMapShape(device) {
 function isRouterDevice(device) {
   const normalizedIcon = normalizeDeviceIcon(device.icon);
   const text = `${device.name || ''} ${device.hostname || ''} ${device.vendor || ''}`.toLowerCase();
+  if (normalizedIcon === 'smart-hub' || text.includes('aqara') || text.includes('aqura')) {
+    return false;
+  }
   return (
     normalizedIcon === 'router' ||
     text.includes('router') ||
@@ -305,9 +345,66 @@ function isRouterDevice(device) {
   );
 }
 
+function isHubDevice(device) {
+  return normalizeDeviceIcon(device.icon) === 'smart-hub';
+}
+
+function isCameraDevice(device) {
+  return normalizeDeviceIcon(device.icon) === 'security-camera';
+}
+
+function NetworkMapDeviceNode({ device, onSelectDevice }) {
+  return (
+    <button
+      type="button"
+      key={device.id}
+      className={`network-device-node ${deviceMapShape(device)} ${device.online ? 'online' : 'offline'}`}
+      onClick={() => onSelectDevice(device)}
+    >
+      <Group justify="space-between" align="flex-start" wrap="nowrap">
+        <span className="network-device-icon">
+          <DeviceIcon value={device.icon} size={22} />
+        </span>
+        <Badge color={device.online ? 'teal' : 'gray'} variant="light">
+          {device.online ? 'Online' : 'Offline'}
+        </Badge>
+      </Group>
+      <Text fw={800} className="network-node-name">{device.name}</Text>
+      <Text size="xs" className="mobile-mono-value">{device.ip}</Text>
+      <div className="network-device-ports">
+        <PortSummary ports={device.open_ports || []} />
+      </div>
+    </button>
+  );
+}
+
+function NetworkMapDeviceSection({ title, devices, onSelectDevice, compact = false }) {
+  if (!devices.length) {
+    return null;
+  }
+
+  return (
+    <section className="network-map-device-section">
+      <Group justify="space-between" align="center" mb="xs">
+        <Text fw={800}>{title}</Text>
+        <Badge variant="light" color="indigo">{devices.length}</Badge>
+      </Group>
+      <div className={`network-device-grid ${compact ? 'featured' : ''}`}>
+        {devices.map((device) => (
+          <NetworkMapDeviceNode key={device.id} device={device} onSelectDevice={onSelectDevice} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function NetworkMap({ devices = [], onSelectDevice }) {
   const routerDevices = devices.filter(isRouterDevice);
-  const networkDevices = devices.filter((device) => !isRouterDevice(device));
+  const hubDevices = devices.filter((device) => !isRouterDevice(device) && isHubDevice(device));
+  const cameraDevices = devices.filter((device) => !isRouterDevice(device) && isCameraDevice(device));
+  const networkDevices = devices.filter(
+    (device) => !isRouterDevice(device) && !isHubDevice(device) && !isCameraDevice(device)
+  );
   const routers = routerDevices.length
     ? routerDevices
     : [
@@ -359,30 +456,23 @@ function NetworkMap({ devices = [], onSelectDevice }) {
 
         <div className="network-map-branch" aria-hidden="true" />
 
-        <div className="network-device-grid">
-          {networkDevices.map((device) => (
-            <button
-              type="button"
-              key={device.id}
-              className={`network-device-node ${deviceMapShape(device)} ${device.online ? 'online' : 'offline'}`}
-              onClick={() => onSelectDevice(device)}
-            >
-              <Group justify="space-between" align="flex-start" wrap="nowrap">
-                <span className="network-device-icon">
-                  <DeviceIcon value={device.icon} size={22} />
-                </span>
-                <Badge color={device.online ? 'teal' : 'gray'} variant="light">
-                  {device.online ? 'Online' : 'Offline'}
-                </Badge>
-              </Group>
-              <Text fw={800} className="network-node-name">{device.name}</Text>
-              <Text size="xs" className="mobile-mono-value">{device.ip}</Text>
-              <div className="network-device-ports">
-                <PortSummary ports={device.open_ports || []} />
-              </div>
-            </button>
-          ))}
-        </div>
+        <NetworkMapDeviceSection
+          title="Hubs"
+          devices={hubDevices}
+          onSelectDevice={onSelectDevice}
+          compact
+        />
+        <NetworkMapDeviceSection
+          title="Cameras"
+          devices={cameraDevices}
+          onSelectDevice={onSelectDevice}
+          compact
+        />
+        <NetworkMapDeviceSection
+          title="Devices"
+          devices={networkDevices}
+          onSelectDevice={onSelectDevice}
+        />
       </div>
     </Paper>
   );
@@ -1762,6 +1852,19 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 </Box>
               </Group>
               <ColorSchemeControl />
+              <Button
+                component="a"
+                href="https://github.com/hillaliy/LanGuard"
+                target="_blank"
+                rel="noreferrer"
+                variant="light"
+                color="gray"
+                size="sm"
+                leftSection={<IconBrandGithub size={17} />}
+                className="topbar-admin-button"
+              >
+                GitHub
+              </Button>
               {canManageUsers && (
                 <Button
                   component="a"

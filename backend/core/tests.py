@@ -369,6 +369,42 @@ class ScanStabilityTests(TestCase):
 
         self.assertEqual(identity["icon"], "shutter")
 
+    def test_guess_device_identity_detects_aqara_hub(self):
+        identity = guess_device_identity(
+            hostname="Aqara hub",
+            vendor="Aqara",
+            mac="aa:bb:cc:dd:ee:ff",
+        )
+
+        self.assertEqual(identity["icon"], "smart-hub")
+
+    def test_guess_device_identity_detects_desk_lamp(self):
+        identity = guess_device_identity(
+            hostname="office desk lamp",
+            vendor="",
+            mac="aa:bb:cc:dd:ee:ff",
+        )
+
+        self.assertEqual(identity["icon"], "desk-lamp")
+
+    def test_guess_device_identity_detects_led_strip(self):
+        identity = guess_device_identity(
+            hostname="kitchen led strip",
+            vendor="",
+            mac="aa:bb:cc:dd:ee:ff",
+        )
+
+        self.assertEqual(identity["icon"], "led-strip")
+
+    def test_guess_device_identity_detects_ceiling_light(self):
+        identity = guess_device_identity(
+            hostname="hall ceiling light",
+            vendor="",
+            mac="aa:bb:cc:dd:ee:ff",
+        )
+
+        self.assertEqual(identity["icon"], "ceiling-light")
+
     def test_guess_device_identity_detects_air_conditioner(self):
         identity = guess_device_identity(
             hostname="bedroom-air-conditioner",
