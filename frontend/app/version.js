@@ -10,6 +10,8 @@ export const CHANGELOG_ENTRIES = [
       'Separated hubs and cameras into their own network map sections.',
       'Added smart hub, smart watch, LED strip, desk lamp, and ceiling light icons.',
       'Improved automatic icon detection for Aqara hubs and common lighting devices.',
+      'Reworked device guessing into reusable backend rules using hostnames, vendors, and open ports.',
+      'Improved vendor fallback names, including Foxconn and Espressif IoT devices, without adding MAC suffixes.',
       'Added a top-bar link to the LanGuard GitHub project.',
     ],
   },

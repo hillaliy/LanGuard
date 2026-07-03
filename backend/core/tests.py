@@ -342,8 +342,26 @@ class ScanStabilityTests(TestCase):
             mac="aa:bb:cc:dd:ee:ff",
         )
 
-        self.assertEqual(identity["name"], "TP-Link device EEFF")
+        self.assertEqual(identity["name"], "TP-Link")
         self.assertEqual(identity["icon"], "router")
+
+    def test_guess_device_identity_uses_plain_vendor_without_mac_suffix(self):
+        identity = guess_device_identity(
+            hostname="Device",
+            vendor="Hon Hai Precision Industry",
+            mac="11:22:33:44:1b:53",
+        )
+
+        self.assertEqual(identity["name"], "Foxconn")
+
+    def test_guess_device_identity_uses_vendor_profile_name(self):
+        identity = guess_device_identity(
+            hostname="Device",
+            vendor="Espressif Inc.",
+            mac="aa:bb:cc:dd:ee:ff",
+        )
+
+        self.assertEqual(identity["name"], "Espressif IoT device")
 
     @override_settings(PORT_SCAN_ENABLED=False)
     @patch("core.scan.get_hostname")
@@ -371,7 +389,7 @@ class ScanStabilityTests(TestCase):
 
     def test_guess_device_identity_detects_aqara_hub(self):
         identity = guess_device_identity(
-            hostname="Aqara hub",
+            hostname="gateway",
             vendor="Aqara",
             mac="aa:bb:cc:dd:ee:ff",
         )
@@ -413,6 +431,52 @@ class ScanStabilityTests(TestCase):
         )
 
         self.assertEqual(identity["icon"], "air-conditioner")
+
+    def test_guess_device_identity_detects_cast_ports(self):
+        identity = guess_device_identity(
+            hostname="Device",
+            vendor="",
+            mac="aa:bb:cc:dd:ee:ff",
+            open_ports=[{"port": 8009}],
+        )
+
+        self.assertEqual(identity["icon"], "streamer")
+
+    def test_guess_device_identity_detects_rtsp_port(self):
+        identity = guess_device_identity(
+            hostname="Device",
+            vendor="",
+            mac="aa:bb:cc:dd:ee:ff",
+            open_ports=[554],
+        )
+
+        self.assertEqual(identity["icon"], "security-camera")
+
+    def test_guess_device_identity_detects_tablet_watch_and_fan(self):
+        self.assertEqual(
+            guess_device_identity(
+                hostname="kids ipad",
+                vendor="",
+                mac="aa:bb:cc:dd:ee:ff",
+            )["icon"],
+            "tablet",
+        )
+        self.assertEqual(
+            guess_device_identity(
+                hostname="apple watch",
+                vendor="",
+                mac="aa:bb:cc:dd:ee:ff",
+            )["icon"],
+            "smart-watch",
+        )
+        self.assertEqual(
+            guess_device_identity(
+                hostname="livingroom ceiling fan",
+                vendor="",
+                mac="aa:bb:cc:dd:ee:ff",
+            )["icon"],
+            "ceiling-fan",
+        )
 
 
 class NotificationTests(TestCase):
