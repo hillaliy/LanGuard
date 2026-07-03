@@ -14,6 +14,137 @@ from .notifications import notify_event
 LOGGER = logging.getLogger(__name__)
 DEFAULT_DEVICE_NAME = "Device"
 DEFAULT_DEVICE_ICONS = {"", "plus", "unknown", "device", "desktop"}
+DEVICE_GUESS_RULES = [
+    {
+        "icon": "smart-hub",
+        "keywords": (
+            "smart hub",
+            "home hub",
+            "aqara hub",
+            "hub aqara",
+            "aqara gateway",
+            "gateway aqara",
+            "aqura hub",
+            "hub aqura",
+            "aqura gateway",
+            "gateway aqura",
+        ),
+    },
+    {
+        "icon": "router",
+        "keywords": (
+            "router",
+            "gateway",
+            "access point",
+            "tp link",
+            "tp-link",
+            "tplink",
+            "ubiquiti",
+            "mikrotik",
+            "deco",
+        ),
+    },
+    {
+        "icon": "phone",
+        "keywords": ("iphone", "android", "phone", "mobile", "oneplus", "pixel", "galaxy"),
+    },
+    {
+        "icon": "tablet",
+        "keywords": ("ipad", "tablet", "tab "),
+    },
+    {
+        "icon": "smart-watch",
+        "keywords": ("watch", "smartwatch", "wearable"),
+    },
+    {
+        "icon": "laptop",
+        "keywords": ("macbook", "laptop", "notebook"),
+    },
+    {
+        "icon": "streamer",
+        "keywords": ("apple tv", "chromecast", "streamer", "streaming", "roku", "fire tv", "google cast"),
+        "ports": (8008, 8009),
+    },
+    {
+        "icon": "tv",
+        "keywords": ("tv", "television"),
+    },
+    {
+        "icon": "security-camera",
+        "keywords": ("camera", "cam", "cctv", "hikvision", "dahua"),
+        "ports": (554,),
+    },
+    {
+        "icon": "shutter",
+        "keywords": ("shutter", "roller shutter"),
+    },
+    {
+        "icon": "blinds",
+        "keywords": ("blind", "blinds", "shade", "curtain"),
+    },
+    {
+        "icon": "led-strip",
+        "keywords": ("led strip", "light strip", "strip light"),
+    },
+    {
+        "icon": "desk-lamp",
+        "keywords": ("desk lamp", "table lamp", "reading lamp"),
+    },
+    {
+        "icon": "ceiling-light",
+        "keywords": ("ceiling light", "downlight"),
+    },
+    {
+        "icon": "light",
+        "keywords": ("light", "bulb", "lamp"),
+    },
+    {
+        "icon": "air-conditioner",
+        "keywords": ("air conditioner", "air-conditioning", "aircon", "hvac"),
+    },
+    {
+        "icon": "ceiling-fan",
+        "keywords": ("ceiling fan",),
+    },
+    {
+        "icon": "fan",
+        "keywords": ("fan",),
+    },
+    {
+        "icon": "thermostat",
+        "keywords": ("thermostat", "heater"),
+    },
+    {
+        "icon": "speaker",
+        "keywords": ("speaker", "sonos", "homepod", "audio"),
+    },
+    {
+        "icon": "printer",
+        "keywords": ("printer", "canon", "brother", "epson", "hewlett", "hp"),
+        "ports": (9100,),
+    },
+    {
+        "icon": "server",
+        "keywords": ("server", "nas", "casaos", "raspberry", "linux"),
+        "ports": (22,),
+    },
+]
+VENDOR_NAME_PROFILES = [
+    {"keywords": ("hon hai", "foxconn"), "name": "Foxconn"},
+    {"keywords": ("espresif", "espressif"), "name": "Espressif IoT device"},
+    {"keywords": ("raspberry",), "name": "Raspberry Pi"},
+    {"keywords": ("tp link", "tp-link", "tplink"), "name": "TP-Link"},
+    {"keywords": ("ubiquiti",), "name": "Ubiquiti"},
+    {"keywords": ("mikrotik",), "name": "MikroTik"},
+    {"keywords": ("aqara", "aqura"), "name": "Aqara"},
+    {"keywords": ("apple",), "name": "Apple"},
+    {"keywords": ("google",), "name": "Google"},
+    {"keywords": ("amazon",), "name": "Amazon"},
+    {"keywords": ("samsung",), "name": "Samsung"},
+    {"keywords": ("sony",), "name": "Sony"},
+    {"keywords": ("lg electronics",), "name": "LG"},
+    {"keywords": ("xiaomi",), "name": "Xiaomi"},
+]
 
 
 def get_hostname(ip):
@@ -59,8 +190,36 @@ def short_vendor(vendor):
     return vendor
 
 
-def device_mac_suffix(mac):
-    return (mac or "").replace(":", "")[-4:].upper()
+def guess_text(*values):
+    return (
+        " ".join(value or "" for value in values)
+        .lower()
+        .replace("-", " ")
+        .replace("_", " ")
+    )
+
+
+def open_port_numbers(open_ports=None):
+    ports = set()
+    for port in open_ports or []:
+        if isinstance(port, dict):
+            value = port.get("port")
+        else:
+            value = port
+        try:
+            ports.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return ports
+
+
+def vendor_profile_name(vendor):
+    cleaned_vendor = short_vendor(vendor)
+    text = guess_text(cleaned_vendor)
+    for profile in VENDOR_NAME_PROFILES:
+        if any(keyword in text for keyword in profile["keywords"]):
+            return profile["name"]
+    return cleaned_vendor
 
 
 def is_default_device_name(name):
@@ -72,65 +231,27 @@ def is_default_device_icon(icon):
     return (icon or "").strip().lower() in DEFAULT_DEVICE_ICONS
 
 
-def guess_device_icon(hostname="", vendor="", open_ports=None):
-    text = f"{hostname} {vendor}".lower().replace("-", " ").replace("_", " ")
-    open_port_numbers = {int(port["port"]) for port in open_ports or []}
+def guess_device_rule(hostname="", vendor="", open_ports=None):
+    text = guess_text(hostname, vendor_profile_name(vendor), vendor)
+    ports = open_port_numbers(open_ports)
+    for rule in DEVICE_GUESS_RULES:
+        if any(keyword in text for keyword in rule.get("keywords", ())):
+            return rule
+        if ports and ports.intersection(rule.get("ports", ())):
+            return rule
+    return None
 
-    if any(keyword in text for keyword in ("smart hub", "home hub")) or (
-        any(keyword in text for keyword in ("aqara", "aqura")) and any(keyword in text for keyword in ("hub", "gateway"))
-    ):
-        return "smart-hub"
-    if any(
-        keyword in text
-        for keyword in ("router", "gateway", "tp link", "tp-link", "tplink", "ubiquiti", "mikrotik", "deco")
-    ):
-        return "router"
-    if any(keyword in text for keyword in ("iphone", "android", "phone", "mobile", "oneplus", "pixel")):
-        return "phone"
-    if any(keyword in text for keyword in ("macbook", "laptop", "notebook")):
-        return "laptop"
-    if any(keyword in text for keyword in ("apple tv", "chromecast", "streamer", "streaming", "roku", "fire tv")):
-        return "streamer"
-    if any(keyword in text for keyword in ("tv", "television")):
-        return "tv"
-    if any(keyword in text for keyword in ("camera", "cam", "hikvision", "dahua")) or 554 in open_port_numbers:
-        return "security-camera"
-    if any(keyword in text for keyword in ("shutter", "blind", "blinds", "shade", "curtain")):
-        return "shutter"
-    if any(keyword in text for keyword in ("led strip", "light strip", "strip light")):
-        return "led-strip"
-    if any(keyword in text for keyword in ("desk lamp", "table lamp", "reading lamp")):
-        return "desk-lamp"
-    if any(keyword in text for keyword in ("ceiling light", "downlight")):
-        return "ceiling-light"
-    if any(keyword in text for keyword in ("light", "bulb", "lamp")):
-        return "light"
-    if any(keyword in text for keyword in ("air conditioner", "air-conditioning", "aircon", "hvac")):
-        return "air-conditioner"
-    if any(keyword in text for keyword in ("thermostat", "heater")):
-        return "thermostat"
-    if any(keyword in text for keyword in ("speaker", "sonos", "homepod", "audio")):
-        return "speaker"
-    if (
-        any(keyword in text for keyword in ("printer", "canon", "brother", "epson", "hewlett", "hp"))
-        or 9100 in open_port_numbers
-    ):
-        return "printer"
-    if (
-        any(keyword in text for keyword in ("server", "nas", "casaos", "raspberry", "linux"))
-        or {22, 80, 443} & open_port_numbers
-    ):
-        return "server"
-    return "unknown"
+
+def guess_device_icon(hostname="", vendor="", open_ports=None):
+    rule = guess_device_rule(hostname=hostname, vendor=vendor, open_ports=open_ports)
+    return rule["icon"] if rule else "unknown"
 
 
 def guess_device_name(hostname, vendor, mac):
     if hostname and not is_default_device_name(hostname):
         return hostname
     if vendor:
-        vendor_name = short_vendor(vendor)
-        suffix = device_mac_suffix(mac)
-        return f"{vendor_name} device {suffix}" if suffix else f"{vendor_name} device"
+        return vendor_profile_name(vendor)
     return DEFAULT_DEVICE_NAME
 
 
