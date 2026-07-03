@@ -451,10 +451,22 @@ textarea {
   max-width: 86%;
 }
 
+.network-map-device-section {
+  margin-top: 16px;
+}
+
+.network-map-device-section:first-of-type {
+  margin-top: 0;
+}
+
 .network-device-grid {
   display: grid;
   gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
+.network-device-grid.featured {
+  grid-template-columns: repeat(auto-fit, minmax(210px, 280px));
 }
 
 .network-device-node {
@@ -752,6 +764,10 @@ textarea {
   }
 
   .network-device-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .network-device-grid.featured {
     grid-template-columns: 1fr;
   }
 }

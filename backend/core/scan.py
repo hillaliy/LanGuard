@@ -76,6 +76,10 @@ def guess_device_icon(hostname="", vendor="", open_ports=None):
     text = f"{hostname} {vendor}".lower().replace("-", " ").replace("_", " ")
     open_port_numbers = {int(port["port"]) for port in open_ports or []}
 
+    if any(keyword in text for keyword in ("smart hub", "home hub")) or (
+        any(keyword in text for keyword in ("aqara", "aqura")) and any(keyword in text for keyword in ("hub", "gateway"))
+    ):
+        return "smart-hub"
     if any(
         keyword in text
         for keyword in ("router", "gateway", "tp link", "tp-link", "tplink", "ubiquiti", "mikrotik", "deco")
@@ -93,6 +97,12 @@ def guess_device_icon(hostname="", vendor="", open_ports=None):
         return "security-camera"
     if any(keyword in text for keyword in ("shutter", "blind", "blinds", "shade", "curtain")):
         return "shutter"
+    if any(keyword in text for keyword in ("led strip", "light strip", "strip light")):
+        return "led-strip"
+    if any(keyword in text for keyword in ("desk lamp", "table lamp", "reading lamp")):
+        return "desk-lamp"
+    if any(keyword in text for keyword in ("ceiling light", "downlight")):
+        return "ceiling-light"
     if any(keyword in text for keyword in ("light", "bulb", "lamp")):
         return "light"
     if any(keyword in text for keyword in ("air conditioner", "air-conditioning", "aircon", "hvac")):
