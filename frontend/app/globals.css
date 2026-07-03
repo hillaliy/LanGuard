@@ -381,6 +381,140 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.network-map-panel {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--muted-panel-bg) 90%, transparent), transparent),
+    var(--panel-strong-bg);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.network-map {
+  padding: 18px;
+}
+
+.network-map-core {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(48px, 0.22fr) minmax(180px, 1fr);
+}
+
+.network-map-router-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.network-map-node,
+.network-device-node {
+  background: var(--input-panel-bg);
+  border: 1px solid var(--border-color);
+  color: var(--field-text);
+  letter-spacing: 0;
+  min-width: 0;
+  text-align: left;
+}
+
+.network-map-node {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  min-height: 138px;
+  padding: 16px;
+}
+
+.network-map-router {
+  border-color: var(--brand);
+  clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
+  cursor: pointer;
+  flex: 1 1 190px;
+}
+
+.network-map-internet {
+  border-radius: 999px;
+}
+
+.network-map-node-icon,
+.network-device-icon {
+  color: var(--brand-strong);
+}
+
+.network-map-link,
+.network-map-branch {
+  background: linear-gradient(90deg, transparent, var(--brand), transparent);
+  min-height: 2px;
+}
+
+.network-map-branch {
+  margin: 18px auto;
+  max-width: 86%;
+}
+
+.network-device-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+}
+
+.network-device-node {
+  border-radius: 10px;
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  min-height: 146px;
+  padding: 12px;
+}
+
+.network-device-node:hover,
+.network-map-router:hover {
+  background: var(--hover-bg);
+}
+
+.network-device-node.unknown {
+  border-style: dashed;
+  border-color: #fab005;
+  border-radius: 4px;
+}
+
+.network-device-node.router {
+  border-color: var(--brand);
+  clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
+  padding-inline: 20px;
+}
+
+.network-device-node.server {
+  border-radius: 4px;
+  border-left: 5px solid var(--brand);
+}
+
+.network-device-node.compact {
+  border-radius: 22px;
+}
+
+.network-device-node.media {
+  border-radius: 14px 14px 6px 6px;
+}
+
+.network-device-node.offline {
+  opacity: 0.72;
+}
+
+.network-node-name {
+  display: -webkit-box;
+  line-height: 1.25;
+  min-height: 2.5em;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-align: inherit;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.network-device-ports .ports-list {
+  flex-wrap: wrap;
+}
+
 .sortable-header {
   align-items: center;
   background: transparent;
@@ -556,6 +690,7 @@ textarea {
     grid-template-columns: 1fr 92px;
   }
 
+  .devices-panel-controls > *:first-child,
   .devices-panel-controls > *:last-child {
     grid-column: 1 / -1;
     width: 100%;
@@ -590,5 +725,33 @@ textarea {
     max-width: 100%;
     overflow-x: auto;
     padding-bottom: 2px;
+  }
+
+  .network-map {
+    padding: 12px;
+  }
+
+  .network-map-core {
+    grid-template-columns: 1fr;
+  }
+
+  .network-map-link {
+    background: linear-gradient(180deg, transparent, var(--brand), transparent);
+    height: 34px;
+    justify-self: center;
+    min-height: 34px;
+    width: 2px;
+  }
+
+  .network-map-router-row {
+    flex-direction: column;
+  }
+
+  .network-map-router {
+    flex-basis: auto;
+  }
+
+  .network-device-grid {
+    grid-template-columns: 1fr;
   }
 }

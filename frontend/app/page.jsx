@@ -42,6 +42,7 @@ import {
   IconBulb,
   IconCast,
   IconClock,
+  IconCloudNetwork,
   IconDeviceCctv,
   IconDeviceDesktop,
   IconDeviceLaptop,
@@ -54,8 +55,10 @@ import {
   IconLogout,
   IconMoon,
   IconNetwork,
+  IconOutlet,
   IconPlugConnected,
   IconPrinter,
+  IconPropeller,
   IconQuestionMark,
   IconRefresh,
   IconRouter,
@@ -73,6 +76,8 @@ import {
   IconVacuumCleaner,
   IconWifi,
   IconWifiOff,
+  IconWindmill,
+  IconWindow,
   IconX,
 } from '@tabler/icons-react';
 import {
@@ -101,6 +106,11 @@ const deviceStatusOptions = [
   { value: 'online', label: 'Online' },
   { value: 'offline', label: 'Offline' },
   { value: 'new', label: 'New devices' },
+];
+
+const inventoryViewOptions = [
+  { value: 'table', label: 'Table' },
+  { value: 'map', label: 'Map' },
 ];
 
 const fallbackTimeZoneOptions = [
@@ -187,14 +197,18 @@ const deviceIconOptions = [
   { value: 'tv', label: 'TV', icon: IconDeviceTv },
   { value: 'streamer', label: 'Streamer', icon: IconCast },
   { value: 'security-camera', label: 'Security camera', icon: IconDeviceCctv },
-  { value: 'shutter', label: 'Shutter', icon: IconBlind },
+  { value: 'shutter', label: 'Shutter', icon: IconWindow },
+  { value: 'blinds', label: 'Blinds', icon: IconBlind },
   { value: 'light', label: 'Light', icon: IconBulb },
   { value: 'air-conditioner', label: 'Air conditioner', icon: IconAirConditioning },
+  { value: 'fan', label: 'Fan', icon: IconPropeller },
+  { value: 'ceiling-fan', label: 'Ceiling fan', icon: IconWindmill },
   { value: 'thermostat', label: 'Thermostat', icon: IconTemperature },
   { value: 'speaker', label: 'Speaker', icon: IconDeviceSpeaker },
   { value: 'printer', label: 'Printer', icon: IconPrinter },
   { value: 'lock', label: 'Lock', icon: IconLock },
   { value: 'robot-vacuum', label: 'Robot vacuum', icon: IconVacuumCleaner },
+  { value: 'power-strip', label: 'Power strip', icon: IconOutlet },
   { value: 'server', label: 'Server', icon: IconServer },
 ];
 
@@ -211,14 +225,22 @@ function normalizeDeviceIcon(value) {
     streaming: 'streamer',
     camera: 'security-camera',
     cctv: 'security-camera',
-    blind: 'shutter',
-    blinds: 'shutter',
-    shade: 'shutter',
-    curtain: 'shutter',
+    blind: 'blinds',
+    shade: 'blinds',
+    curtain: 'blinds',
+    window: 'shutter',
+    'roller-shutter': 'shutter',
+    rollershutter: 'shutter',
     bulb: 'light',
     aircon: 'air-conditioner',
     ac: 'air-conditioner',
     hvac: 'air-conditioner',
+    propeller: 'fan',
+    'standing-fan': 'fan',
+    'floor-fan': 'fan',
+    ceilingfan: 'ceiling-fan',
+    'cilling-fan': 'ceiling-fan',
+    cillingfan: 'ceiling-fan',
     'thermometer-snow': 'thermostat',
     temperature: 'thermostat',
     audio: 'speaker',
@@ -229,6 +251,12 @@ function normalizeDeviceIcon(value) {
     roomba: 'robot-vacuum',
     robot: 'robot-vacuum',
     'vacuum-cleaner': 'robot-vacuum',
+    outlet: 'power-strip',
+    socket: 'power-strip',
+    plug: 'power-strip',
+    'smart-plug': 'power-strip',
+    'plug-strip': 'power-strip',
+    'power-outlet': 'power-strip',
     nas: 'server',
   };
   const normalized = aliases[value] || value || 'unknown';
@@ -244,6 +272,120 @@ function DeviceIcon({ value, size = 18 }) {
     deviceIconOptions[0];
   const Icon = option.icon;
   return <Icon size={size} stroke={1.8} />;
+}
+
+function deviceMapShape(device) {
+  const icon = normalizeDeviceIcon(device.icon);
+  if (!device.known || icon === 'unknown') {
+    return 'unknown';
+  }
+  if (icon === 'router') {
+    return 'router';
+  }
+  if (icon === 'server') {
+    return 'server';
+  }
+  if (['phone', 'tablet', 'robot-vacuum', 'power-strip', 'lock'].includes(icon)) {
+    return 'compact';
+  }
+  if (['tv', 'streamer', 'security-camera'].includes(icon)) {
+    return 'media';
+  }
+  return 'device';
+}
+
+function isRouterDevice(device) {
+  const normalizedIcon = normalizeDeviceIcon(device.icon);
+  const text = `${device.name || ''} ${device.hostname || ''} ${device.vendor || ''}`.toLowerCase();
+  return (
+    normalizedIcon === 'router' ||
+    text.includes('router') ||
+    text.includes('gateway') ||
+    text.includes('access point')
+  );
+}
+
+function NetworkMap({ devices = [], onSelectDevice }) {
+  const routerDevices = devices.filter(isRouterDevice);
+  const networkDevices = devices.filter((device) => !isRouterDevice(device));
+  const routers = routerDevices.length
+    ? routerDevices
+    : [
+        {
+          id: 'router-placeholder',
+          name: 'Home router',
+          ip: 'Gateway',
+          icon: 'router',
+          known: true,
+          online: true,
+          open_ports: [],
+        },
+      ];
+
+  return (
+    <Paper className="network-map-panel" radius="md">
+      <div className="network-map">
+        <div className="network-map-core">
+          <div className="network-map-node network-map-internet">
+            <span className="network-map-node-icon">
+              <IconCloudNetwork size={30} />
+            </span>
+            <Text fw={800}>Internet</Text>
+            <Text size="xs" c="dimmed">WAN connection</Text>
+          </div>
+          <div className="network-map-link" aria-hidden="true" />
+          <div className="network-map-router-row">
+            {routers.map((router) => (
+              <button
+                type="button"
+                key={router.id}
+                className="network-map-node network-map-router"
+                onClick={() => {
+                  if (router.id !== 'router-placeholder') {
+                    onSelectDevice(router);
+                  }
+                }}
+              >
+                <span className="network-map-node-icon">
+                  <DeviceIcon value={router.icon} size={28} />
+                </span>
+                <Text fw={800} className="network-node-name">{router.name}</Text>
+                <Text size="xs" className="mobile-mono-value">{router.ip}</Text>
+                <PortSummary ports={router.open_ports || []} />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="network-map-branch" aria-hidden="true" />
+
+        <div className="network-device-grid">
+          {networkDevices.map((device) => (
+            <button
+              type="button"
+              key={device.id}
+              className={`network-device-node ${deviceMapShape(device)} ${device.online ? 'online' : 'offline'}`}
+              onClick={() => onSelectDevice(device)}
+            >
+              <Group justify="space-between" align="flex-start" wrap="nowrap">
+                <span className="network-device-icon">
+                  <DeviceIcon value={device.icon} size={22} />
+                </span>
+                <Badge color={device.online ? 'teal' : 'gray'} variant="light">
+                  {device.online ? 'Online' : 'Offline'}
+                </Badge>
+              </Group>
+              <Text fw={800} className="network-node-name">{device.name}</Text>
+              <Text size="xs" className="mobile-mono-value">{device.ip}</Text>
+              <div className="network-device-ports">
+                <PortSummary ports={device.open_ports || []} />
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    </Paper>
+  );
 }
 
 function sortableOrdering(field, currentOrdering) {
@@ -1334,6 +1476,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [error, setError] = useState('');
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [devices, setDevices] = useState([]);
+  const [mapDevices, setMapDevices] = useState([]);
   const [devicePagination, setDevicePagination] = useState({
     count: 0,
     limit: 10,
@@ -1349,6 +1492,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [appSettings, setAppSettings] = useState(null);
   const [search, setSearch] = useState('');
   const [deviceStatus, setDeviceStatus] = useState('');
+  const [inventoryView, setInventoryView] = useState('table');
   const [devicePage, setDevicePage] = useState(1);
   const [devicePageSize, setDevicePageSize] = useState('10');
   const [deviceOrdering, setDeviceOrdering] = useState('');
@@ -1432,13 +1576,18 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         event_type: currentTableState.eventType || undefined,
         limit: 8,
       };
+      const mapDeviceParams = {
+        limit: 100,
+        ordering: 'ip',
+      };
 
       const settingsRequest = canManageUsers
         ? apiRequest('settings/')
         : Promise.resolve({ data: null });
-      const [deviceData, statusData, runData, eventData, notificationData, settingsData] =
+      const [deviceData, mapDeviceData, statusData, runData, eventData, notificationData, settingsData] =
         await Promise.all([
           apiRequest('device/', { params: deviceParams }),
+          apiRequest('device/', { params: mapDeviceParams }),
           apiRequest('scan/status/'),
           apiRequest('scan/runs/', { params: { limit: 8 } }),
           apiRequest('events/', { params: eventParams }),
@@ -1447,6 +1596,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         ]);
 
       setDevices(deviceData.data || []);
+      setMapDevices(mapDeviceData.data || []);
       setDevicePagination(
         deviceData.pagination || {
           count: 0,
@@ -1693,6 +1843,12 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                   <Title order={4}>Devices</Title>
                 </Group>
                 <Group className="devices-panel-controls">
+                  <SegmentedControl
+                    data={inventoryViewOptions}
+                    value={inventoryView}
+                    onChange={setInventoryView}
+                    aria-label="Inventory view"
+                  />
                   <Select
                     w={140}
                     placeholder="Status"
@@ -1732,142 +1888,159 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 </Group>
               </Group>
               <Divider />
-              <Table className="devices-table" highlightOnHover verticalSpacing="sm">
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th className="device-status-cell">Status</Table.Th>
-                    <SortableHeader
-                      field="name"
-                      label="Name"
-                      ordering={deviceOrdering}
-                      onChange={setDeviceOrdering}
-                      className="device-name-cell"
-                    />
-                    <SortableHeader
-                      field="ip"
-                      label="IP"
-                      ordering={deviceOrdering}
-                      onChange={setDeviceOrdering}
-                      className="device-ip-cell"
-                    />
-                    <Table.Th className="device-mac-cell">MAC</Table.Th>
-                    <Table.Th className="device-ports-cell">Ports</Table.Th>
-                    <Table.Th className="device-lastseen-cell">Last seen</Table.Th>
-                    <Table.Th className="device-known-cell">Known</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {filteredDevices.map((device) => (
-                    <Table.Tr
-                      className="device-row"
-                      key={device.id}
-                      onClick={() => {
-                        setActiveDevice(device);
-                        modal.open();
-                      }}
-                      style={{ cursor: 'pointer' }}
-                    >
-                      <Table.Td className="device-status-cell">
-                        <Group gap="xs">
-                          <span className={`status-dot ${device.online ? 'online' : 'offline'}`} />
-                          {device.online ? 'Online' : 'Offline'}
-                        </Group>
-                      </Table.Td>
-                      <Table.Td className="device-name-cell" fw={600}>
-                        <Group gap="xs" wrap="nowrap">
-                          <span className="device-table-icon">
-                            <DeviceIcon value={device.icon} size={17} />
-                          </span>
-                          <span className="truncate-cell" title={device.name}>
-                            {device.name}
-                          </span>
-                        </Group>
-                      </Table.Td>
-                      <Table.Td className="device-ip-cell">{device.ip}</Table.Td>
-                      <Table.Td className="device-mac-cell">{device.mac}</Table.Td>
-                      <Table.Td className="device-ports-cell">
-                        <PortSummary ports={device.open_ports || []} />
-                      </Table.Td>
-                      <Table.Td className="device-lastseen-cell">{formatDate(device.lastseen)}</Table.Td>
-                      <Table.Td className="device-known-cell">
-                        <Badge
-                          className="device-known-badge"
-                          color={device.known ? 'teal' : 'yellow'}
-                          variant="light"
-                        >
-                          {device.known ? 'Known' : 'New'}
-                        </Badge>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-              <Stack className="device-mobile-list" gap={0}>
-                {filteredDevices.map((device) => (
-                  <button
-                    type="button"
-                    className="device-mobile-row"
-                    key={device.id}
-                    onClick={() => {
+              {inventoryView === 'map' ? (
+                <Box p="md">
+                  <NetworkMap
+                    devices={mapDevices}
+                    onSelectDevice={(device) => {
                       setActiveDevice(device);
                       modal.open();
                     }}
-                  >
-                    <Group justify="space-between" align="flex-start" wrap="nowrap">
-                      <Group gap="sm" align="flex-start" wrap="nowrap" className="device-mobile-main">
-                        <span className="device-mobile-icon">
-                          <DeviceIcon value={device.icon} size={19} />
-                        </span>
-                        <Box className="device-mobile-title">
-                          <Text fw={700} className="truncate-cell">{device.name}</Text>
-                          <Group gap="xs" wrap="nowrap">
-                            <span className={`status-dot ${device.online ? 'online' : 'offline'}`} />
-                            <Text size="sm" c="dimmed">{device.online ? 'Online' : 'Offline'}</Text>
-                          </Group>
-                        </Box>
-                      </Group>
-                      <Badge
-                        className="device-known-badge"
-                        color={device.known ? 'teal' : 'yellow'}
-                        variant="light"
+                  />
+                  <Text size="xs" c="dimmed" mt="sm">
+                    Showing up to 100 devices on the map.
+                  </Text>
+                </Box>
+              ) : (
+                <>
+                  <Table className="devices-table" highlightOnHover verticalSpacing="sm">
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th className="device-status-cell">Status</Table.Th>
+                        <SortableHeader
+                          field="name"
+                          label="Name"
+                          ordering={deviceOrdering}
+                          onChange={setDeviceOrdering}
+                          className="device-name-cell"
+                        />
+                        <SortableHeader
+                          field="ip"
+                          label="IP"
+                          ordering={deviceOrdering}
+                          onChange={setDeviceOrdering}
+                          className="device-ip-cell"
+                        />
+                        <Table.Th className="device-mac-cell">MAC</Table.Th>
+                        <Table.Th className="device-ports-cell">Ports</Table.Th>
+                        <Table.Th className="device-lastseen-cell">Last seen</Table.Th>
+                        <Table.Th className="device-known-cell">Known</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {filteredDevices.map((device) => (
+                        <Table.Tr
+                          className="device-row"
+                          key={device.id}
+                          onClick={() => {
+                            setActiveDevice(device);
+                            modal.open();
+                          }}
+                          style={{ cursor: 'pointer' }}
+                        >
+                          <Table.Td className="device-status-cell">
+                            <Group gap="xs">
+                              <span className={`status-dot ${device.online ? 'online' : 'offline'}`} />
+                              {device.online ? 'Online' : 'Offline'}
+                            </Group>
+                          </Table.Td>
+                          <Table.Td className="device-name-cell" fw={600}>
+                            <Group gap="xs" wrap="nowrap">
+                              <span className="device-table-icon">
+                                <DeviceIcon value={device.icon} size={17} />
+                              </span>
+                              <span className="truncate-cell" title={device.name}>
+                                {device.name}
+                              </span>
+                            </Group>
+                          </Table.Td>
+                          <Table.Td className="device-ip-cell">{device.ip}</Table.Td>
+                          <Table.Td className="device-mac-cell">{device.mac}</Table.Td>
+                          <Table.Td className="device-ports-cell">
+                            <PortSummary ports={device.open_ports || []} />
+                          </Table.Td>
+                          <Table.Td className="device-lastseen-cell">{formatDate(device.lastseen)}</Table.Td>
+                          <Table.Td className="device-known-cell">
+                            <Badge
+                              className="device-known-badge"
+                              color={device.known ? 'teal' : 'yellow'}
+                              variant="light"
+                            >
+                              {device.known ? 'Known' : 'New'}
+                            </Badge>
+                          </Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                  <Stack className="device-mobile-list" gap={0}>
+                    {filteredDevices.map((device) => (
+                      <button
+                        type="button"
+                        className="device-mobile-row"
+                        key={device.id}
+                        onClick={() => {
+                          setActiveDevice(device);
+                          modal.open();
+                        }}
                       >
-                        {device.known ? 'Known' : 'New'}
-                      </Badge>
-                    </Group>
-                    <SimpleGrid cols={2} spacing="xs" mt="sm">
-                      <Box>
-                        <Text size="xs" c="dimmed">IP</Text>
-                        <Text size="sm" className="mobile-mono-value">{device.ip}</Text>
-                      </Box>
-                      <Box>
-                        <Text size="xs" c="dimmed">Last seen</Text>
-                        <Text size="sm">{formatDate(device.lastseen)}</Text>
-                      </Box>
-                      <Box className="device-mobile-wide">
-                        <Text size="xs" c="dimmed">MAC</Text>
-                        <Text size="sm" className="mobile-mono-value">{device.mac}</Text>
-                      </Box>
-                      <Box className="device-mobile-wide">
-                        <Text size="xs" c="dimmed">Ports</Text>
-                        <PortSummary ports={device.open_ports || []} />
-                      </Box>
-                    </SimpleGrid>
-                  </button>
-                ))}
-              </Stack>
-              <Divider />
-              <Group className="devices-pagination" justify="space-between" p="md">
-                <Text size="sm" c="dimmed">
-                  Showing {deviceStart}-{deviceEnd} of {devicePagination.count} devices
-                </Text>
-                <Pagination
-                  total={devicePageCount}
-                  value={devicePage}
-                  onChange={setDevicePage}
-                  size="sm"
-                  withEdges
-                />
-              </Group>
+                        <Group justify="space-between" align="flex-start" wrap="nowrap">
+                          <Group gap="sm" align="flex-start" wrap="nowrap" className="device-mobile-main">
+                            <span className="device-mobile-icon">
+                              <DeviceIcon value={device.icon} size={19} />
+                            </span>
+                            <Box className="device-mobile-title">
+                              <Text fw={700} className="truncate-cell">{device.name}</Text>
+                              <Group gap="xs" wrap="nowrap">
+                                <span className={`status-dot ${device.online ? 'online' : 'offline'}`} />
+                                <Text size="sm" c="dimmed">{device.online ? 'Online' : 'Offline'}</Text>
+                              </Group>
+                            </Box>
+                          </Group>
+                          <Badge
+                            className="device-known-badge"
+                            color={device.known ? 'teal' : 'yellow'}
+                            variant="light"
+                          >
+                            {device.known ? 'Known' : 'New'}
+                          </Badge>
+                        </Group>
+                        <SimpleGrid cols={2} spacing="xs" mt="sm">
+                          <Box>
+                            <Text size="xs" c="dimmed">IP</Text>
+                            <Text size="sm" className="mobile-mono-value">{device.ip}</Text>
+                          </Box>
+                          <Box>
+                            <Text size="xs" c="dimmed">Last seen</Text>
+                            <Text size="sm">{formatDate(device.lastseen)}</Text>
+                          </Box>
+                          <Box className="device-mobile-wide">
+                            <Text size="xs" c="dimmed">MAC</Text>
+                            <Text size="sm" className="mobile-mono-value">{device.mac}</Text>
+                          </Box>
+                          <Box className="device-mobile-wide">
+                            <Text size="xs" c="dimmed">Ports</Text>
+                            <PortSummary ports={device.open_ports || []} />
+                          </Box>
+                        </SimpleGrid>
+                      </button>
+                    ))}
+                  </Stack>
+                  <Divider />
+                  <Group className="devices-pagination" justify="space-between" p="md">
+                    <Text size="sm" c="dimmed">
+                      Showing {deviceStart}-{deviceEnd} of {devicePagination.count} devices
+                    </Text>
+                    <Pagination
+                      total={devicePageCount}
+                      value={devicePage}
+                      onChange={setDevicePage}
+                      size="sm"
+                      withEdges
+                    />
+                  </Group>
+                </>
+              )}
             </Stack>
           </Paper>
 
