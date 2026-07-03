@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.4',
+    date: '2026-07-03',
+    items: [
+      'Added a network map view with Internet, router, and device nodes.',
+      'Added power strip, fan, ceiling fan, and separate shutter/blinds icons.',
+      'Improved network map labels so long device names wrap cleanly.',
+      'Cleaned up README badges for GHCR container images.',
+    ],
+  },
+  {
     version: '1.0.3',
     date: '2026-07-01',
     items: [

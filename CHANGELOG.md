@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4 - 2026-07-03
+
+- Added a network map view with Internet, router, and device nodes.
+- Added power strip, fan, ceiling fan, and separate shutter/blinds icons.
+- Improved network map labels so long device names wrap cleanly.
+- Cleaned up README badges for GHCR container images.
+
 ## 1.0.3 - 2026-07-01
 
 - Added a new-version indicator that checks for published releases every 6 hours.
