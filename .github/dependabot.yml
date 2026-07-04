@@ -28,6 +28,10 @@ updates:
       frontend-npm:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: eslint
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
       - frontend
