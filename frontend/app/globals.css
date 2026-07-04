@@ -276,11 +276,12 @@ textarea {
 }
 
 .device-status-cell {
-  width: 9%;
+  width: 11%;
+  white-space: nowrap;
 }
 
 .device-name-cell {
-  width: 22%;
+  width: 20%;
 }
 
 .device-ip-cell {
