@@ -64,6 +64,10 @@ updates:
       frontend-docker:
         patterns:
           - "*"
+    ignore:
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major
     labels:
       - dependencies
       - docker
