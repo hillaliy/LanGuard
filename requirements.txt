@@ -1,4 +1,4 @@
-APScheduler==3.11.2
+APScheduler==3.11.3
 Django==6.0.6
 djangorestframework==3.17.1
 django-cors-headers==4.9.0
