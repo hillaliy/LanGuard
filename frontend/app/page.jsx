@@ -354,6 +354,8 @@ function isCameraDevice(device) {
 }
 
 function NetworkMapDeviceNode({ device, onSelectDevice }) {
+  const status = deviceStatus(device);
+
   return (
     <button
       type="button"
@@ -365,8 +367,8 @@ function NetworkMapDeviceNode({ device, onSelectDevice }) {
         <span className="network-device-icon">
           <DeviceIcon value={device.icon} size={22} />
         </span>
-        <Badge color={device.online ? 'teal' : 'gray'} variant="light">
-          {device.online ? 'Online' : 'Offline'}
+        <Badge color={status.color} variant="light">
+          {status.label}
         </Badge>
       </Group>
       <Text fw={800} className="network-node-name">{device.name}</Text>
@@ -565,6 +567,40 @@ function formatDate(value) {
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(new Date(value));
+}
+
+function deviceStatus(device) {
+  const statusValue = device?.status || (device?.online ? 'online' : 'offline');
+  const labels = {
+    online: 'Online',
+    recently_seen: 'Recently seen',
+    sleeping: 'Sleeping',
+    offline: 'Offline',
+  };
+  const colors = {
+    online: 'teal',
+    recently_seen: 'blue',
+    sleeping: 'yellow',
+    offline: 'gray',
+  };
+  const dot = statusValue.replace('_', '-');
+  return {
+    value: statusValue,
+    label: device?.status_display || labels[statusValue] || (device?.online ? 'Online' : 'Offline'),
+    color: colors[statusValue] || (device?.online ? 'teal' : 'gray'),
+    dot,
+    reason: device?.status_reason || '',
+  };
+}
+
+function DeviceStatusInline({ device, muted = false }) {
+  const status = deviceStatus(device);
+  return (
+    <Group gap="xs" wrap="nowrap">
+      <span className={`status-dot ${status.dot}`} />
+      <Text size="sm" c={muted ? 'dimmed' : undefined}>{status.label}</Text>
+    </Group>
+  );
 }
 
 function formatTopbarDate(value) {
@@ -941,6 +977,8 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
     onClose();
   }
 
+  const currentStatus = deviceStatus(device);
+
   return (
     <Modal
       opened={opened}
@@ -986,11 +1024,18 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
             onChange={(event) => setKnown(event.currentTarget.checked)}
           />
           <Group gap="xs">
-            <span className={`status-dot ${device?.online ? 'online' : 'offline'}`} />
-            <Text size="sm">{device?.online ? 'Online' : 'Offline'}</Text>
+            <span className={`status-dot ${currentStatus.dot}`} />
+            <Text size="sm">{currentStatus.label}</Text>
+            {device?.status_source_display && (
+              <Text size="sm" c="dimmed">via {device.status_source_display}</Text>
+            )}
             <Text size="sm" c="dimmed">Missed scans: {device?.missed_scans ?? 0}</Text>
           </Group>
         </Group>
+
+        {currentStatus.reason && (
+          <Text size="sm" c="dimmed">{currentStatus.reason}</Text>
+        )}
 
         <Divider />
 
@@ -1833,6 +1878,20 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                       {hasVersionIndicator && <span className="version-dot" aria-hidden="true" />}
                     </button>
                   </Tooltip>
+                  <Tooltip label="GitHub project">
+                    <ActionIcon
+                      component="a"
+                      href="https://github.com/hillaliy/LanGuard"
+                      target="_blank"
+                      rel="noreferrer"
+                      variant="light"
+                      color="gray"
+                      size="sm"
+                      aria-label="GitHub project"
+                    >
+                      <IconBrandGithub size={17} />
+                    </ActionIcon>
+                  </Tooltip>
                 </Group>
                 <Text size="xs" c="dimmed">
                   Signed in as {userDisplayName(user)}
@@ -1852,19 +1911,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 </Box>
               </Group>
               <ColorSchemeControl />
-              <Button
-                component="a"
-                href="https://github.com/hillaliy/LanGuard"
-                target="_blank"
-                rel="noreferrer"
-                variant="light"
-                color="gray"
-                size="sm"
-                leftSection={<IconBrandGithub size={17} />}
-                className="topbar-admin-button"
-              >
-                GitHub
-              </Button>
               {canManageUsers && (
                 <Button
                   component="a"
@@ -2042,10 +2088,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           style={{ cursor: 'pointer' }}
                         >
                           <Table.Td className="device-status-cell">
-                            <Group gap="xs">
-                              <span className={`status-dot ${device.online ? 'online' : 'offline'}`} />
-                              {device.online ? 'Online' : 'Offline'}
-                            </Group>
+                            <DeviceStatusInline device={device} />
                           </Table.Td>
                           <Table.Td className="device-name-cell" fw={600}>
                             <Group gap="xs" wrap="nowrap">
@@ -2094,10 +2137,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                             </span>
                             <Box className="device-mobile-title">
                               <Text fw={700} className="truncate-cell">{device.name}</Text>
-                              <Group gap="xs" wrap="nowrap">
-                                <span className={`status-dot ${device.online ? 'online' : 'offline'}`} />
-                                <Text size="sm" c="dimmed">{device.online ? 'Online' : 'Offline'}</Text>
-                              </Group>
+                              <DeviceStatusInline device={device} muted />
                             </Box>
                           </Group>
                           <Badge

@@ -103,6 +103,14 @@ class DevicePortSerializer(serializers.ModelSerializer):
 
 class DeviceSerializer(serializers.ModelSerializer):
     open_ports = serializers.SerializerMethodField()
+    status_display = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+    status_source_display = serializers.CharField(
+        source="get_status_source_display",
+        read_only=True,
+    )
 
     class Meta:
         model = Device

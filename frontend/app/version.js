@@ -4,6 +4,14 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.6',
+    date: '2026-07-04',
+    items: [
+      'Improved online/offline status with status reasons, per-device grace, ICMP checks, and remembered-port confirmation.',
+      'Added Dependabot updates and dependency review checks for GitHub pull requests.',
+    ],
+  },
+  {
     version: '1.0.5',
     date: '2026-07-03',
     items: [

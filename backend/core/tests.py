@@ -247,7 +247,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(len(devices), 2)
         self.assertEqual(srp.call_count, 2)
 
-    @override_settings(SCAN_OFFLINE_AFTER_MISSES=3)
+    @override_settings(SCAN_OFFLINE_AFTER_MISSES=3, PORT_SCAN_ENABLED=False)
     def test_missing_device_is_not_marked_offline_until_grace_limit(self):
         device = Device.objects.create(
             name="Router",
@@ -263,6 +263,8 @@ class ScanStabilityTests(TestCase):
         device.refresh_from_db()
         self.assertTrue(device.online)
         self.assertEqual(device.missed_scans, 1)
+        self.assertEqual(device.status, Device.Status.RECENTLY_SEEN)
+        self.assertEqual(device.status_source, Device.StatusSource.RECENT)
 
         mark_missing_devices_offline(
             [],
@@ -279,12 +281,156 @@ class ScanStabilityTests(TestCase):
         device.refresh_from_db()
         self.assertFalse(device.online)
         self.assertEqual(device.missed_scans, 3)
+        self.assertEqual(device.status, Device.Status.OFFLINE)
+        self.assertEqual(device.status_source, Device.StatusSource.NONE)
         self.assertTrue(
             NetworkEvent.objects.filter(
                 device=device,
                 event_type=NetworkEvent.EventType.DEVICE_OFFLINE,
             ).exists()
         )
+
+    @override_settings(
+        SCAN_OFFLINE_AFTER_MISSES=1,
+        PORT_SCAN_ENABLED=True,
+        SCAN_CONFIRM_OFFLINE_WITH_PORTS=True,
+        PORT_SCAN_PORTS=[22],
+    )
+    @patch("core.scan.scan_open_ports")
+    def test_missing_device_stays_online_when_ports_respond(self, scan_open_ports):
+        scan_open_ports.return_value = [{"port": 22, "protocol": "tcp", "service": "ssh"}]
+        device = Device.objects.create(
+            name="Server",
+            ip="192.168.1.20",
+            mac="aa:bb:cc:dd:ee:ff",
+            online=True,
+        )
+
+        scan_run = ScanRun.objects.create(ip_range="192.168.1.0/24")
+        mark_missing_devices_offline([], scan_run=scan_run)
+
+        scan_open_ports.assert_called_once_with(device.ip, ports=[22])
+        device.refresh_from_db()
+        self.assertTrue(device.online)
+        self.assertEqual(device.missed_scans, 0)
+        self.assertIsNotNone(device.last_port_scan)
+        self.assertEqual(device.status, Device.Status.ONLINE)
+        self.assertEqual(device.status_source, Device.StatusSource.PORT)
+        self.assertIn("tcp/22", device.status_reason)
+        self.assertTrue(device.ports.filter(port=22, open=True).exists())
+        self.assertFalse(
+            NetworkEvent.objects.filter(
+                device=device,
+                event_type=NetworkEvent.EventType.DEVICE_OFFLINE,
+            ).exists()
+        )
+
+    @override_settings(
+        SCAN_OFFLINE_AFTER_MISSES=1,
+        PORT_SCAN_ENABLED=True,
+        SCAN_CONFIRM_OFFLINE_WITH_PORTS=True,
+        PORT_SCAN_PORTS=[22],
+    )
+    @patch("core.scan.scan_open_ports")
+    def test_missing_device_confirms_with_previously_open_ports(self, scan_open_ports):
+        scan_open_ports.return_value = [{"port": 32400, "protocol": "tcp", "service": ""}]
+        device = Device.objects.create(
+            name="Media server",
+            ip="192.168.1.30",
+            mac="aa:bb:cc:dd:ee:ff",
+            online=True,
+        )
+        DevicePort.objects.create(
+            device=device,
+            port=32400,
+            protocol="tcp",
+            service="",
+            open=True,
+        )
+
+        mark_missing_devices_offline(
+            [],
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        scan_open_ports.assert_called_once_with(device.ip, ports=[22, 32400])
+        device.refresh_from_db()
+        self.assertTrue(device.online)
+        self.assertEqual(device.missed_scans, 0)
+        self.assertEqual(device.status_source, Device.StatusSource.PORT)
+        self.assertTrue(device.ports.filter(port=32400, open=True).exists())
+
+    @override_settings(
+        SCAN_OFFLINE_AFTER_MISSES=1,
+        PORT_SCAN_ENABLED=False,
+        SCAN_CONFIRM_OFFLINE_WITH_ICMP=True,
+    )
+    @patch("core.scan.scapy.sr1")
+    def test_missing_device_stays_online_when_icmp_responds(self, sr1):
+        sr1.return_value = object()
+        device = Device.objects.create(
+            name="Server",
+            ip="192.168.1.20",
+            mac="aa:bb:cc:dd:ee:ff",
+            online=True,
+        )
+
+        mark_missing_devices_offline(
+            [],
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device.refresh_from_db()
+        self.assertTrue(device.online)
+        self.assertEqual(device.missed_scans, 0)
+        self.assertEqual(device.status, Device.Status.ONLINE)
+        self.assertEqual(device.status_source, Device.StatusSource.ICMP)
+
+    @override_settings(
+        PORT_SCAN_ENABLED=False,
+        SCAN_SLEEPING_OFFLINE_AFTER_MISSES=6,
+    )
+    def test_sleeping_device_gets_longer_grace_status(self):
+        device = Device.objects.create(
+            name="Bedroom light",
+            ip="192.168.1.40",
+            mac="aa:bb:cc:dd:ee:ff",
+            icon="light",
+            online=True,
+        )
+
+        mark_missing_devices_offline(
+            [],
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device.refresh_from_db()
+        self.assertTrue(device.online)
+        self.assertEqual(device.missed_scans, 1)
+        self.assertEqual(device.status, Device.Status.SLEEPING)
+
+    @override_settings(
+        PORT_SCAN_ENABLED=False,
+        SCAN_MOBILE_OFFLINE_AFTER_MISSES=1,
+        SCAN_CONFIRM_OFFLINE_WITH_ICMP=False,
+    )
+    def test_mobile_device_uses_shorter_offline_grace(self):
+        device = Device.objects.create(
+            name="Phone",
+            ip="192.168.1.50",
+            mac="aa:bb:cc:dd:ee:ff",
+            icon="phone",
+            online=True,
+        )
+
+        mark_missing_devices_offline(
+            [],
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device.refresh_from_db()
+        self.assertFalse(device.online)
+        self.assertEqual(device.status, Device.Status.OFFLINE)
 
     @override_settings(PORT_SCAN_ENABLED=True, PORT_SCAN_INTERVAL=30)
     @patch("core.scan.scan_open_ports")
