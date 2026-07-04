@@ -67,7 +67,7 @@ def validate_production_settings(environment, secret_key, debug, allowed_hosts):
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
-APP_VERSION = os.getenv("APP_VERSION", "1.0.5")
+APP_VERSION = os.getenv("APP_VERSION", "1.0.6")
 LATEST_VERSION_URL = os.getenv(
     "LATEST_VERSION_URL",
     "https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/package.json",
@@ -320,9 +320,14 @@ PORT_SCAN_PORTS = env_list(
 )
 PORT_SCAN_TIMEOUT = float(os.getenv("PORT_SCAN_TIMEOUT", "0.5"))
 PORT_SCAN_INTERVAL = int(os.getenv("PORT_SCAN_INTERVAL", "30"))
+SCAN_CONFIRM_OFFLINE_WITH_PORTS = env_bool("SCAN_CONFIRM_OFFLINE_WITH_PORTS", default=True)
+SCAN_CONFIRM_OFFLINE_WITH_ICMP = env_bool("SCAN_CONFIRM_OFFLINE_WITH_ICMP", default=True)
+SCAN_ICMP_TIMEOUT = float(os.getenv("SCAN_ICMP_TIMEOUT", "0.5"))
 SCAN_ARP_TIMEOUT = float(os.getenv("SCAN_ARP_TIMEOUT", "2"))
 SCAN_ARP_RETRIES = int(os.getenv("SCAN_ARP_RETRIES", "2"))
 SCAN_OFFLINE_AFTER_MISSES = int(os.getenv("SCAN_OFFLINE_AFTER_MISSES", "3"))
+SCAN_MOBILE_OFFLINE_AFTER_MISSES = int(os.getenv("SCAN_MOBILE_OFFLINE_AFTER_MISSES", "1"))
+SCAN_SLEEPING_OFFLINE_AFTER_MISSES = int(os.getenv("SCAN_SLEEPING_OFFLINE_AFTER_MISSES", "6"))
 SCAN_MAX_HOSTS = int(os.getenv("SCAN_MAX_HOSTS", "256"))
 SCAN_ALLOW_PUBLIC_RANGES = env_bool("SCAN_ALLOW_PUBLIC_RANGES", default=False)
 PORT_SCAN_MAX_PORTS = int(os.getenv("PORT_SCAN_MAX_PORTS", "64"))

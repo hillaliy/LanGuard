@@ -4,14 +4,39 @@ from django.utils import timezone
 
 
 class Device(models.Model):
+    class Status(models.TextChoices):
+        ONLINE = "online", "Online"
+        RECENTLY_SEEN = "recently_seen", "Recently seen"
+        SLEEPING = "sleeping", "Sleeping"
+        OFFLINE = "offline", "Offline"
+
+    class StatusSource(models.TextChoices):
+        ARP = "arp", "ARP"
+        PORT = "port", "Port"
+        ICMP = "icmp", "ICMP"
+        RECENT = "recent", "Recent"
+        NONE = "none", "None"
+
     icon = models.CharField(max_length=255, default="plus")
     name = models.CharField(max_length=100, default="Device")
     ip = models.GenericIPAddressField()
     mac = models.CharField(max_length=17, unique=True)
     vendor = models.CharField(max_length=255, blank=True, default="")
     online = models.BooleanField(default=True)
+    status = models.CharField(
+        max_length=32,
+        choices=Status.choices,
+        default=Status.ONLINE,
+    )
+    status_source = models.CharField(
+        max_length=32,
+        choices=StatusSource.choices,
+        default=StatusSource.ARP,
+    )
+    status_reason = models.CharField(max_length=255, blank=True, default="")
     firstseen = models.DateTimeField(default=timezone.now)
     lastseen = models.DateTimeField(default=timezone.now)
+    last_status_check = models.DateTimeField(blank=True, null=True)
     last_port_scan = models.DateTimeField(blank=True, null=True)
     missed_scans = models.PositiveIntegerField(default=0)
     known = models.BooleanField(default=False)

@@ -669,6 +669,14 @@ textarea {
   background: #adb5bd;
 }
 
+.status-dot.recently-seen {
+  background: #339af0;
+}
+
+.status-dot.sleeping {
+  background: #fab005;
+}
+
 @media (max-width: 720px) {
   .auth-shell {
     padding: 16px;

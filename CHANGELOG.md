@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.6 - 2026-07-04
+
+- Improved online/offline status with status reasons, per-device grace, ICMP checks, and remembered-port confirmation.
+- Added Dependabot updates and dependency review checks for GitHub pull requests.
+
 ## 1.0.5 - 2026-07-03
 
 - Separated hubs and cameras into their own network map sections.
