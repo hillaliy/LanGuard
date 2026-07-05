@@ -1696,12 +1696,10 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
       const currentTableState = tableStateRef.current;
       const deviceParams = {
         search: currentTableState.search,
-        online:
-          currentTableState.deviceStatus === 'online'
-            ? 'true'
-            : currentTableState.deviceStatus === 'offline'
-              ? 'false'
-              : undefined,
+        status:
+          currentTableState.deviceStatus && currentTableState.deviceStatus !== 'new'
+            ? currentTableState.deviceStatus
+            : undefined,
         known: currentTableState.deviceStatus === 'new' ? 'false' : undefined,
         limit: currentTableState.deviceLimit,
         offset: currentTableState.deviceOffset,

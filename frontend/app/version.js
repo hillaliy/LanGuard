@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.7',
+    date: '2026-07-05',
+    items: [
+      'Fixed device status filters so Offline, Online, Recently seen, and Sleeping use the same status field shown in the table.',
+      'Aligned dashboard online/offline counters with the displayed device status.',
+      'Updated frontend dependencies through Dependabot.',
+      'Added Dependabot handling for Node Docker image major updates.',
+    ],
+  },
+  {
     version: '1.0.6',
     date: '2026-07-04',
     items: [
