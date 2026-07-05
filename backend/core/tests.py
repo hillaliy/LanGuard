@@ -716,6 +716,57 @@ class NotificationTests(TestCase):
         TELEGRAM_TOKEN="",
         TELEGRAM_USERID="",
         NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
+    def test_enabled_device_online_rule_sends_delivery(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        AppSettings.objects.create(
+            discord_webhook="https://discord.example/webhook",
+            notify_device_online=True,
+        )
+        event = NetworkEvent.objects.create(
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Camera came online",
+        )
+
+        deliveries = notify_event(event)
+
+        self.assertEqual(len(deliveries), 1)
+        post.assert_called_once()
+        event.refresh_from_db()
+        self.assertTrue(event.notified)
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
+    def test_quiet_hours_skip_external_delivery(self, post):
+        AppSettings.objects.create(
+            discord_webhook="https://discord.example/webhook",
+            notification_quiet_hours_enabled=True,
+            notification_quiet_hours_start="00:00",
+            notification_quiet_hours_end="00:00",
+        )
+
+        deliveries = notify_event(self.event)
+
+        self.assertEqual(deliveries, [])
+        post.assert_not_called()
+        self.event.refresh_from_db()
+        self.assertTrue(self.event.notified)
+        self.assertEqual(self.event.metadata["notification_skipped"], "quiet_hours")
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
         NOTIFICATION_MAX_ATTEMPTS=3,
     )
     @patch("core.notifications.requests.post")
@@ -1072,6 +1123,13 @@ class ScanApiTests(TestCase):
                 "version_check_interval": 3600,
                 "discord_enabled": False,
                 "telegram_enabled": True,
+                "notify_new_devices": True,
+                "notify_device_online": True,
+                "notify_device_offline": True,
+                "notify_port_changes": True,
+                "notification_quiet_hours_enabled": True,
+                "notification_quiet_hours_start": "23:00",
+                "notification_quiet_hours_end": "06:30",
                 "discord_webhook": "https://discord.example/webhook",
                 "telegram_token": "token",
                 "telegram_user_id": "123",
@@ -1087,6 +1145,13 @@ class ScanApiTests(TestCase):
         self.assertEqual(config.version_check_interval, 3600)
         self.assertFalse(config.discord_enabled)
         self.assertTrue(config.telegram_enabled)
+        self.assertTrue(config.notify_new_devices)
+        self.assertTrue(config.notify_device_online)
+        self.assertTrue(config.notify_device_offline)
+        self.assertTrue(config.notify_port_changes)
+        self.assertTrue(config.notification_quiet_hours_enabled)
+        self.assertEqual(config.notification_quiet_hours_start, "23:00")
+        self.assertEqual(config.notification_quiet_hours_end, "06:30")
         self.assertEqual(config.discord_webhook, "https://discord.example/webhook")
         self.assertEqual(config.telegram_token, "token")
         self.assertEqual(config.telegram_user_id, "123")
@@ -1100,6 +1165,12 @@ class ScanApiTests(TestCase):
         self.assertTrue(response.data["data"]["telegram_enabled"])
         self.assertTrue(response.data["data"]["discord_configured"])
         self.assertEqual(response.data["data"]["version_check_interval"], 3600)
+        self.assertTrue(response.data["data"]["notify_device_online"])
+        self.assertTrue(response.data["data"]["notify_device_offline"])
+        self.assertTrue(response.data["data"]["notify_port_changes"])
+        self.assertTrue(response.data["data"]["notification_quiet_hours_enabled"])
+        self.assertEqual(response.data["data"]["notification_quiet_hours_start"], "23:00")
+        self.assertEqual(response.data["data"]["notification_quiet_hours_end"], "06:30")
 
     def test_settings_endpoint_rejects_short_version_check_interval(self):
         response = self.client.put(
@@ -1110,6 +1181,16 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("version_check_interval", response.data)
+
+    def test_settings_endpoint_rejects_bad_quiet_hours(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"notification_quiet_hours_start": "23:00:00"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("notification_quiet_hours_start", response.data)
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
     def test_settings_endpoint_rejects_unsafe_scan_range(self):
@@ -1133,6 +1214,9 @@ class ScanApiTests(TestCase):
         self.assertIn("time_zone", response.data)
 
     def test_scan_status_endpoint_returns_latest_scan_and_counters(self):
+        self.scan_run.started_at = timezone.now() - timedelta(minutes=2)
+        self.scan_run.finished_at = timezone.now()
+        self.scan_run.save(update_fields=["started_at", "finished_at"])
         Device.objects.create(
             name="Stale phone",
             ip="192.168.1.21",
@@ -1156,6 +1240,22 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["counters"]["online_devices"], 2)
         self.assertEqual(response.data["counters"]["offline_devices"], 1)
         self.assertEqual(response.data["counters"]["unnotified_events"], 1)
+        self.assertFalse(response.data["visibility"]["is_scanning"])
+        self.assertEqual(response.data["visibility"]["current_range"], "192.168.1.0/24")
+        self.assertGreaterEqual(response.data["visibility"]["duration_seconds"], 119)
+
+    def test_scan_status_endpoint_returns_active_scan_visibility(self):
+        running_scan = ScanRun.objects.create(
+            ip_range="192.168.2.0/24",
+            status=ScanRun.Status.RUNNING,
+        )
+
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["active_scan"]["id"], running_scan.id)
+        self.assertTrue(response.data["visibility"]["is_scanning"])
+        self.assertEqual(response.data["visibility"]["current_range"], "192.168.2.0/24")
 
     def test_scan_status_endpoint_keeps_latest_completed_scan_during_running_scan(self):
         running_scan = ScanRun.objects.create(

@@ -1,4 +1,6 @@
 import logging
+from datetime import time
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
 from django.conf import settings
@@ -26,7 +28,41 @@ def notification_event_types():
 
 
 def notification_event_allowed(event):
+    app_config = AppSettings.load()
+    if event.event_type == NetworkEvent.EventType.NEW_DEVICE:
+        return app_config.notify_new_devices
+    if event.event_type == NetworkEvent.EventType.DEVICE_ONLINE:
+        return app_config.notify_device_online
+    if event.event_type == NetworkEvent.EventType.DEVICE_OFFLINE:
+        return app_config.notify_device_offline
+    if event.event_type in {
+        NetworkEvent.EventType.PORT_OPENED,
+        NetworkEvent.EventType.PORT_CLOSED,
+    }:
+        return app_config.notify_port_changes
     return event.event_type in notification_event_types()
+
+
+def quiet_hours_active(app_config, now=None):
+    if not app_config.notification_quiet_hours_enabled:
+        return False
+
+    now = now or timezone.now()
+    try:
+        app_timezone = ZoneInfo(app_config.time_zone)
+    except ZoneInfoNotFoundError:
+        app_timezone = timezone.get_current_timezone()
+
+    if timezone.is_naive(now):
+        now = timezone.make_aware(now, app_timezone)
+    local_time = timezone.localtime(now, app_timezone).time()
+    start = time.fromisoformat(app_config.notification_quiet_hours_start)
+    end = time.fromisoformat(app_config.notification_quiet_hours_end)
+    if start == end:
+        return True
+    if start < end:
+        return start <= local_time < end
+    return local_time >= start or local_time < end
 
 
 def mark_notification_skipped(event, reason):
@@ -44,6 +80,10 @@ def notify_event(event):
 
     if not notification_event_allowed(event):
         mark_notification_skipped(event, "event_type_not_enabled")
+        return []
+
+    if quiet_hours_active(app_config):
+        mark_notification_skipped(event, "quiet_hours")
         return []
 
     deliveries = []

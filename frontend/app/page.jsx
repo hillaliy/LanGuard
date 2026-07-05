@@ -592,6 +592,24 @@ function formatDate(value) {
   }).format(new Date(value));
 }
 
+function formatDuration(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) {
+    return '-';
+  }
+  const minutes = Math.floor(value / 60);
+  const remainingSeconds = Math.floor(value % 60);
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+    return `${hours}h ${remainingMinutes}m`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`;
+  }
+  return `${remainingSeconds}s`;
+}
+
 function deviceStatus(device) {
   const statusValue = device?.status || (device?.online ? 'online' : 'offline');
   const labels = {
@@ -1452,6 +1470,13 @@ function SettingsModal({ opened, onClose, onSaved }) {
   const [discordWebhook, setDiscordWebhook] = useState('');
   const [telegramToken, setTelegramToken] = useState('');
   const [telegramUserId, setTelegramUserId] = useState('');
+  const [notifyNewDevices, setNotifyNewDevices] = useState(true);
+  const [notifyDeviceOnline, setNotifyDeviceOnline] = useState(false);
+  const [notifyDeviceOffline, setNotifyDeviceOffline] = useState(false);
+  const [notifyPortChanges, setNotifyPortChanges] = useState(false);
+  const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
+  const [quietHoursStart, setQuietHoursStart] = useState('22:00');
+  const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -1475,6 +1500,13 @@ function SettingsModal({ opened, onClose, onSaved }) {
       setDiscordWebhook(data.discord_webhook || '');
       setTelegramToken(data.telegram_token || '');
       setTelegramUserId(data.telegram_user_id || '');
+      setNotifyNewDevices(Boolean(data.notify_new_devices));
+      setNotifyDeviceOnline(Boolean(data.notify_device_online));
+      setNotifyDeviceOffline(Boolean(data.notify_device_offline));
+      setNotifyPortChanges(Boolean(data.notify_port_changes));
+      setQuietHoursEnabled(Boolean(data.notification_quiet_hours_enabled));
+      setQuietHoursStart(data.notification_quiet_hours_start || '22:00');
+      setQuietHoursEnd(data.notification_quiet_hours_end || '07:00');
     } catch (err) {
       setError(err.message);
       showErrorNotification('Could not load settings', err.message);
@@ -1500,6 +1532,13 @@ function SettingsModal({ opened, onClose, onSaved }) {
         version_check_interval: buildVersionCheckInterval(versionCheckValue, versionCheckUnit),
         discord_enabled: discordEnabled,
         telegram_enabled: telegramEnabled,
+        notify_new_devices: notifyNewDevices,
+        notify_device_online: notifyDeviceOnline,
+        notify_device_offline: notifyDeviceOffline,
+        notify_port_changes: notifyPortChanges,
+        notification_quiet_hours_enabled: quietHoursEnabled,
+        notification_quiet_hours_start: quietHoursStart,
+        notification_quiet_hours_end: quietHoursEnd,
       };
       body.discord_webhook = discordWebhook;
       body.telegram_token = telegramToken;
@@ -1508,7 +1547,7 @@ function SettingsModal({ opened, onClose, onSaved }) {
       const savedSettings = await apiRequest('settings/', { method: 'PUT', body });
       await loadSettings();
       await onSaved(savedSettings.data || {});
-      showSuccessNotification('Settings saved', 'Scanner and notification settings were updated.');
+      showSuccessNotification('Settings saved', 'Scanner, version, and notification settings were updated.');
       onClose();
     } catch (err) {
       setError(err.message);
@@ -1578,6 +1617,55 @@ function SettingsModal({ opened, onClose, onSaved }) {
             required
           />
         </SimpleGrid>
+
+        <Divider />
+
+        <Stack gap="sm">
+          <Text fw={700}>Notification rules</Text>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+            <Switch
+              label="New devices"
+              checked={notifyNewDevices}
+              onChange={(event) => setNotifyNewDevices(event.currentTarget.checked)}
+            />
+            <Switch
+              label="Device comes online"
+              checked={notifyDeviceOnline}
+              onChange={(event) => setNotifyDeviceOnline(event.currentTarget.checked)}
+            />
+            <Switch
+              label="Device goes offline"
+              checked={notifyDeviceOffline}
+              onChange={(event) => setNotifyDeviceOffline(event.currentTarget.checked)}
+            />
+            <Switch
+              label="Port changes"
+              checked={notifyPortChanges}
+              onChange={(event) => setNotifyPortChanges(event.currentTarget.checked)}
+            />
+          </SimpleGrid>
+          <SimpleGrid cols={{ base: 1, sm: 3 }}>
+            <Switch
+              label="Quiet hours"
+              checked={quietHoursEnabled}
+              onChange={(event) => setQuietHoursEnabled(event.currentTarget.checked)}
+            />
+            <TextInput
+              type="time"
+              label="Quiet from"
+              value={quietHoursStart}
+              onChange={(event) => setQuietHoursStart(event.currentTarget.value)}
+              disabled={!quietHoursEnabled}
+            />
+            <TextInput
+              type="time"
+              label="Quiet until"
+              value={quietHoursEnd}
+              onChange={(event) => setQuietHoursEnd(event.currentTarget.value)}
+              disabled={!quietHoursEnabled}
+            />
+          </SimpleGrid>
+        </Stack>
 
         <Divider />
 
@@ -1668,6 +1756,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   });
   const [counters, setCounters] = useState({});
   const [scanStatus, setScanStatus] = useState(null);
+  const [scanVisibility, setScanVisibility] = useState(null);
   const [scanRuns, setScanRuns] = useState([]);
   const [events, setEvents] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -1787,7 +1876,8 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         }
       );
       setCounters(deviceData.counters || {});
-      setScanStatus((previous) => statusData.data || previous);
+      setScanStatus(statusData.data || statusData.active_scan || null);
+      setScanVisibility(statusData.visibility || null);
       setScanRuns(runData.data || []);
       setEvents(eventData.data || []);
       setNotifications(notificationData.data || []);
@@ -2242,6 +2332,14 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 <Text size="sm" c="dimmed">
                   Last scan: {scanStatus ? formatDate(scanStatus.finished_at || scanStatus.started_at) : '-'}
                 </Text>
+                <Group gap="xs">
+                  <Badge color={scanVisibility?.is_scanning ? 'blue' : 'gray'} variant="light">
+                    {scanVisibility?.is_scanning ? 'Scanning' : 'Idle'}
+                  </Badge>
+                  <Text size="sm" c="dimmed">
+                    Range: {scanVisibility?.current_range || appSettings?.ip_range || '-'}
+                  </Text>
+                </Group>
                 <TextInput
                   label="CIDR range"
                   placeholder={
@@ -2269,6 +2367,32 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 <NumberReadout label="Opened" value={scanStatus?.ports_opened} />
                 <NumberReadout label="Closed" value={scanStatus?.ports_closed} />
               </SimpleGrid>
+              <Divider my="sm" />
+              <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                <Box>
+                  <Text size="xs" c="dimmed">Started</Text>
+                  <Text fw={600}>{formatDate(scanVisibility?.started_at)}</Text>
+                </Box>
+                <Box>
+                  <Text size="xs" c="dimmed">Finished</Text>
+                  <Text fw={600}>{formatDate(scanVisibility?.finished_at)}</Text>
+                </Box>
+                <Box>
+                  <Text size="xs" c="dimmed">Duration</Text>
+                  <Text fw={600}>{formatDuration(scanVisibility?.duration_seconds)}</Text>
+                </Box>
+                <Box>
+                  <Text size="xs" c="dimmed">Status</Text>
+                  <Badge color={scanVisibility?.is_scanning ? 'blue' : scanStatus?.status === 'failed' ? 'red' : 'teal'} variant="light">
+                    {scanVisibility?.is_scanning ? 'running' : scanStatus?.status || '-'}
+                  </Badge>
+                </Box>
+              </SimpleGrid>
+              {scanVisibility?.last_error && (
+                <Alert mt="sm" color="red" icon={<IconAlertCircle size={18} />}>
+                  {scanVisibility.last_error}
+                </Alert>
+              )}
             </Paper>
           </SimpleGrid>
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.8 - 2026-07-05
+
+- Added notification rules for new devices, online/offline changes, port changes, and quiet hours.
+- Improved scan visibility with active/idle state, current range, duration, timing, and last error details.
+
 ## 1.0.7 - 2026-07-05
 
 - Fixed device status filters so Offline, Online, Recently seen, and Sleeping use the same status field shown in the table.

@@ -185,6 +185,13 @@ class AppSettings(models.Model):
     telegram_enabled = models.BooleanField(default=True)
     telegram_token = models.CharField(max_length=255, blank=True, default="")
     telegram_user_id = models.CharField(max_length=64, blank=True, default="")
+    notify_new_devices = models.BooleanField(default=True)
+    notify_device_online = models.BooleanField(default=False)
+    notify_device_offline = models.BooleanField(default=False)
+    notify_port_changes = models.BooleanField(default=False)
+    notification_quiet_hours_enabled = models.BooleanField(default=False)
+    notification_quiet_hours_start = models.CharField(max_length=5, default="22:00")
+    notification_quiet_hours_end = models.CharField(max_length=5, default="07:00")
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -207,6 +214,16 @@ class AppSettings(models.Model):
             "telegram_enabled": settings.NOTIFICATIONS_ENABLED,
             "telegram_token": settings.TELEGRAM_TOKEN or "",
             "telegram_user_id": settings.TELEGRAM_USERID or "",
+            "notify_new_devices": "new_device" in settings.NOTIFICATION_EVENT_TYPES,
+            "notify_device_online": "device_online" in settings.NOTIFICATION_EVENT_TYPES,
+            "notify_device_offline": "device_offline" in settings.NOTIFICATION_EVENT_TYPES,
+            "notify_port_changes": any(
+                event_type in settings.NOTIFICATION_EVENT_TYPES
+                for event_type in ("port_opened", "port_closed")
+            ),
+            "notification_quiet_hours_enabled": False,
+            "notification_quiet_hours_start": "22:00",
+            "notification_quiet_hours_end": "07:00",
         }
         config, _ = cls.objects.get_or_create(singleton_key=1, defaults=defaults)
         return config
