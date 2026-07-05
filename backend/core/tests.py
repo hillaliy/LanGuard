@@ -84,7 +84,7 @@ class ApiDocsAccessTests(SimpleTestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class VersionStatusTests(SimpleTestCase):
+class VersionStatusTests(TestCase):
     def setUp(self):
         self.client = APIClient()
 
@@ -105,6 +105,15 @@ class VersionStatusTests(SimpleTestCase):
         self.assertEqual(response.data["data"]["current_version"], "1.0.2")
         self.assertEqual(response.data["data"]["latest_version"], "1.0.3")
         self.assertEqual(response.data["data"]["check_interval_seconds"], 21600)
+
+    @override_settings(APP_VERSION="1.0.2", LATEST_VERSION_URL="")
+    def test_version_endpoint_uses_saved_check_interval(self):
+        AppSettings.objects.create(version_check_interval=1800)
+
+        response = self.client.get("/api/v1/version/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["check_interval_seconds"], 1800)
 
     @override_settings(APP_VERSION="1.0.2", LATEST_VERSION_URL="")
     def test_version_endpoint_falls_back_without_latest_source(self):
@@ -1060,6 +1069,7 @@ class ScanApiTests(TestCase):
                 "ip_range": "192.168.1.0/24",
                 "scan_interval": 15,
                 "time_zone": "Asia/Jerusalem",
+                "version_check_interval": 3600,
                 "discord_enabled": False,
                 "telegram_enabled": True,
                 "discord_webhook": "https://discord.example/webhook",
@@ -1074,6 +1084,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(config.ip_range, "192.168.1.0/24")
         self.assertEqual(config.scan_interval, 15)
         self.assertEqual(config.time_zone, "Asia/Jerusalem")
+        self.assertEqual(config.version_check_interval, 3600)
         self.assertFalse(config.discord_enabled)
         self.assertTrue(config.telegram_enabled)
         self.assertEqual(config.discord_webhook, "https://discord.example/webhook")
@@ -1088,6 +1099,17 @@ class ScanApiTests(TestCase):
         self.assertFalse(response.data["data"]["discord_enabled"])
         self.assertTrue(response.data["data"]["telegram_enabled"])
         self.assertTrue(response.data["data"]["discord_configured"])
+        self.assertEqual(response.data["data"]["version_check_interval"], 3600)
+
+    def test_settings_endpoint_rejects_short_version_check_interval(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"version_check_interval": 30},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("version_check_interval", response.data)
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
     def test_settings_endpoint_rejects_unsafe_scan_range(self):

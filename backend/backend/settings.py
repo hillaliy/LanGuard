@@ -73,6 +73,7 @@ LATEST_VERSION_URL = os.getenv(
     "https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/package.json",
 )
 VERSION_CHECK_TIMEOUT = float(os.getenv("VERSION_CHECK_TIMEOUT", "3"))
+VERSION_CHECK_INTERVAL = int(os.getenv("VERSION_CHECK_INTERVAL", "21600"))
 
 
 # Quick-start development settings - unsuitable for production

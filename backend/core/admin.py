@@ -67,6 +67,7 @@ class AppSettingsAdmin(admin.ModelAdmin):
     list_display = (
         "ip_range",
         "scan_interval",
+        "version_check_interval",
         "time_zone",
         "notifications_enabled",
         "updated_at",

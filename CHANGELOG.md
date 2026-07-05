@@ -4,6 +4,7 @@
 
 - Fixed device status filters so Offline, Online, Recently seen, and Sleeping use the same status field shown in the table.
 - Aligned dashboard online/offline counters with the displayed device status.
+- Added a settings option to configure new-version checks in minutes or hours.
 - Updated frontend dependencies through Dependabot.
 - Added Dependabot handling for Node Docker image major updates.
 

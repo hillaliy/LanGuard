@@ -163,6 +163,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "ip_range",
             "scan_interval",
             "time_zone",
+            "version_check_interval",
             "notifications_enabled",
             "discord_enabled",
             "discord_webhook",
@@ -210,4 +211,11 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             ZoneInfo(value)
         except ZoneInfoNotFoundError as exc:
             raise serializers.ValidationError("Enter a valid IANA timezone.") from exc
+        return value
+
+    def validate_version_check_interval(self, value):
+        if value < 60:
+            raise serializers.ValidationError("Version check interval must be at least 1 minute.")
+        if value > 604800:
+            raise serializers.ValidationError("Version check interval must be 7 days or less.")
         return value
