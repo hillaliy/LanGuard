@@ -178,6 +178,7 @@ class AppSettings(models.Model):
     ip_range = models.CharField(max_length=64, default="192.168.1.0/24")
     scan_interval = models.PositiveIntegerField(default=10)
     time_zone = models.CharField(max_length=64, default="UTC")
+    version_check_interval = models.PositiveIntegerField(default=21600)
     notifications_enabled = models.BooleanField(default=True)
     discord_enabled = models.BooleanField(default=True)
     discord_webhook = models.URLField(blank=True, default="")
@@ -199,6 +200,7 @@ class AppSettings(models.Model):
             "ip_range": settings.IP_RANGE,
             "scan_interval": settings.INTERVAL,
             "time_zone": settings.TIME_ZONE,
+            "version_check_interval": settings.VERSION_CHECK_INTERVAL,
             "notifications_enabled": settings.NOTIFICATIONS_ENABLED,
             "discord_enabled": settings.NOTIFICATIONS_ENABLED,
             "discord_webhook": settings.DISCORD_WEBHOOK or "",

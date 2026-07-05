@@ -173,12 +173,13 @@ def fetch_latest_version():
 @permission_classes([AllowAny])
 def version_status(request):
     latest_version = fetch_latest_version()
+    config = AppSettings.load()
     return Response(
         {
             "data": {
                 "current_version": settings.APP_VERSION,
                 "latest_version": latest_version,
-                "check_interval_seconds": 21600,
+                "check_interval_seconds": config.version_check_interval,
             }
         }
     )
