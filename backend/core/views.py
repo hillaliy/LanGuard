@@ -22,6 +22,7 @@ from django.shortcuts import get_object_or_404
 
 import logging
 
+from django.utils import timezone
 from .serializers import (
     AppSettingsSerializer,
     DeviceSerializer,
@@ -639,10 +640,24 @@ def scan_runs(request):
 def scan_status(request):
     latest_scan = ScanRun.objects.exclude(status=ScanRun.Status.RUNNING).first()
     active_scan = ScanRun.objects.filter(status=ScanRun.Status.RUNNING).first()
+    visible_scan = active_scan or latest_scan
+    now = timezone.now()
+    duration_seconds = None
+    if visible_scan:
+        finished_at = visible_scan.finished_at or now
+        duration_seconds = max(0, int((finished_at - visible_scan.started_at).total_seconds()))
     return Response(
         {
             "data": ScanRunSerializer(latest_scan).data if latest_scan else None,
             "active_scan": ScanRunSerializer(active_scan).data if active_scan else None,
+            "visibility": {
+                "is_scanning": active_scan is not None,
+                "current_range": visible_scan.ip_range if visible_scan else "",
+                "started_at": visible_scan.started_at if visible_scan else None,
+                "finished_at": visible_scan.finished_at if visible_scan else None,
+                "duration_seconds": duration_seconds,
+                "last_error": visible_scan.error if visible_scan and visible_scan.error else "",
+            },
             "counters": {
                 "all_devices": Device.objects.count(),
                 "online_devices": Device.objects.exclude(status=Device.Status.OFFLINE).count(),

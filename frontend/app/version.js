@@ -4,6 +4,14 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.8',
+    date: '2026-07-05',
+    items: [
+      'Added notification rules for new devices, online/offline changes, port changes, and quiet hours.',
+      'Improved scan visibility with active/idle state, current range, duration, timing, and last error details.',
+    ],
+  },
+  {
     version: '1.0.7',
     date: '2026-07-05',
     items: [

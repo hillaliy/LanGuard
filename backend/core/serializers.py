@@ -172,6 +172,13 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "telegram_token",
             "telegram_user_id",
             "telegram_configured",
+            "notify_new_devices",
+            "notify_device_online",
+            "notify_device_offline",
+            "notify_port_changes",
+            "notification_quiet_hours_enabled",
+            "notification_quiet_hours_start",
+            "notification_quiet_hours_end",
             "updated_at",
         )
         extra_kwargs = {
@@ -218,4 +225,21 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Version check interval must be at least 1 minute.")
         if value > 604800:
             raise serializers.ValidationError("Version check interval must be 7 days or less.")
+        return value
+
+    def validate_notification_quiet_hours_start(self, value):
+        return self.validate_quiet_hour(value)
+
+    def validate_notification_quiet_hours_end(self, value):
+        return self.validate_quiet_hour(value)
+
+    def validate_quiet_hour(self, value):
+        import datetime
+
+        if len(value) != 5:
+            raise serializers.ValidationError("Enter time in HH:MM format.")
+        try:
+            datetime.time.fromisoformat(value)
+        except ValueError as exc:
+            raise serializers.ValidationError("Enter time in HH:MM format.") from exc
         return value
