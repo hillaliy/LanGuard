@@ -1111,11 +1111,28 @@ class ScanApiTests(TestCase):
         self.assertIn("time_zone", response.data)
 
     def test_scan_status_endpoint_returns_latest_scan_and_counters(self):
+        Device.objects.create(
+            name="Stale phone",
+            ip="192.168.1.21",
+            mac="bb:bb:bb:bb:bb:bb",
+            online=False,
+            status=Device.Status.ONLINE,
+        )
+        Device.objects.create(
+            name="Offline camera",
+            ip="192.168.1.22",
+            mac="cc:cc:cc:cc:cc:cc",
+            online=True,
+            status=Device.Status.OFFLINE,
+        )
+
         response = self.client.get("/api/v1/scan/status/")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["id"], self.scan_run.id)
-        self.assertEqual(response.data["counters"]["all_devices"], 1)
+        self.assertEqual(response.data["counters"]["all_devices"], 3)
+        self.assertEqual(response.data["counters"]["online_devices"], 2)
+        self.assertEqual(response.data["counters"]["offline_devices"], 1)
         self.assertEqual(response.data["counters"]["unnotified_events"], 1)
 
     def test_scan_status_endpoint_keeps_latest_completed_scan_during_running_scan(self):
@@ -1190,6 +1207,35 @@ class ScanApiTests(TestCase):
             [device["ip"] for device in response.data["data"]],
             ["192.168.1.2", "192.168.1.20", "192.168.1.100"],
         )
+
+    def test_device_endpoint_filters_by_display_status(self):
+        Device.objects.create(
+            name="Status online but stale boolean",
+            ip="192.168.1.21",
+            mac="bb:bb:bb:bb:bb:bb",
+            online=False,
+            status=Device.Status.ONLINE,
+        )
+        offline_device = Device.objects.create(
+            name="Offline camera",
+            ip="192.168.1.22",
+            mac="cc:cc:cc:cc:cc:cc",
+            online=True,
+            status=Device.Status.OFFLINE,
+        )
+
+        response = self.client.get("/api/v1/device/", {"status": Device.Status.OFFLINE})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["pagination"]["count"], 1)
+        self.assertEqual(response.data["data"][0]["id"], offline_device.id)
+        self.assertEqual(response.data["data"][0]["status"], Device.Status.OFFLINE)
+
+    def test_device_endpoint_rejects_invalid_status_filter(self):
+        response = self.client.get("/api/v1/device/", {"status": "gone"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("status", response.data)
 
     def test_device_endpoint_counters_include_current_open_ports(self):
         DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)

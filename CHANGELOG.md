@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.7 - 2026-07-05
+
+- Fixed device status filters so Offline, Online, Recently seen, and Sleeping use the same status field shown in the table.
+- Aligned dashboard online/offline counters with the displayed device status.
+- Updated frontend dependencies through Dependabot.
+- Added Dependabot handling for Node Docker image major updates.
+
 ## 1.0.6 - 2026-07-04
 
 - Improved online/offline status with status reasons, per-device grace, ICMP checks, and remembered-port confirmation.

@@ -432,8 +432,8 @@ def users(request):
 @permission_classes([permissions.IsAuthenticated])
 def device(request):
     all_devices = Device.objects.all().count()
-    online_devices = Device.objects.filter(online=True).count()
-    offline_devices = Device.objects.filter(online=False).count()
+    online_devices = Device.objects.exclude(status=Device.Status.OFFLINE).count()
+    offline_devices = Device.objects.filter(status=Device.Status.OFFLINE).count()
     new_devices = Device.objects.filter(known=False).count()
     open_ports = DevicePort.objects.filter(open=True).count()
     counters = {
@@ -450,11 +450,16 @@ def device(request):
         if not id_:
             devices = Device.objects.prefetch_related("ports").all()
             online = parse_bool_param(request.query_params, "online")
+            device_status = request.query_params.get("status")
             known = parse_bool_param(request.query_params, "known")
             search = request.query_params.get("search")
             open_port = request.query_params.get("open_port")
 
-            if online is not None:
+            if device_status:
+                if device_status not in Device.Status.values:
+                    raise ValidationError({"status": "Invalid device status."})
+                devices = devices.filter(status=device_status)
+            elif online is not None:
                 devices = devices.filter(online=online)
             if known is not None:
                 devices = devices.filter(known=known)
@@ -639,8 +644,8 @@ def scan_status(request):
             "active_scan": ScanRunSerializer(active_scan).data if active_scan else None,
             "counters": {
                 "all_devices": Device.objects.count(),
-                "online_devices": Device.objects.filter(online=True).count(),
-                "offline_devices": Device.objects.filter(online=False).count(),
+                "online_devices": Device.objects.exclude(status=Device.Status.OFFLINE).count(),
+                "offline_devices": Device.objects.filter(status=Device.Status.OFFLINE).count(),
                 "open_ports": DevicePort.objects.filter(open=True).count(),
                 "unnotified_events": NetworkEvent.objects.filter(notified=False).count(),
             },
