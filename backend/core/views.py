@@ -125,6 +125,21 @@ def staff_count():
     return User.objects.filter(is_staff=True).count()
 
 
+def reconcile_scan_status(latest_scan, active_scan):
+    if not latest_scan or not active_scan:
+        return active_scan
+
+    latest_finished_at = latest_scan.finished_at or latest_scan.started_at
+    if latest_finished_at <= active_scan.started_at:
+        return active_scan
+
+    active_scan.status = ScanRun.Status.FAILED
+    active_scan.finished_at = latest_finished_at
+    active_scan.error = "Scan was superseded by a newer completed scan."
+    active_scan.save(update_fields=["status", "finished_at", "error"])
+    return None
+
+
 def fetch_latest_version():
     if not settings.LATEST_VERSION_URL:
         return None
@@ -640,6 +655,7 @@ def scan_runs(request):
 def scan_status(request):
     latest_scan = ScanRun.objects.exclude(status=ScanRun.Status.RUNNING).first()
     active_scan = ScanRun.objects.filter(status=ScanRun.Status.RUNNING).first()
+    active_scan = reconcile_scan_status(latest_scan, active_scan)
     visible_scan = active_scan or latest_scan
     now = timezone.now()
     duration_seconds = None
