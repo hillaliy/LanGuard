@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.9 - 2026-07-08
+
+- Fixed stale running scan records so newer completed scans show as finished instead of running.
+- Added README guidance about private/random phone MAC addresses.
+
 ## 1.0.8 - 2026-07-05
 
 - Added notification rules for new devices, online/offline changes, port changes, and quiet hours.

@@ -4,6 +4,14 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.9',
+    date: '2026-07-08',
+    items: [
+      'Fixed stale running scan records so newer completed scans show as finished instead of running.',
+      'Added README guidance about private/random phone MAC addresses.',
+    ],
+  },
+  {
     version: '1.0.8',
     date: '2026-07-05',
     items: [

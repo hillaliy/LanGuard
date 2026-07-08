@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-1.0.8-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.0.9-blue">
   <a href="https://github.com/users/hillaliy/packages/container/package/languard-backend">
     <img alt="Backend image" src="https://img.shields.io/badge/backend-GHCR-2ea44f">
   </a>
@@ -104,6 +104,12 @@ After sign in, open Settings to change the scan range, scan interval, timezone, 
 Portainer will create the stack network automatically.
 
 Backend and scanner use host networking so ARP discovery can see LAN devices. Without host networking, Docker bridge networking may only show the Docker host/gateway.
+
+## Phone MAC Randomization
+
+Modern iPhone and Android devices often use a private/random MAC address per Wi-Fi network. If that address changes, LanGuard will see the same phone as a new device.
+
+For stable tracking, disable private/random MAC addressing for your home Wi-Fi network on the phone, or mark the new entry as known when it appears.
 
 ## Update
 

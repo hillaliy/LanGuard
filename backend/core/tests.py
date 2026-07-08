@@ -1269,6 +1269,30 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["data"]["id"], self.scan_run.id)
         self.assertEqual(response.data["active_scan"]["id"], running_scan.id)
 
+    def test_scan_status_endpoint_finishes_superseded_running_scan(self):
+        running_scan = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            status=ScanRun.Status.RUNNING,
+            started_at=timezone.now() - timedelta(minutes=30),
+        )
+        self.scan_run.started_at = timezone.now() - timedelta(minutes=5)
+        self.scan_run.finished_at = timezone.now() - timedelta(minutes=1)
+        self.scan_run.save(update_fields=["started_at", "finished_at"])
+
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["id"], self.scan_run.id)
+        self.assertIsNone(response.data["active_scan"])
+        self.assertFalse(response.data["visibility"]["is_scanning"])
+        self.assertEqual(response.data["visibility"]["finished_at"], self.scan_run.finished_at)
+        running_scan.refresh_from_db()
+        self.assertEqual(running_scan.status, ScanRun.Status.FAILED)
+        self.assertEqual(
+            running_scan.error,
+            "Scan was superseded by a newer completed scan.",
+        )
+
     def test_device_endpoint_paginates_devices(self):
         Device.objects.create(
             name="Tablet",
