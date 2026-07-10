@@ -1,6 +1,7 @@
 import logging
 import ipaddress
 import socket
+import struct
 
 from django.conf import settings
 from django.utils import timezone
@@ -290,6 +291,33 @@ def validate_ip_range(ip_range):
         raise ValueError("Public IP ranges are disabled.")
 
     return network.with_prefixlen
+
+
+def default_gateway_from_proc_route(path="/proc/net/route"):
+    try:
+        with open(path, encoding="utf-8") as route_file:
+            next(route_file, None)
+            for line in route_file:
+                fields = line.strip().split()
+                if len(fields) < 3:
+                    continue
+                destination, gateway = fields[1], fields[2]
+                if destination != "00000000" or gateway == "00000000":
+                    continue
+                return socket.inet_ntoa(struct.pack("<L", int(gateway, 16)))
+    except (FileNotFoundError, OSError, ValueError):
+        return ""
+    return ""
+
+
+def get_default_gateway_ip():
+    return default_gateway_from_proc_route()
+
+
+def clear_stale_gateways(gateway_ip):
+    if not gateway_ip:
+        return 0
+    return Device.objects.filter(is_gateway=True).exclude(ip=gateway_ip).update(is_gateway=False)
 
 
 def normalize_scan_ports(ports=None):
@@ -621,6 +649,7 @@ def discover_devices(ip_range):
 def scan(ip_range, scan_run=None):
     ip_range = validate_ip_range(ip_range)
     scan_run = scan_run or ScanRun.objects.create(ip_range=ip_range)
+    gateway_ip = get_default_gateway_ip()
     ports_opened = 0
     ports_closed = 0
     new_devices = 0
@@ -636,12 +665,14 @@ def scan(ip_range, scan_run=None):
                 oui=oui,
                 scan_run=scan_run,
                 scan_started_at=scan_started_at,
+                gateway_ip=gateway_ip,
             )
             new_devices += stats["new_devices"]
             ports_opened += stats["ports_opened"]
             ports_closed += stats["ports_closed"]
 
         online_macs = [element[1].hwsrc.lower() for element in answered_list]
+        clear_stale_gateways(gateway_ip)
         mark_missing_devices_offline(online_macs, scan_run=scan_run)
     except Exception as exc:
         scan_run.status = ScanRun.Status.FAILED
@@ -673,7 +704,7 @@ def scan(ip_range, scan_run=None):
     return scan_run
 
 
-def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=None):
+def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=None, gateway_ip=""):
     scan_started_at = scan_started_at or timezone.now()
     ip = element[1].psrc
     mac = element[1].hwsrc.lower()
@@ -683,6 +714,7 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
     ports_opened = 0
     ports_closed = 0
     new_devices = 0
+    is_gateway = bool(gateway_ip and ip == gateway_ip)
 
     try:
         device = Device.objects.get(mac=mac)
@@ -715,6 +747,13 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
             if is_default_device_icon(device.icon):
                 device.icon = identity["icon"]
                 update_fields.append("icon")
+        if is_gateway:
+            device.is_gateway = True
+            device.known = True
+            if is_default_device_name(device.name):
+                device.name = "Gateway"
+            device.icon = "router"
+            update_fields.extend(["is_gateway", "known", "name", "icon"])
         device.save(update_fields=update_fields)
 
         if not was_online:
@@ -726,12 +765,19 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
             )
     except Device.DoesNotExist:
         identity = guess_device_identity(hostname, vendor_name, mac)
+        if is_gateway:
+            identity = {
+                "name": "Gateway" if is_default_device_name(identity["name"]) else identity["name"],
+                "icon": "router",
+            }
         device = Device.objects.create(
             icon=identity["icon"],
             name=identity["name"],
             ip=ip,
             mac=mac,
             vendor=vendor_name,
+            known=is_gateway,
+            is_gateway=is_gateway,
             lastseen=scan_started_at,
         )
         set_device_status(

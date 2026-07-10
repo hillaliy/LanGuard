@@ -21,7 +21,9 @@ from .models import (
 )
 from .notifications import notify_event, retry_failed_notifications
 from .scan import (
+    clear_stale_gateways,
     create_event,
+    default_gateway_from_proc_route,
     discover_devices,
     guess_device_identity,
     mark_missing_devices_offline,
@@ -499,6 +501,56 @@ class ScanStabilityTests(TestCase):
 
         self.assertEqual(identity["name"], "TP-Link")
         self.assertEqual(identity["icon"], "router")
+
+    @patch("builtins.open")
+    def test_default_gateway_from_proc_route(self, open_mock):
+        open_mock.return_value.__enter__.return_value = iter(
+            [
+                "Iface Destination Gateway Flags RefCnt Use Metric Mask MTU Window IRTT\n",
+                "eth0 00000000 0100A8C0 0003 0 0 0 00000000 0 0 0\n",
+            ]
+        )
+
+        self.assertEqual(default_gateway_from_proc_route(), "192.168.0.1")
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname")
+    def test_discovered_gateway_is_marked_known_router(self, get_hostname):
+        get_hostname.return_value = "Device"
+
+        sync_discovered_device(
+            self.scan_element("192.168.0.1", "aa:bb:cc:dd:ee:ff"),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.0.0/24"),
+            gateway_ip="192.168.0.1",
+        )
+
+        device = Device.objects.get(mac="aa:bb:cc:dd:ee:ff")
+        self.assertTrue(device.is_gateway)
+        self.assertTrue(device.known)
+        self.assertEqual(device.name, "Gateway")
+        self.assertEqual(device.icon, "router")
+
+    def test_clear_stale_gateways_keeps_current_gateway_only(self):
+        current = Device.objects.create(
+            name="Current router",
+            ip="192.168.0.1",
+            mac="aa:bb:cc:dd:ee:01",
+            is_gateway=True,
+        )
+        stale = Device.objects.create(
+            name="Old router",
+            ip="192.168.0.254",
+            mac="aa:bb:cc:dd:ee:02",
+            is_gateway=True,
+        )
+
+        clear_stale_gateways("192.168.0.1")
+
+        current.refresh_from_db()
+        stale.refresh_from_db()
+        self.assertTrue(current.is_gateway)
+        self.assertFalse(stale.is_gateway)
 
     def test_guess_device_identity_uses_plain_vendor_without_mac_suffix(self):
         identity = guess_device_identity(
@@ -1396,6 +1448,37 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["counters"]["open_ports"], 1)
+
+    def test_device_endpoint_includes_low_risk_badge_data(self):
+        self.device.known = True
+        self.device.vendor = "Apple"
+        self.device.save()
+
+        response = self.client.get("/api/v1/device/")
+
+        self.assertEqual(response.status_code, 200)
+        device = response.data["data"][0]
+        self.assertEqual(device["risk_level"], "low")
+        self.assertEqual(device["risk_score"], 0)
+        self.assertEqual(device["risk_reasons"], [])
+
+    def test_device_endpoint_flags_unknown_device_with_risky_ports(self):
+        self.device.known = False
+        self.device.vendor = ""
+        self.device.save()
+        DevicePort.objects.create(device=self.device, port=22, protocol="tcp", open=True)
+        DevicePort.objects.create(device=self.device, port=445, protocol="tcp", open=True)
+
+        response = self.client.get("/api/v1/device/")
+
+        self.assertEqual(response.status_code, 200)
+        device = response.data["data"][0]
+        self.assertEqual(device["risk_level"], "high")
+        self.assertGreaterEqual(device["risk_score"], 5)
+        self.assertIn("New unknown device", device["risk_reasons"])
+        self.assertTrue(
+            any("Risky open ports" in reason for reason in device["risk_reasons"])
+        )
 
     def test_device_endpoint_rejects_too_large_page_size(self):
         response = self.client.get("/api/v1/device/", {"limit": 101})

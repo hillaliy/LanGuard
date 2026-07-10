@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.10 - 2026-07-10
+
+- Added gateway/router detection from the default network route and marks the gateway as a known router.
+- Added device risk badges with backend risk scoring for unknown devices, risky ports, many open ports, missing vendors, and unstable scan status.
+
 ## 1.0.9 - 2026-07-08
 
 - Fixed stale running scan records so newer completed scans show as finished instead of running.

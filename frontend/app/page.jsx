@@ -336,6 +336,9 @@ function DeviceIcon({ value, size = 18 }) {
 
 function deviceMapShape(device) {
   const icon = normalizeDeviceIcon(device.icon);
+  if (device.is_gateway) {
+    return 'router';
+  }
   if (!device.known || icon === 'unknown') {
     return 'unknown';
   }
@@ -355,6 +358,9 @@ function deviceMapShape(device) {
 }
 
 function isRouterDevice(device) {
+  if (device.is_gateway) {
+    return true;
+  }
   const normalizedIcon = normalizeDeviceIcon(device.icon);
   const text = `${device.name || ''} ${device.hostname || ''} ${device.vendor || ''}`.toLowerCase();
   if (normalizedIcon === 'smart-hub' || text.includes('aqara') || text.includes('aqura')) {
@@ -390,9 +396,12 @@ function NetworkMapDeviceNode({ device, onSelectDevice }) {
         <span className="network-device-icon">
           <DeviceIcon value={device.icon} size={22} />
         </span>
-        <Badge color={status.color} variant="light">
-          {status.label}
-        </Badge>
+        <Group gap={4} justify="flex-end" wrap="wrap">
+          <RiskBadge device={device} compact />
+          <Badge color={status.color} variant="light">
+            {status.label}
+          </Badge>
+        </Group>
       </Group>
       <Text fw={800} className="network-node-name">{device.name}</Text>
       <Text size="xs" className="mobile-mono-value">{device.ip}</Text>
@@ -424,7 +433,9 @@ function NetworkMapDeviceSection({ title, devices, onSelectDevice, compact = fal
 }
 
 function NetworkMap({ devices = [], onSelectDevice }) {
-  const routerDevices = devices.filter(isRouterDevice);
+  const routerDevices = devices
+    .filter(isRouterDevice)
+    .sort((left, right) => Number(Boolean(right.is_gateway)) - Number(Boolean(left.is_gateway)));
   const hubDevices = devices.filter((device) => !isRouterDevice(device) && isHubDevice(device));
   const cameraDevices = devices.filter((device) => !isRouterDevice(device) && isCameraDevice(device));
   const networkDevices = devices.filter(
@@ -641,6 +652,45 @@ function DeviceStatusInline({ device, muted = false }) {
       <span className={`status-dot ${status.dot}`} />
       <Text size="sm" c={muted ? 'dimmed' : undefined}>{status.label}</Text>
     </Group>
+  );
+}
+
+function deviceRisk(device) {
+  const level = device?.risk_level || 'low';
+  const labels = {
+    high: 'High',
+    medium: 'Medium',
+    low: 'Low',
+  };
+  const colors = {
+    high: 'red',
+    medium: 'orange',
+    low: 'teal',
+  };
+  const reasons = device?.risk_reasons || [];
+  return {
+    level,
+    label: labels[level] || 'Low',
+    color: colors[level] || 'gray',
+    reasons,
+    tooltip: reasons.length ? reasons.join('\n') : 'No obvious risk',
+  };
+}
+
+function RiskBadge({ device, compact = false }) {
+  const risk = deviceRisk(device);
+
+  return (
+    <Tooltip label={risk.tooltip} multiline withArrow>
+      <Badge
+        className="device-risk-badge"
+        color={risk.color}
+        variant={risk.level === 'low' ? 'light' : 'filled'}
+        size={compact ? 'sm' : 'md'}
+      >
+        {compact ? risk.label : `${risk.label} risk`}
+      </Badge>
+    </Tooltip>
   );
 }
 
@@ -1072,6 +1122,7 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
             )}
             <Text size="sm" c="dimmed">Missed scans: {device?.missed_scans ?? 0}</Text>
           </Group>
+          <RiskBadge device={device} />
         </Group>
 
         {currentStatus.reason && (
@@ -2207,6 +2258,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                         />
                         <Table.Th className="device-mac-cell">MAC</Table.Th>
                         <Table.Th className="device-ports-cell">Ports</Table.Th>
+                        <Table.Th className="device-risk-cell">Risk</Table.Th>
                         <Table.Th className="device-lastseen-cell">Last seen</Table.Th>
                         <Table.Th className="device-known-cell">Known</Table.Th>
                       </Table.Tr>
@@ -2239,6 +2291,9 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           <Table.Td className="device-mac-cell">{device.mac}</Table.Td>
                           <Table.Td className="device-ports-cell">
                             <PortSummary ports={device.open_ports || []} />
+                          </Table.Td>
+                          <Table.Td className="device-risk-cell">
+                            <RiskBadge device={device} compact />
                           </Table.Td>
                           <Table.Td className="device-lastseen-cell">{formatDate(device.lastseen)}</Table.Td>
                           <Table.Td className="device-known-cell">
@@ -2275,13 +2330,16 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                               <DeviceStatusInline device={device} muted />
                             </Box>
                           </Group>
-                          <Badge
-                            className="device-known-badge"
-                            color={device.known ? 'teal' : 'yellow'}
-                            variant="light"
-                          >
-                            {device.known ? 'Known' : 'New'}
-                          </Badge>
+                          <Group gap={6} justify="flex-end" wrap="wrap">
+                            <RiskBadge device={device} compact />
+                            <Badge
+                              className="device-known-badge"
+                              color={device.known ? 'teal' : 'yellow'}
+                              variant="light"
+                            >
+                              {device.known ? 'Known' : 'New'}
+                            </Badge>
+                          </Group>
                         </Group>
                         <SimpleGrid cols={2} spacing="xs" mt="sm">
                           <Box>

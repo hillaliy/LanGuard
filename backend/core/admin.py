@@ -17,8 +17,8 @@ class DevicePortInline(admin.TabularInline):
 
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
-    list_display = ("name", "ip", "mac", "vendor", "status", "status_source", "online", "known", "lastseen")
-    list_filter = ("status", "status_source", "online", "known", "vendor")
+    list_display = ("name", "ip", "mac", "vendor", "status", "status_source", "online", "known", "is_gateway", "lastseen")
+    list_filter = ("status", "status_source", "online", "known", "is_gateway", "vendor")
     search_fields = ("name", "ip", "mac", "vendor")
     inlines = [DevicePortInline]
 
