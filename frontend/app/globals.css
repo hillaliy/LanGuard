@@ -276,16 +276,16 @@ textarea {
 }
 
 .device-status-cell {
-  width: 11%;
+  width: 10%;
   white-space: nowrap;
 }
 
 .device-name-cell {
-  width: 20%;
+  width: 19%;
 }
 
 .device-ip-cell {
-  width: 13%;
+  width: 12%;
   white-space: nowrap;
 }
 
@@ -296,22 +296,32 @@ textarea {
 }
 
 .device-ports-cell {
-  width: 15%;
+  width: 12%;
+}
+
+.device-risk-cell {
+  width: 8%;
+  white-space: nowrap;
 }
 
 .device-lastseen-cell {
-  width: 15%;
+  width: 14%;
   white-space: nowrap;
 }
 
 .device-known-cell {
-  width: 10%;
+  width: 9%;
   white-space: nowrap;
 }
 
 .device-known-badge {
   min-width: 76px;
   justify-content: center;
+}
+
+.device-risk-badge {
+  justify-content: center;
+  min-width: 64px;
 }
 
 .device-table-icon {

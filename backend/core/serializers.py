@@ -101,8 +101,68 @@ class DevicePortSerializer(serializers.ModelSerializer):
         read_only_fields = ("device", "firstseen", "lastseen")
 
 
+RISKY_PORTS = {
+    21: "FTP",
+    22: "SSH",
+    23: "Telnet",
+    445: "SMB",
+    3389: "Remote Desktop",
+    5900: "VNC",
+    8080: "Admin web",
+}
+HIGH_RISK_PORTS = {23, 445, 3389, 5900}
+
+
+def device_risk(device):
+    score = 0
+    reasons = []
+
+    if not device.known:
+        score += 3
+        reasons.append("New unknown device")
+
+    open_ports = list(device.ports.filter(open=True).values_list("port", "protocol"))
+    risky_ports = [
+        f"{protocol}/{port} ({RISKY_PORTS[port]})"
+        for port, protocol in open_ports
+        if port in RISKY_PORTS
+    ]
+    if risky_ports:
+        high_risk_count = sum(1 for port, _protocol in open_ports if port in HIGH_RISK_PORTS)
+        score += 3 if high_risk_count else 2
+        reasons.append(f"Risky open ports: {', '.join(risky_ports)}")
+
+    if len(open_ports) >= 4:
+        score += 2
+        reasons.append("Many open ports")
+
+    if not device.vendor:
+        score += 1
+        reasons.append("No vendor detected")
+
+    if device.status in {Device.Status.RECENTLY_SEEN, Device.Status.SLEEPING} or device.missed_scans:
+        score += 1
+        reasons.append("Recently missed scans")
+
+    if score >= 5:
+        level = "high"
+    elif score >= 2:
+        level = "medium"
+    else:
+        level = "low"
+
+    return {
+        "level": level,
+        "score": score,
+        "reasons": reasons,
+    }
+
+
 class DeviceSerializer(serializers.ModelSerializer):
     open_ports = serializers.SerializerMethodField()
+    risk_level = serializers.SerializerMethodField()
+    risk_score = serializers.SerializerMethodField()
+    risk_reasons = serializers.SerializerMethodField()
     status_display = serializers.CharField(
         source="get_status_display",
         read_only=True,
@@ -119,6 +179,23 @@ class DeviceSerializer(serializers.ModelSerializer):
     @extend_schema_field(DevicePortSerializer(many=True))
     def get_open_ports(self, obj):
         return DevicePortSerializer(obj.ports.filter(open=True), many=True).data
+
+    def get_device_risk(self, obj):
+        if not hasattr(obj, "_risk_data"):
+            obj._risk_data = device_risk(obj)
+        return obj._risk_data
+
+    @extend_schema_field(serializers.CharField)
+    def get_risk_level(self, obj):
+        return self.get_device_risk(obj)["level"]
+
+    @extend_schema_field(serializers.IntegerField)
+    def get_risk_score(self, obj):
+        return self.get_device_risk(obj)["score"]
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_risk_reasons(self, obj):
+        return self.get_device_risk(obj)["reasons"]
 
 
 class ScanRunSerializer(serializers.ModelSerializer):
