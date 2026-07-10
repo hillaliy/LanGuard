@@ -4,6 +4,14 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.10',
+    date: '2026-07-10',
+    items: [
+      'Added gateway/router detection from the default network route and marks the gateway as a known router.',
+      'Added device risk badges with backend risk scoring for unknown devices, risky ports, many open ports, missing vendors, and unstable scan status.',
+    ],
+  },
+  {
     version: '1.0.9',
     date: '2026-07-08',
     items: [
