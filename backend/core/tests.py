@@ -11,6 +11,7 @@ import requests
 from rest_framework.test import APIClient
 
 from backend.settings import validate_production_settings
+from .datetime_utils import utc_isoformat
 from .models import (
     AppSettings,
     Device,
@@ -728,6 +729,7 @@ class NotificationTests(TestCase):
         self.assertEqual(embed["color"], 0xE03131)
         self.assertEqual(embed["author"]["icon_url"], "https://example.com/languard.png")
         self.assertEqual(embed["thumbnail"]["url"], "https://example.com/languard.png")
+        self.assertTrue(embed["timestamp"].endswith("Z"))
         self.assertEqual(
             {field["name"]: field["value"] for field in embed["fields"]},
             {
@@ -1292,8 +1294,13 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["counters"]["online_devices"], 2)
         self.assertEqual(response.data["counters"]["offline_devices"], 1)
         self.assertEqual(response.data["counters"]["unnotified_events"], 1)
+        self.assertEqual(response.data["time_zone"], "UTC")
         self.assertFalse(response.data["visibility"]["is_scanning"])
         self.assertEqual(response.data["visibility"]["current_range"], "192.168.1.0/24")
+        self.assertTrue(response.data["data"]["started_at"].endswith("Z"))
+        self.assertTrue(response.data["data"]["finished_at"].endswith("Z"))
+        self.assertTrue(response.data["visibility"]["started_at"].endswith("Z"))
+        self.assertTrue(response.data["visibility"]["finished_at"].endswith("Z"))
         self.assertGreaterEqual(response.data["visibility"]["duration_seconds"], 119)
 
     def test_scan_status_endpoint_returns_active_scan_visibility(self):
@@ -1308,6 +1315,8 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["active_scan"]["id"], running_scan.id)
         self.assertTrue(response.data["visibility"]["is_scanning"])
         self.assertEqual(response.data["visibility"]["current_range"], "192.168.2.0/24")
+        self.assertTrue(response.data["active_scan"]["started_at"].endswith("Z"))
+        self.assertTrue(response.data["visibility"]["started_at"].endswith("Z"))
 
     def test_scan_status_endpoint_keeps_latest_completed_scan_during_running_scan(self):
         running_scan = ScanRun.objects.create(
@@ -1337,7 +1346,10 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["data"]["id"], self.scan_run.id)
         self.assertIsNone(response.data["active_scan"])
         self.assertFalse(response.data["visibility"]["is_scanning"])
-        self.assertEqual(response.data["visibility"]["finished_at"], self.scan_run.finished_at)
+        self.assertEqual(
+            response.data["visibility"]["finished_at"],
+            utc_isoformat(self.scan_run.finished_at),
+        )
         running_scan.refresh_from_db()
         self.assertEqual(running_scan.status, ScanRun.Status.FAILED)
         self.assertEqual(
@@ -1449,6 +1461,23 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["counters"]["open_ports"], 1)
 
+    def test_device_endpoint_returns_utc_datetime_strings(self):
+        self.device.last_status_check = timezone.now()
+        self.device.last_port_scan = timezone.now()
+        self.device.save(update_fields=["last_status_check", "last_port_scan"])
+        DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
+
+        response = self.client.get("/api/v1/device/")
+
+        self.assertEqual(response.status_code, 200)
+        device = response.data["data"][0]
+        self.assertTrue(device["firstseen"].endswith("Z"))
+        self.assertTrue(device["lastseen"].endswith("Z"))
+        self.assertTrue(device["last_status_check"].endswith("Z"))
+        self.assertTrue(device["last_port_scan"].endswith("Z"))
+        self.assertTrue(device["open_ports"][0]["firstseen"].endswith("Z"))
+        self.assertTrue(device["open_ports"][0]["lastseen"].endswith("Z"))
+
     def test_device_endpoint_includes_low_risk_badge_data(self):
         self.device.known = True
         self.device.vendor = "Apple"
@@ -1491,6 +1520,7 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"][0]["id"], self.scan_run.id)
+        self.assertTrue(response.data["data"][0]["started_at"].endswith("Z"))
         self.assertEqual(response.data["pagination"]["count"], 1)
 
     def test_scan_runs_endpoint_filters_by_status(self):
@@ -1511,6 +1541,7 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"][0]["id"], self.event.id)
+        self.assertTrue(response.data["data"][0]["created_at"].endswith("Z"))
         self.assertEqual(response.data["pagination"]["count"], 1)
 
     def test_events_endpoint_filters_by_type_and_notified(self):
@@ -1543,6 +1574,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["pagination"]["count"], 1)
         self.assertEqual(response.data["data"][0]["id"], self.delivery.id)
+        self.assertTrue(response.data["data"][0]["created_at"].endswith("Z"))
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
     def test_scan_now_rejects_public_ranges(self):

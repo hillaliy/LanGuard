@@ -4,6 +4,15 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.11',
+    date: '2026-07-11',
+    items: [
+      'Fixed dashboard timestamps so timezone-less API dates are treated as UTC and displayed in the configured LanGuard timezone.',
+      'Added automatic scan-status refresh for the Scan control and Latest scan panels without changing device table pagination.',
+      'Standardized API and Discord notification timestamps to UTC ISO strings with a Z suffix.',
+    ],
+  },
+  {
     version: '1.0.10',
     date: '2026-07-10',
     items: [

@@ -593,14 +593,36 @@ function ColorSchemeControl() {
   );
 }
 
-function formatDate(value) {
+function normalizeApiDate(value) {
+  if (typeof value !== 'string') {
+    return value;
+  }
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return trimmedValue;
+  }
+  const normalizedValue = trimmedValue.replace(
+    /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})/,
+    '$1T$2'
+  );
+  const hasTime = normalizedValue.includes('T');
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalizedValue);
+  return hasTime && !hasTimezone ? `${normalizedValue}Z` : normalizedValue;
+}
+
+function formatDate(value, timeZone) {
   if (!value) {
+    return '-';
+  }
+  const date = new Date(normalizeApiDate(value));
+  if (Number.isNaN(date.getTime())) {
     return '-';
   }
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date(value));
+    ...(timeZone ? { timeZone } : {}),
+  }).format(date);
 }
 
 function formatDuration(seconds) {
@@ -694,19 +716,21 @@ function RiskBadge({ device, compact = false }) {
   );
 }
 
-function formatTopbarDate(value) {
+function formatTopbarDate(value, timeZone) {
   return new Intl.DateTimeFormat(undefined, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
     year: 'numeric',
+    ...(timeZone ? { timeZone } : {}),
   }).format(value);
 }
 
-function formatTopbarTime(value) {
+function formatTopbarTime(value, timeZone) {
   return new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
   }).format(value);
 }
 
@@ -999,7 +1023,7 @@ function DeviceIconPicker({ value, onChange }) {
   );
 }
 
-function DeviceModal({ device, opened, onClose, onSaved }) {
+function DeviceModal({ device, opened, onClose, onSaved, timeZone }) {
   const [icon, setIcon] = useState('');
   const [name, setName] = useState('');
   const [known, setKnown] = useState(false);
@@ -1134,15 +1158,15 @@ function DeviceModal({ device, opened, onClose, onSaved }) {
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <Box>
             <Text size="xs" c="dimmed">First seen</Text>
-            <Text size="sm">{formatDate(device?.firstseen)}</Text>
+            <Text size="sm">{formatDate(device?.firstseen, timeZone)}</Text>
           </Box>
           <Box>
             <Text size="xs" c="dimmed">Last seen</Text>
-            <Text size="sm">{formatDate(device?.lastseen)}</Text>
+            <Text size="sm">{formatDate(device?.lastseen, timeZone)}</Text>
           </Box>
           <Box>
             <Text size="xs" c="dimmed">Last port scan</Text>
-            <Text size="sm">{formatDate(device?.last_port_scan)}</Text>
+            <Text size="sm">{formatDate(device?.last_port_scan, timeZone)}</Text>
           </Box>
           <Box>
             <Text size="xs" c="dimmed">Open ports</Text>
@@ -1812,6 +1836,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [events, setEvents] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [appSettings, setAppSettings] = useState(null);
+  const [dashboardTimeZone, setDashboardTimeZone] = useState();
   const [search, setSearch] = useState('');
   const [deviceStatus, setDeviceStatus] = useState('');
   const [inventoryView, setInventoryView] = useState('table');
@@ -1859,6 +1884,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const versionTooltip = hasVersionUpdate
     ? `New version v${latestVersion} is available`
     : 'Version history';
+  const displayTimeZone = appSettings?.time_zone || dashboardTimeZone || undefined;
 
   useEffect(() => {
     tableStateRef.current = {
@@ -1929,6 +1955,9 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
       setCounters(deviceData.counters || {});
       setScanStatus(statusData.data || statusData.active_scan || null);
       setScanVisibility(statusData.visibility || null);
+      if (statusData.time_zone) {
+        setDashboardTimeZone(statusData.time_zone);
+      }
       setScanRuns(runData.data || []);
       setEvents(eventData.data || []);
       setNotifications(notificationData.data || []);
@@ -1955,9 +1984,36 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     }
   }
 
+  async function loadScanData({ notifyOnError = false, notifyOnSuccess = false } = {}) {
+    try {
+      const [statusData, runData] = await Promise.all([
+        apiRequest('scan/status/'),
+        apiRequest('scan/runs/', { params: { limit: 8 } }),
+      ]);
+      setScanStatus(statusData.data || statusData.active_scan || null);
+      setScanVisibility(statusData.visibility || null);
+      if (statusData.time_zone) {
+        setDashboardTimeZone(statusData.time_zone);
+      }
+      setScanRuns(runData.data || []);
+      if (notifyOnSuccess) {
+        showSuccessNotification('Scan refreshed', 'Latest scan status loaded.');
+      }
+    } catch (err) {
+      if (notifyOnError) {
+        showErrorNotification('Scan refresh failed', err.message);
+      }
+    }
+  }
+
   useEffect(() => {
     loadData();
     const timer = window.setInterval(() => loadData({ quiet: true }), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => loadScanData(), 10000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -2089,10 +2145,10 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 <IconClock size={18} />
                 <Box>
                   <Text size="xs" c="dimmed" lh={1.1}>
-                    {formatTopbarDate(currentTime)}
+                    {formatTopbarDate(currentTime, displayTimeZone)}
                   </Text>
                   <Text size="sm" fw={700} lh={1.15}>
-                    {formatTopbarTime(currentTime)}
+                    {formatTopbarTime(currentTime, displayTimeZone)}
                   </Text>
                 </Box>
               </Group>
@@ -2295,7 +2351,9 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           <Table.Td className="device-risk-cell">
                             <RiskBadge device={device} compact />
                           </Table.Td>
-                          <Table.Td className="device-lastseen-cell">{formatDate(device.lastseen)}</Table.Td>
+                          <Table.Td className="device-lastseen-cell">
+                            {formatDate(device.lastseen, displayTimeZone)}
+                          </Table.Td>
                           <Table.Td className="device-known-cell">
                             <Badge
                               className="device-known-badge"
@@ -2348,7 +2406,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           </Box>
                           <Box>
                             <Text size="xs" c="dimmed">Last seen</Text>
-                            <Text size="sm">{formatDate(device.lastseen)}</Text>
+                            <Text size="sm">{formatDate(device.lastseen, displayTimeZone)}</Text>
                           </Box>
                           <Box className="device-mobile-wide">
                             <Text size="xs" c="dimmed">MAC</Text>
@@ -2388,7 +2446,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                   <Title order={4}>Scan control</Title>
                 </Group>
                 <Text size="sm" c="dimmed">
-                  Last scan: {scanStatus ? formatDate(scanStatus.finished_at || scanStatus.started_at) : '-'}
+                  Last scan: {scanStatus ? formatDate(scanStatus.finished_at || scanStatus.started_at, displayTimeZone) : '-'}
                 </Text>
                 <Group gap="xs">
                   <Badge color={scanVisibility?.is_scanning ? 'blue' : 'gray'} variant="light">
@@ -2429,11 +2487,11 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
               <SimpleGrid cols={{ base: 1, sm: 2 }}>
                 <Box>
                   <Text size="xs" c="dimmed">Started</Text>
-                  <Text fw={600}>{formatDate(scanVisibility?.started_at)}</Text>
+                  <Text fw={600}>{formatDate(scanVisibility?.started_at, displayTimeZone)}</Text>
                 </Box>
                 <Box>
                   <Text size="xs" c="dimmed">Finished</Text>
-                  <Text fw={600}>{formatDate(scanVisibility?.finished_at)}</Text>
+                  <Text fw={600}>{formatDate(scanVisibility?.finished_at, displayTimeZone)}</Text>
                 </Box>
                 <Box>
                   <Text size="xs" c="dimmed">Duration</Text>
@@ -2493,7 +2551,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           </Badge>
                         </Table.Td>
                         <Table.Td>{event.message}</Table.Td>
-                        <Table.Td>{formatDate(event.created_at)}</Table.Td>
+                        <Table.Td>{formatDate(event.created_at, displayTimeZone)}</Table.Td>
                         <Table.Td>
                           <Badge color={event.notified ? 'teal' : 'gray'} variant="light">
                             {event.notified ? 'Handled' : 'Pending'}
@@ -2527,7 +2585,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           </Badge>
                         </Table.Td>
                         <Table.Td>{run.ip_range}</Table.Td>
-                        <Table.Td>{formatDate(run.started_at)}</Table.Td>
+                        <Table.Td>{formatDate(run.started_at, displayTimeZone)}</Table.Td>
                         <Table.Td>{run.devices_seen}</Table.Td>
                         <Table.Td>{run.ports_opened} / {run.ports_closed}</Table.Td>
                       </Table.Tr>
@@ -2558,7 +2616,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           </Badge>
                         </Table.Td>
                         <Table.Td>{delivery.attempts}</Table.Td>
-                        <Table.Td>{formatDate(delivery.created_at)}</Table.Td>
+                        <Table.Td>{formatDate(delivery.created_at, displayTimeZone)}</Table.Td>
                       </Table.Tr>
                     ))}
                   </Table.Tbody>
@@ -2574,6 +2632,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         opened={modalOpened}
         onClose={modal.close}
         onSaved={() => loadData({ quiet: true })}
+        timeZone={displayTimeZone}
       />
       <UserManagementModal
         opened={usersModalOpened}

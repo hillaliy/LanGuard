@@ -1,6 +1,7 @@
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from .datetime_utils import utc_isoformat
 from .models import (
     AppSettings,
     Device,
@@ -19,6 +20,11 @@ def capitalize_name(value):
         "-".join(capitalize_part(part) for part in word.split("-"))
         for word in (value or "").strip().split()
     )
+
+
+class UTCDateTimeField(serializers.DateTimeField):
+    def to_representation(self, value):
+        return utc_isoformat(value)
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -95,6 +101,9 @@ class UserManagementSerializer(serializers.ModelSerializer):
 
 
 class DevicePortSerializer(serializers.ModelSerializer):
+    firstseen = UTCDateTimeField(read_only=True)
+    lastseen = UTCDateTimeField(read_only=True)
+
     class Meta:
         model = DevicePort
         fields = "__all__"
@@ -159,6 +168,10 @@ def device_risk(device):
 
 
 class DeviceSerializer(serializers.ModelSerializer):
+    firstseen = UTCDateTimeField(read_only=True)
+    lastseen = UTCDateTimeField(read_only=True)
+    last_status_check = UTCDateTimeField(read_only=True)
+    last_port_scan = UTCDateTimeField(read_only=True)
     open_ports = serializers.SerializerMethodField()
     risk_level = serializers.SerializerMethodField()
     risk_score = serializers.SerializerMethodField()
@@ -199,12 +212,16 @@ class DeviceSerializer(serializers.ModelSerializer):
 
 
 class ScanRunSerializer(serializers.ModelSerializer):
+    started_at = UTCDateTimeField(read_only=True)
+    finished_at = UTCDateTimeField(read_only=True)
+
     class Meta:
         model = ScanRun
         fields = "__all__"
 
 
 class NetworkEventSerializer(serializers.ModelSerializer):
+    created_at = UTCDateTimeField(read_only=True)
     event_type_display = serializers.CharField(
         source="get_event_type_display",
         read_only=True,
@@ -216,6 +233,8 @@ class NetworkEventSerializer(serializers.ModelSerializer):
 
 
 class NotificationDeliverySerializer(serializers.ModelSerializer):
+    created_at = UTCDateTimeField(read_only=True)
+    sent_at = UTCDateTimeField(read_only=True)
     channel_display = serializers.CharField(
         source="get_channel_display",
         read_only=True,
@@ -231,6 +250,7 @@ class NotificationDeliverySerializer(serializers.ModelSerializer):
 
 
 class AppSettingsSerializer(serializers.ModelSerializer):
+    updated_at = UTCDateTimeField(read_only=True)
     discord_configured = serializers.SerializerMethodField()
     telegram_configured = serializers.SerializerMethodField()
 

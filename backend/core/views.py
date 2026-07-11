@@ -23,6 +23,7 @@ from django.shortcuts import get_object_or_404
 import logging
 
 from django.utils import timezone
+from .datetime_utils import utc_isoformat
 from .serializers import (
     AppSettingsSerializer,
     DeviceSerializer,
@@ -657,6 +658,7 @@ def scan_status(request):
     active_scan = ScanRun.objects.filter(status=ScanRun.Status.RUNNING).first()
     active_scan = reconcile_scan_status(latest_scan, active_scan)
     visible_scan = active_scan or latest_scan
+    app_config = AppSettings.load()
     now = timezone.now()
     duration_seconds = None
     if visible_scan:
@@ -669,11 +671,12 @@ def scan_status(request):
             "visibility": {
                 "is_scanning": active_scan is not None,
                 "current_range": visible_scan.ip_range if visible_scan else "",
-                "started_at": visible_scan.started_at if visible_scan else None,
-                "finished_at": visible_scan.finished_at if visible_scan else None,
+                "started_at": utc_isoformat(visible_scan.started_at) if visible_scan else None,
+                "finished_at": utc_isoformat(visible_scan.finished_at) if visible_scan else None,
                 "duration_seconds": duration_seconds,
                 "last_error": visible_scan.error if visible_scan and visible_scan.error else "",
             },
+            "time_zone": app_config.time_zone,
             "counters": {
                 "all_devices": Device.objects.count(),
                 "online_devices": Device.objects.exclude(status=Device.Status.OFFLINE).count(),

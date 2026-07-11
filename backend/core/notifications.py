@@ -6,6 +6,7 @@ import requests
 from django.conf import settings
 from django.utils import timezone
 
+from .datetime_utils import utc_isoformat
 from .models import AppSettings, NetworkEvent, NotificationDelivery
 
 
@@ -213,7 +214,7 @@ def format_discord_payload(event):
         "description": event.message,
         "color": DISCORD_ALERT_COLOR,
         "fields": fields,
-        "timestamp": event.created_at.isoformat(),
+        "timestamp": utc_isoformat(event.created_at),
         "footer": {"text": "LanGuard"},
     }
     if icon_url:
