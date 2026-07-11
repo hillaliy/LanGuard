@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.11 - 2026-07-11
+
+- Fixed dashboard timestamps so timezone-less API dates are treated as UTC and displayed in the configured LanGuard timezone.
+- Added automatic scan-status refresh for the Scan control and Latest scan panels without changing device table pagination.
+- Standardized API and Discord notification timestamps to UTC ISO strings with a `Z` suffix.
+
 ## 1.0.10 - 2026-07-10
 
 - Added gateway/router detection from the default network route and marks the gateway as a known router.
