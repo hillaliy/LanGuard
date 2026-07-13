@@ -1,8 +1,8 @@
 APScheduler==3.11.3
-Django==6.0.6
+Django==6.0.7
 djangorestframework==3.17.1
 django-cors-headers==4.9.0
-drf-spectacular==0.29.0
+drf-spectacular==0.30.0
 granian==2.7.9
 python-dotenv==1.2.2
 requests==2.34.2
