@@ -688,7 +688,7 @@ textarea {
   background: #fab005;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 980px) {
   .auth-shell {
     padding: 16px;
     background-size: 320px;
