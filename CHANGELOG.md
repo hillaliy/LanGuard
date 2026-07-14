@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.12 - 2026-07-14
+
+- Updated backend dependencies through Dependabot, including Django 6.0.7 and drf-spectacular 0.30.0.
+- Updated the frontend ESLint dependency through Dependabot.
+- Improved the device table layout on mobile landscape and narrow tablet widths so columns use the compact mobile layout before they get cut off.
+
 ## 1.0.11 - 2026-07-11
 
 - Fixed dashboard timestamps so timezone-less API dates are treated as UTC and displayed in the configured LanGuard timezone.

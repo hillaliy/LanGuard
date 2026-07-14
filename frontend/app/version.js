@@ -4,6 +4,15 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.12',
+    date: '2026-07-14',
+    items: [
+      'Updated backend dependencies through Dependabot, including Django 6.0.7 and drf-spectacular 0.30.0.',
+      'Updated the frontend ESLint dependency through Dependabot.',
+      'Improved the device table layout on mobile landscape and narrow tablet widths so columns use the compact mobile layout before they get cut off.',
+    ],
+  },
+  {
     version: '1.0.11',
     date: '2026-07-11',
     items: [
