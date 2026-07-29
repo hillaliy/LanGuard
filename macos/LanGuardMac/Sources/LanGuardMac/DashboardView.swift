@@ -217,7 +217,8 @@ private struct HeroPanel: View {
     private var header: some View {
         HeaderView(
             title: "LanGuard",
-            subtitle: "Local network watch for macOS"
+            subtitle: "Local network watch for macOS",
+            version: AppVersion.current
         )
     }
 
