@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.13',
+    date: '2026-07-29',
+    items: [
+      'Added device inventory export and import for Docker LanGuard so device names, icons, vendors, IPs, MAC addresses, known state, and open ports can be moved between installs.',
+      'Added matching device inventory export and import to the native macOS app settings.',
+      'Updated the Docker project logo assets to use the improved LanGuard shield/network icon.',
+      'Added the initial native macOS SwiftUI app source, packaging files, app icon, and tests under macos/LanGuardMac.',
+    ],
+  },
+  {
     version: '1.0.12',
     date: '2026-07-14',
     items: [

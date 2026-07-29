@@ -37,6 +37,11 @@ build/
 dist/
 coverage/
 
+# Swift/macOS build output
+.build/
+.swiftpm/
+DerivedData/
+
 # Package manager logs
 npm-debug.log*
 yarn-debug.log*

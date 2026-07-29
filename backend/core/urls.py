@@ -16,6 +16,8 @@ from .views import (
     notifications,
     export_db,
     import_db,
+    export_devices,
+    import_devices,
     users,
 )
 
@@ -34,6 +36,8 @@ urlpatterns = [
     path("scan/runs/", scan_runs, name="scan_runs"),
     path("events/", events, name="events"),
     path("notifications/", notifications, name="notifications"),
+    path("devices/export/", export_devices, name="export_devices"),
+    path("devices/import/", import_devices, name="import_devices"),
     path("export-db/", export_db, name="export_db"),
     path("import-db/", import_db, name="import_db"),
 ]
