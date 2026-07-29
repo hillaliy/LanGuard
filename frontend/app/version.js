@@ -4,6 +4,15 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.14',
+    date: '2026-07-29',
+    items: [
+      'Published Docker backend and frontend images as multi-architecture builds for linux/amd64 and linux/arm64.',
+      'Fixed Portainer startup failures on non-Apple-Silicon hosts caused by single-architecture images.',
+      'Added the version badge to the native macOS app header.',
+    ],
+  },
+  {
     version: '1.0.13',
     date: '2026-07-29',
     items: [

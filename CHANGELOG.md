@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.14 - 2026-07-29
+
+- Published Docker backend and frontend images as multi-architecture builds for `linux/amd64` and `linux/arm64`.
+- Fixed Portainer startup failures on non-Apple-Silicon hosts caused by single-architecture images.
+- Added the version badge to the native macOS app header.
+
 ## 1.0.13 - 2026-07-29
 
 - Added device inventory export and import for Docker LanGuard so device names, icons, vendors, IPs, MAC addresses, known state, and open ports can be moved between installs.
