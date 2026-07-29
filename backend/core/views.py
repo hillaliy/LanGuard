@@ -2,6 +2,7 @@ import ipaddress
 import json
 import urllib.error
 import urllib.request
+from datetime import timezone as datetime_timezone
 
 from drf_spectacular.utils import OpenApiTypes, extend_schema, inline_serializer
 from rest_framework import status, generics, permissions
@@ -19,6 +20,7 @@ from django.contrib.auth.models import User
 from django.http import JsonResponse
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils.dateparse import parse_datetime
 
 import logging
 
@@ -51,6 +53,8 @@ from .api import (
 from .scan import scan, validate_ip_range
 
 LOGGER = logging.getLogger(__name__)
+
+INVENTORY_FORMAT = "languard-device-inventory"
 
 
 DEVICE_ORDERING_FIELDS = {
@@ -169,6 +173,190 @@ def fetch_latest_version():
     if isinstance(latest_version, str) and latest_version.strip():
         return latest_version.strip()
     return None
+
+
+def inventory_device_payload(device):
+    return {
+        "name": device.name,
+        "ip": device.ip,
+        "mac": device.mac,
+        "vendor": device.vendor,
+        "hostname": getattr(device, "hostname", ""),
+        "icon": device.icon,
+        "known": device.known,
+        "is_gateway": device.is_gateway,
+        "status": device.status,
+        "open_ports": list(
+            device.ports.filter(open=True).order_by("port").values_list("port", flat=True)
+        ),
+        "first_seen": utc_isoformat(device.firstseen),
+        "last_seen": utc_isoformat(device.lastseen),
+    }
+
+
+def parse_inventory_datetime(value, fallback):
+    if not value:
+        return fallback
+    parsed = parse_datetime(str(value))
+    if parsed is None:
+        return fallback
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, datetime_timezone.utc)
+    return parsed
+
+
+def normalize_inventory_ports(raw_ports):
+    ports = []
+    for raw_port in raw_ports or []:
+        try:
+            port = int(raw_port)
+        except (TypeError, ValueError):
+            raise ValidationError({"open_ports": "Ports must be numbers."}) from None
+        if port < 1 or port > 65535:
+            raise ValidationError({"open_ports": "Ports must be between 1 and 65535."})
+        ports.append(port)
+    return sorted(set(ports))
+
+
+def inventory_devices_from_payload(payload):
+    if isinstance(payload, list):
+        return payload
+    if not isinstance(payload, dict):
+        raise ValidationError({"detail": "Import file must be a JSON object or device list."})
+
+    if payload.get("format") and payload.get("format") != INVENTORY_FORMAT:
+        raise ValidationError({"format": "Unsupported inventory format."})
+
+    devices = payload.get("devices")
+    if not isinstance(devices, list):
+        raise ValidationError({"devices": "Import file must include a devices list."})
+    return devices
+
+
+def import_inventory_devices(payload):
+    imported_devices = inventory_devices_from_payload(payload)
+    created = 0
+    updated = 0
+    skipped = 0
+    now = timezone.now()
+
+    for item in imported_devices:
+        if not isinstance(item, dict):
+            skipped += 1
+            continue
+
+        mac = str(item.get("mac") or item.get("macAddress") or "").strip().lower()
+        ip = str(item.get("ip") or item.get("ipAddress") or "").strip()
+        if not mac or not ip:
+            skipped += 1
+            continue
+
+        try:
+            ipaddress.ip_address(ip)
+        except ValueError:
+            skipped += 1
+            continue
+
+        name = str(item.get("name") or "Device").strip()[:100] or "Device"
+        first_seen = parse_inventory_datetime(
+            item.get("first_seen") or item.get("firstSeen"),
+            now,
+        )
+        last_seen = parse_inventory_datetime(
+            item.get("last_seen") or item.get("lastSeen"),
+            first_seen,
+        )
+        raw_status = item.get("status")
+        device_status = (
+            raw_status if raw_status in Device.Status.values else Device.Status.OFFLINE
+        )
+
+        defaults = {
+            "name": name,
+            "ip": ip,
+            "vendor": str(item.get("vendor") or "").strip()[:255],
+            "icon": str(item.get("icon") or item.get("iconName") or "unknown").strip()[:255]
+            or "unknown",
+            "known": bool(item.get("known", item.get("isKnown", False))),
+            "is_gateway": bool(item.get("is_gateway", item.get("isGateway", False))),
+            "online": device_status != Device.Status.OFFLINE,
+            "status": device_status,
+            "lastseen": last_seen,
+        }
+
+        device, was_created = Device.objects.get_or_create(
+            mac=mac,
+            defaults={
+                **defaults,
+                "firstseen": first_seen,
+            },
+        )
+        if not was_created:
+            for field, value in defaults.items():
+                setattr(device, field, value)
+            if first_seen < device.firstseen:
+                device.firstseen = first_seen
+            device.save(
+                update_fields=[
+                    "name",
+                    "ip",
+                    "vendor",
+                    "icon",
+                    "known",
+                    "is_gateway",
+                    "online",
+                    "status",
+                    "firstseen",
+                    "lastseen",
+                ]
+            )
+        created += 1 if was_created else 0
+        updated += 0 if was_created else 1
+
+        for port in normalize_inventory_ports(item.get("open_ports") or item.get("openPorts")):
+            DevicePort.objects.update_or_create(
+                device=device,
+                port=port,
+                protocol="tcp",
+                defaults={
+                    "open": True,
+                    "lastseen": last_seen,
+                },
+            )
+
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "total": len(imported_devices),
+    }
+
+
+def inventory_export_response():
+    devices = Device.objects.prefetch_related("ports").order_by("name", "ip")
+    return JsonResponse(
+        {
+            "format": INVENTORY_FORMAT,
+            "version": 1,
+            "exported_at": utc_isoformat(timezone.now()),
+            "devices": [inventory_device_payload(device) for device in devices],
+        }
+    )
+
+
+def inventory_import_response(payload):
+    result = import_inventory_devices(payload)
+    return Response(
+        {
+            "status": "OK",
+            "info": (
+                f"Imported {result['created']} new devices and updated "
+                f"{result['updated']} existing devices."
+            ),
+            "data": result,
+        },
+        status=status.HTTP_200_OK,
+    )
 
 
 @extend_schema(
@@ -766,29 +954,35 @@ def notifications(request):
     )
 
 
-@extend_schema(responses=DeviceSerializer(many=True))
+@extend_schema(responses=OpenApiTypes.OBJECT)
 @api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAdminUser])
 def export_db(request):
-    data = DeviceSerializer(Device.objects.all(), many=True).data
-    return JsonResponse(data, safe=False)
+    return inventory_export_response()
 
 
 @extend_schema(
-    request=DeviceSerializer(many=True),
+    request=OpenApiTypes.OBJECT,
     responses=OpenApiTypes.OBJECT,
 )
 @api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAdminUser])
 def import_db(request):
-    data = request.data
-    serializer = DeviceSerializer(data=data, many=True)
+    return inventory_import_response(request.data)
 
-    if serializer.is_valid():
-        serializer.save()
-        return Response(
-            {"status": "OK", "info": "Import successful"},
-            status=status.HTTP_201_CREATED,
-        )
 
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+@extend_schema(responses=OpenApiTypes.OBJECT)
+@api_view(["GET"])
+@permission_classes([permissions.IsAdminUser])
+def export_devices(request):
+    return inventory_export_response()
+
+
+@extend_schema(
+    request=OpenApiTypes.OBJECT,
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def import_devices(request):
+    return inventory_import_response(request.data)

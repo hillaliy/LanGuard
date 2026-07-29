@@ -52,6 +52,7 @@ import {
   IconDeviceTablet,
   IconDeviceTv,
   IconDeviceWatch,
+  IconDownload,
   IconHistory,
   IconLamp,
   IconLamp2,
@@ -76,6 +77,7 @@ import {
   IconSun,
   IconTemperature,
   IconTrash,
+  IconUpload,
   IconUserPlus,
   IconUserMinus,
   IconUserEdit,
@@ -1533,6 +1535,7 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
 }
 
 function SettingsModal({ opened, onClose, onSaved }) {
+  const importInputRef = useRef(null);
   const [ipRange, setIpRange] = useState('');
   const [scanInterval, setScanInterval] = useState(10);
   const [timeZone, setTimeZone] = useState('UTC');
@@ -1554,6 +1557,8 @@ function SettingsModal({ opened, onClose, onSaved }) {
   const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
 
   async function loadSettings() {
@@ -1632,9 +1637,72 @@ function SettingsModal({ opened, onClose, onSaved }) {
     }
   }
 
+  async function exportInventory() {
+    setExporting(true);
+    setError('');
+    try {
+      const payload = await apiRequest('devices/export/');
+      const json = JSON.stringify(payload, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const date = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `languard-inventory-${date}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showSuccessNotification('Inventory exported', 'Device names, icons, vendors, IPs, and ports were exported.');
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('Could not export inventory', err.message);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function importInventoryFile(event) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) {
+      return;
+    }
+
+    setImporting(true);
+    setError('');
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const result = await apiRequest('devices/import/', {
+        method: 'POST',
+        body: payload,
+      });
+      await onSaved({});
+      const summary = result.data || {};
+      showSuccessNotification(
+        'Inventory imported',
+        `Created ${summary.created || 0}, updated ${summary.updated || 0}, skipped ${summary.skipped || 0}.`
+      );
+    } catch (err) {
+      const message = err instanceof SyntaxError ? 'Choose a valid LanGuard JSON inventory file.' : err.message;
+      setError(message);
+      showErrorNotification('Could not import inventory', message);
+    } finally {
+      setImporting(false);
+    }
+  }
+
   return (
     <Modal opened={opened} onClose={onClose} title="Settings" centered size="lg">
       <LoadingOverlay visible={loading} />
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        hidden
+        onChange={importInventoryFile}
+      />
       <Stack>
         {error && (
           <Alert color="red" icon={<IconAlertCircle size={18} />}>
@@ -1800,6 +1868,35 @@ function SettingsModal({ opened, onClose, onSaved }) {
             />
           </SimpleGrid>
         </Stack>
+
+        <Divider />
+
+        <Group justify="space-between" align="flex-start">
+          <Box>
+            <Text fw={700}>Device inventory</Text>
+            <Text size="sm" c="dimmed">
+              Export or import known devices, names, icons, vendors, IPs, and open ports.
+            </Text>
+          </Box>
+          <Group gap="sm">
+            <Button
+              variant="default"
+              leftSection={<IconDownload size={18} />}
+              onClick={exportInventory}
+              loading={exporting}
+            >
+              Export
+            </Button>
+            <Button
+              variant="light"
+              leftSection={<IconUpload size={18} />}
+              onClick={() => importInputRef.current?.click()}
+              loading={importing}
+            >
+              Import
+            </Button>
+          </Group>
+        </Group>
 
         <Divider />
         <Group justify="flex-end">

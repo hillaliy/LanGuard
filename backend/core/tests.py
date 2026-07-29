@@ -1515,6 +1515,95 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("limit", response.data)
 
+    def test_device_inventory_export_requires_admin(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.get("/api/v1/devices/export/")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_device_inventory_export_returns_shared_format(self):
+        DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
+
+        response = self.client.get("/api/v1/devices/export/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["format"], "languard-device-inventory")
+        exported_device = response.json()["devices"][0]
+        self.assertEqual(exported_device["name"], "Laptop")
+        self.assertEqual(exported_device["mac"], "aa:aa:aa:aa:aa:aa")
+        self.assertEqual(exported_device["open_ports"], [80])
+        self.assertTrue(exported_device["first_seen"].endswith("Z"))
+
+    def test_device_inventory_import_updates_existing_device_by_mac(self):
+        self.device.firstseen = timezone.now() - timedelta(days=1)
+        self.device.save(update_fields=["firstseen"])
+
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Living Room TV",
+                        "ip": "192.168.1.50",
+                        "mac": "aa:aa:aa:aa:aa:aa",
+                        "vendor": "Apple",
+                        "icon": "tv",
+                        "known": True,
+                        "is_gateway": False,
+                        "status": Device.Status.ONLINE,
+                        "open_ports": [80, "443"],
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["created"], 0)
+        self.assertEqual(response.data["data"]["updated"], 1)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.name, "Living Room TV")
+        self.assertEqual(self.device.ip, "192.168.1.50")
+        self.assertEqual(self.device.vendor, "Apple")
+        self.assertEqual(self.device.icon, "tv")
+        self.assertTrue(self.device.known)
+        self.assertEqual(
+            list(self.device.ports.filter(open=True).values_list("port", flat=True)),
+            [80, 443],
+        )
+
+    def test_device_inventory_import_creates_new_device(self):
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Camera",
+                        "ip": "192.168.1.60",
+                        "mac": "bb:bb:bb:bb:bb:bb",
+                        "vendor": "Reolink",
+                        "icon": "security-camera",
+                        "known": True,
+                        "open_ports": [554],
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["created"], 1)
+        imported = Device.objects.get(mac="bb:bb:bb:bb:bb:bb")
+        self.assertEqual(imported.name, "Camera")
+        self.assertEqual(imported.ports.get().port, 554)
+
     def test_scan_runs_endpoint_returns_history(self):
         response = self.client.get("/api/v1/scan/runs/")
 

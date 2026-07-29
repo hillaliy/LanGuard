@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.13 - 2026-07-29
+
+- Added device inventory export and import for Docker LanGuard so device names, icons, vendors, IPs, MAC addresses, known state, and open ports can be moved between installs.
+- Added matching device inventory export and import to the native macOS app settings.
+- Updated the Docker project logo assets to use the improved LanGuard shield/network icon.
+- Added the initial native macOS SwiftUI app source, packaging files, app icon, and tests under `macos/LanGuardMac`.
+
 ## 1.0.12 - 2026-07-14
 
 - Updated backend dependencies through Dependabot, including Django 6.0.7 and drf-spectacular 0.30.0.

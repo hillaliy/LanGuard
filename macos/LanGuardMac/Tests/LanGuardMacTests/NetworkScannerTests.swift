@@ -1,0 +1,127 @@
+import Testing
+@testable import LanGuardMac
+
+private struct StubCommandRunner: CommandRunning {
+    func run(_ launchPath: String, arguments: [String]) async throws -> String {
+        switch launchPath {
+        case "/usr/sbin/arp":
+            """
+            router.local (192.168.0.1) at 1:2:3:a:b:c on en0 ifscope [ethernet]
+            camera.local (192.168.0.20) at 90:dd:5d:b7:bd:01 on en0 ifscope [ethernet]
+            """
+        case "/sbin/route":
+            """
+               route to: default
+            destination: default
+                   mask: default
+                gateway: 192.168.0.1
+              interface: en0
+            """
+        default:
+            ""
+        }
+    }
+}
+
+private struct StubPortScanner: PortScanning {
+    func scanOpenPorts(host: String, ports: [Int]) async -> [Int] {
+        switch host {
+        case "192.168.0.1":
+            [53, 80]
+        case "192.168.0.20":
+            [80, 554, 8443]
+        default:
+            []
+        }
+    }
+}
+
+private actor RecordingPortScanner: PortScanning {
+    private var scannedHosts: [String] = []
+
+    func scanOpenPorts(host: String, ports: [Int]) async -> [Int] {
+        scannedHosts.append(host)
+        return []
+    }
+
+    func hosts() -> [String] {
+        scannedHosts
+    }
+}
+
+@Test
+func localScannerAddsOpenPortsGatewayAndRisk() async throws {
+    let scanner = LocalNetworkScanner(
+        commandRunner: StubCommandRunner(),
+        portScanner: StubPortScanner()
+    )
+
+    let devices = try await scanner.scan(settings: AppSettings(
+        defaultScanRange: "192.168.0.0/24",
+        scanIntervalMinutes: 5,
+        tcpPorts: [53, 80, 554, 8443],
+        scheduledScanningEnabled: false
+    ))
+
+    #expect(devices.count == 2)
+    #expect(devices.first?.ipAddress == "192.168.0.1")
+    #expect(devices.first?.isGateway == true)
+    #expect(devices.first?.openPorts == [53, 80])
+    #expect(devices.first?.risk == .medium)
+    #expect(devices.last?.ipAddress == "192.168.0.20")
+    #expect(devices.last?.openPorts == [80, 554, 8443])
+    #expect(devices.last?.risk == .medium)
+}
+
+@Test
+func localScannerFiltersDevicesOutsideConfiguredRange() async throws {
+    let scanner = LocalNetworkScanner(
+        commandRunner: StubCommandRunner(),
+        portScanner: StubPortScanner()
+    )
+
+    let devices = try await scanner.scan(settings: AppSettings(
+        defaultScanRange: "192.168.0.0/30",
+        scanIntervalMinutes: 5,
+        tcpPorts: [53, 80],
+        scheduledScanningEnabled: false
+    ))
+
+    #expect(devices.map(\.ipAddress) == ["192.168.0.1"])
+}
+
+@Test
+func localScannerRejectsInvalidScanRange() async throws {
+    let scanner = LocalNetworkScanner(
+        commandRunner: StubCommandRunner(),
+        portScanner: StubPortScanner()
+    )
+
+    await #expect(throws: ScannerError.self) {
+        _ = try await scanner.scan(settings: AppSettings(
+            defaultScanRange: "not-a-range",
+            scanIntervalMinutes: 5,
+            tcpPorts: [80],
+            scheduledScanningEnabled: false
+        ))
+    }
+}
+
+@Test
+func localScannerProbesTCPHostsBeforeReadingFilteredDevices() async throws {
+    let portScanner = RecordingPortScanner()
+    let scanner = LocalNetworkScanner(
+        commandRunner: StubCommandRunner(),
+        portScanner: portScanner,
+        sweepConcurrency: 2
+    )
+
+    _ = try await scanner.scan(settings: AppSettings(
+        defaultScanRange: "192.168.0.0/30",
+        scanIntervalMinutes: 5,
+        tcpPorts: [80],
+        scheduledScanningEnabled: false
+    ))
+
+    #expect(await portScanner.hosts().contains("192.168.0.2"))
+}
