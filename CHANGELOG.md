@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.15 - 2026-07-30
+
+- Added the native macOS Grouping page for role-based device views.
+- Added temporary Guest Scan so client or guest networks can be scanned without saving devices, history, or inventory changes.
+- Added macOS device import/export, launch-at-login, an About page, menu bar status, and richer device detail editing.
+- Improved macOS discovery with bundled vendor data, better role and icon detection, offline grace handling, and network/broadcast address filtering.
+- Added more device icons, secondary device icons, manual role editing, and device deletion.
+- Polished the macOS dashboard, Devices filters, compact layouts, sidebar behavior, and empty states across small and full-screen windows.
+
 ## 1.0.14 - 2026-07-29
 
 - Published Docker backend and frontend images as multi-architecture builds for `linux/amd64` and `linux/arm64`.

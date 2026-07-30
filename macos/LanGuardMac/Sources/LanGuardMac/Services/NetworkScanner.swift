@@ -46,7 +46,7 @@ struct LocalNetworkScanner: NetworkScanning {
         async let routeOutput = commandRunner.run("/sbin/route", arguments: ["-n", "get", "default"])
 
         let entries = ARPTableParser.parse(try await arpOutput)
-            .filter { scanRange.contains($0.ipAddress) }
+            .filter { scanRange.isUsableHost($0.ipAddress) }
         let gatewayAddress = RouteParser.defaultGateway(from: (try? await routeOutput) ?? "")
         let seenAt = Date.now
 

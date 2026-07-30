@@ -8,6 +8,7 @@ private struct StubCommandRunner: CommandRunning {
             """
             router.local (192.168.0.1) at 1:2:3:a:b:c on en0 ifscope [ethernet]
             camera.local (192.168.0.20) at 90:dd:5d:b7:bd:01 on en0 ifscope [ethernet]
+            broadcast (192.168.0.255) at ff:ff:ff:ff:ff:ff on en0 ifscope [ethernet]
             """
         case "/sbin/route":
             """
@@ -88,6 +89,23 @@ func localScannerFiltersDevicesOutsideConfiguredRange() async throws {
     ))
 
     #expect(devices.map(\.ipAddress) == ["192.168.0.1"])
+}
+
+@Test
+func localScannerFiltersNetworkBroadcastARPEntries() async throws {
+    let scanner = LocalNetworkScanner(
+        commandRunner: StubCommandRunner(),
+        portScanner: StubPortScanner()
+    )
+
+    let devices = try await scanner.scan(settings: AppSettings(
+        defaultScanRange: "192.168.0.0/24",
+        scanIntervalMinutes: 5,
+        tcpPorts: [53, 80],
+        scheduledScanningEnabled: false
+    ))
+
+    #expect(devices.map(\.ipAddress).contains("192.168.0.255") == false)
 }
 
 @Test

@@ -1,0 +1,47 @@
+# Local LanGuard MAC vendor database.
+# Format is compatible with Wireshark manuf: OUI short-name optional-long-name.
+00:1A:11 Google Google, Inc.
+00:1B:63 Apple Apple, Inc.
+00:1E:C2 Apple Apple, Inc.
+00:25:00 Apple Apple, Inc.
+04:BC:6D Apple Apple, Inc.
+0C:DB:EA Apple Apple, Inc.
+18:DE:50 TP-Link TP-Link Technologies Co., Ltd.
+20:37:A5 Apple Apple, Inc.
+24:62:AB Espressif Espressif Inc.
+24:A1:60 Espressif Espressif Inc.
+28:6C:07 Apple Apple, Inc.
+38:A5:C9 Apple Apple, Inc.
+38:E1:3D Apple Apple, Inc.
+3C:6A:D2 TP-Link TP-Link Technologies Co., Ltd.
+3C:5A:B4 Google Google, Inc.
+44:65:0D Amazon Amazon Technologies Inc.
+4C:11:AE Aqara Lumi United Technology Co., Ltd.
+50:C7:BF TP-Link TP-Link Technologies Co., Ltd.
+54:EF:44 Samsung Samsung Electronics Co., Ltd.
+58:FD:B1 Apple Apple, Inc.
+5C:E5:0C Xiaomi Xiaomi Communications Co., Ltd.
+68:FF:7B TP-Link TP-Link Technologies Co., Ltd.
+70:03:9F Apple Apple, Inc.
+74:DA:88 TP-Link TP-Link Technologies Co., Ltd.
+8C:AA:B5 Apple Apple, Inc.
+8C:85:90 Apple Apple, Inc.
+90:2C:09 Apple Apple, Inc.
+90:DD:5D Apple Apple, Inc.
+90:EE:C7 Apple Apple, Inc.
+94:9F:3E Sonos Sonos, Inc.
+98:84:E3 Apple Apple, Inc.
+9C:93:4E Foxconn Hon Hai Precision Industry Co., Ltd.
+A4:AE:12 Espressif Espressif Inc.
+B8:27:EB RaspberryPi Raspberry Pi Foundation
+BC:5E:33 Apple Apple, Inc.
+C0:6D:ED Apple Apple, Inc.
+C4:5B:AC Apple Apple, Inc.
+D8:3A:DD RaspberryPi Raspberry Pi Foundation
+DC:95:66 Apple Apple, Inc.
+DC:A6:32 RaspberryPi Raspberry Pi Trading Ltd.
+E4:5F:01 RaspberryPi Raspberry Pi Trading Ltd.
+E8:9F:6D Xiaomi Xiaomi Communications Co., Ltd.
+EC:71:DB Apple Apple, Inc.
+F0:C9:D1 Midea GD Midea Air-Conditioning Equipment Co., Ltd.
+F4:34:F0 Apple Apple, Inc.

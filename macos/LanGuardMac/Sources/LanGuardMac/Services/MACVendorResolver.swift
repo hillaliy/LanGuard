@@ -2,8 +2,35 @@ import Foundation
 
 enum MACVendorResolver {
     static func vendor(for macAddress: String) -> String? {
+        guard canResolveHardwareVendor(for: macAddress) else {
+            return nil
+        }
+
         let prefix = normalizedPrefix(macAddress)
         return BundledVendorDatabase.shared.vendor(forPrefix: prefix) ?? vendors[prefix]
+    }
+
+    static func isLocallyAdministered(_ macAddress: String) -> Bool {
+        guard
+            let firstOctet = macAddress.split(separator: ":").first,
+            let value = UInt8(firstOctet, radix: 16)
+        else {
+            return false
+        }
+
+        return value & 0x02 != 0
+    }
+
+    private static func canResolveHardwareVendor(for macAddress: String) -> Bool {
+        guard
+            let firstOctet = macAddress.split(separator: ":").first,
+            let value = UInt8(firstOctet, radix: 16)
+        else {
+            return false
+        }
+
+        let isMulticast = value & 0x01 != 0
+        return !isMulticast && !isLocallyAdministered(macAddress)
     }
 
     private static func normalizedPrefix(_ macAddress: String) -> String {
@@ -56,7 +83,6 @@ final class BundledVendorDatabase: @unchecked Sendable {
 
     private init(bundle: Bundle = .main) {
         guard
-            bundle.bundleURL.pathExtension == "app",
             let url = bundle.url(forResource: "manuf", withExtension: nil),
             let contents = try? String(contentsOf: url, encoding: .utf8)
         else {

@@ -14,6 +14,10 @@ final class AppModel {
     var recentChanges: [DeviceChange] = []
     var settings: AppSettings = .default
     var isScanning = false
+    var guestDevices: [NetworkDevice] = []
+    var guestScan: ScanRecord?
+    var isGuestScanning = false
+    var guestErrorMessage: String?
     var isLoading = false
     var nextScheduledScanAt: Date?
     var lastErrorMessage: String?
@@ -51,7 +55,7 @@ final class AppModel {
     }
 
     private func runScan(triggeredBySchedule: Bool) {
-        guard !isScanning else { return }
+        guard !isScanning, !isGuestScanning else { return }
 
         if !triggeredBySchedule {
             scheduleTask?.cancel()
@@ -85,8 +89,68 @@ final class AppModel {
         }
     }
 
-    func prepareNotifications() async {
+    func runGuestScan(range: String, ports: [Int]) {
+        guard !isScanning, !isGuestScanning else { return }
+
+        let guestSettings = AppSettings(
+            defaultScanRange: range,
+            scanIntervalMinutes: settings.scanIntervalMinutes,
+            tcpPorts: ports,
+            scheduledScanningEnabled: false,
+            newDeviceNotificationsEnabled: false,
+            riskyPortNotificationsEnabled: false
+        ).normalized
+
+        isGuestScanning = true
+        guestErrorMessage = nil
+        guestScan = ScanRecord()
+
+        Task {
+            do {
+                let discoveredDevices = try await scanner.scan(settings: guestSettings)
+                guestDevices = discoveredDevices.map { device in
+                    var guestDevice = device
+                    guestDevice.isKnown = false
+                    return guestDevice
+                }
+                completeGuestScan(status: .completed, count: discoveredDevices.count)
+            } catch {
+                guestErrorMessage = error.localizedDescription
+                completeGuestScan(status: .failed, errorMessage: error.localizedDescription)
+            }
+
+            isGuestScanning = false
+        }
+    }
+
+    func clearGuestScan() {
+        guestDevices.removeAll()
+        guestScan = nil
+        guestErrorMessage = nil
+    }
+
+    @discardableResult
+    func prepareNotifications() async -> Bool {
         await notifications.requestAuthorization()
+    }
+
+    func sendTestNotification() async -> NotificationTestResult {
+        guard await prepareNotifications() else {
+            return NotificationTestResult(
+                message: "Notifications are not allowed for LanGuard in macOS System Settings.",
+                isError: true
+            )
+        }
+
+        do {
+            try await notifications.notifyTest()
+            return NotificationTestResult(message: "Test notification sent.", isError: false)
+        } catch {
+            return NotificationTestResult(
+                message: "Could not send test notification: \(error.localizedDescription)",
+                isError: true
+            )
+        }
     }
 
     func updateDevice(_ updatedDevice: NetworkDevice) {
@@ -95,6 +159,11 @@ final class AppModel {
         }
 
         devices[index] = updatedDevice
+        saveCurrentState()
+    }
+
+    func deleteDevice(_ device: NetworkDevice) {
+        devices.removeAll { $0.id == device.id }
         saveCurrentState()
     }
 
@@ -110,12 +179,11 @@ final class AppModel {
     }
 
     func exportDeviceInventory(to url: URL) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        let document = DeviceInventoryDocument(devices: devices)
-        let data = try encoder.encode(document)
-        try data.write(to: url, options: [.atomic])
+        try Self.writeDeviceInventory(devices: devices, to: url)
+    }
+
+    func backupDeviceInventoryNow() throws {
+        try Self.writeCloudBackup(devices: devices, settings: settings)
     }
 
     func importDeviceInventory(from url: URL) throws -> DeviceInventoryImportResult {
@@ -226,8 +294,42 @@ final class AppModel {
                 try await storage.save(snapshot)
             } catch {
                 lastErrorMessage = "Could not save LanGuard data: \(error.localizedDescription)"
+                return
+            }
+
+            do {
+                try Self.writeCloudBackup(devices: snapshot.devices, settings: snapshot.settings)
+            } catch {
+                lastErrorMessage = "Could not write cloud backup: \(error.localizedDescription)"
             }
         }
+    }
+
+    private static func writeCloudBackup(devices: [NetworkDevice], settings: AppSettings) throws {
+        guard settings.cloudBackupEnabled else { return }
+
+        let folderPath = settings.cloudBackupFolderPath?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !folderPath.isEmpty else {
+            throw CloudBackupError.missingFolder
+        }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: folderPath, isDirectory: &isDirectory), isDirectory.boolValue else {
+            throw CloudBackupError.folderUnavailable(folderPath)
+        }
+
+        let backupURL = URL(fileURLWithPath: folderPath, isDirectory: true)
+            .appending(path: "languard-devices-backup.json")
+        try writeDeviceInventory(devices: devices, to: backupURL)
+    }
+
+    private static func writeDeviceInventory(devices: [NetworkDevice], to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let document = DeviceInventoryDocument(devices: devices)
+        let data = try encoder.encode(document)
+        try data.write(to: url, options: [.atomic])
     }
 
     private func notifyScanChanges(_ mergeResult: DeviceMergeResult) async {
@@ -265,6 +367,17 @@ final class AppModel {
         scanHistory[index].discoveredCount = count
         scanHistory[index].errorMessage = errorMessage
     }
+
+    private func completeGuestScan(
+        status: ScanRecord.Status,
+        count: Int = 0,
+        errorMessage: String? = nil
+    ) {
+        guestScan?.finishedAt = .now
+        guestScan?.status = status
+        guestScan?.discoveredCount = count
+        guestScan?.errorMessage = errorMessage
+    }
 }
 
 enum DeviceInventoryImportError: LocalizedError {
@@ -274,6 +387,20 @@ enum DeviceInventoryImportError: LocalizedError {
         switch self {
         case .unsupportedFormat:
             "Choose a LanGuard device inventory JSON file."
+        }
+    }
+}
+
+enum CloudBackupError: LocalizedError {
+    case missingFolder
+    case folderUnavailable(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingFolder:
+            "Choose a cloud backup folder first."
+        case .folderUnavailable(let path):
+            "The cloud backup folder is not available: \(path)"
         }
     }
 }

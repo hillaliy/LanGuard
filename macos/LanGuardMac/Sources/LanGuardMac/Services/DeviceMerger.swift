@@ -8,32 +8,46 @@ struct DeviceMergeResult: Equatable, Sendable {
 }
 
 enum DeviceMerger {
+    private static let offlineAfterMissedScans = 3
+
     static func merge(existing: [NetworkDevice], discovered: [NetworkDevice]) -> DeviceMergeResult {
-        let existingByID = Dictionary(uniqueKeysWithValues: existing.map { ($0.id, $0) })
+        let normalizedExisting = coalescedDevices(existing)
+        let normalizedDiscovered = coalescedDevices(discovered)
+        let existingByID = Dictionary(uniqueKeysWithValues: normalizedExisting.map { ($0.id, $0) })
+        let discoveredIDs = Set(normalizedDiscovered.map(\.id))
         var newDevices: [NetworkDevice] = []
         var riskyDevices: [NetworkDevice] = []
         var changes: [DeviceChange] = []
 
-        let mergedDevices = discovered.map { device in
+        var mergedDevices = normalizedDiscovered.map { device in
             guard let previous = existingByID[device.id] else {
-                newDevices.append(device)
-                if !device.isKnown, device.risk == .high {
-                    riskyDevices.append(device)
+                var newDevice = device
+                newDevice.status = .online
+                newDevice.missedScans = 0
+                newDevice.risk = DeviceRiskScorer.risk(for: newDevice.openPorts, isKnown: newDevice.isKnown)
+                newDevices.append(newDevice)
+                if !newDevice.isKnown, newDevice.risk == .high {
+                    riskyDevices.append(newDevice)
                 }
-                return device
+                return newDevice
             }
 
             var merged = device
             if previous.isKnown {
                 merged.name = previous.name
                 merged.iconName = previous.iconName
+                merged.secondaryIconName = previous.secondaryIconName
             } else {
                 merged.name = device.name
                 merged.iconName = device.iconName
+                merged.secondaryIconName = device.secondaryIconName
             }
-            merged.vendor = device.vendor ?? previous.vendor
+            merged.vendor = device.vendor ?? (MACVendorResolver.isLocallyAdministered(device.macAddress) ? nil : previous.vendor)
+            merged.role = previous.role
             merged.isKnown = previous.isKnown
             merged.firstSeen = previous.firstSeen
+            merged.status = .online
+            merged.missedScans = 0
             merged.risk = DeviceRiskScorer.risk(for: merged.openPorts, isKnown: merged.isKnown)
 
             if previous.ipAddress != merged.ipAddress {
@@ -52,6 +66,68 @@ enum DeviceMerger {
             return merged
         }
 
-        return DeviceMergeResult(devices: mergedDevices, newDevices: newDevices, riskyDevices: riskyDevices, changes: changes)
+        for previous in normalizedExisting where !discoveredIDs.contains(previous.id) {
+            var missingDevice = previous
+            missingDevice.missedScans += 1
+            missingDevice.status = missingDevice.missedScans >= offlineAfterMissedScans ? .offline : .recentlySeen
+            mergedDevices.append(missingDevice)
+        }
+
+        let sortedDevices = mergedDevices.sorted {
+            IPv4AddressSortKey($0.ipAddress) < IPv4AddressSortKey($1.ipAddress)
+        }
+
+        return DeviceMergeResult(devices: sortedDevices, newDevices: newDevices, riskyDevices: riskyDevices, changes: changes)
+    }
+
+    private static func coalescedDevices(_ devices: [NetworkDevice]) -> [NetworkDevice] {
+        var devicesByID: [String: NetworkDevice] = [:]
+
+        for device in devices {
+            guard var current = devicesByID[device.id] else {
+                devicesByID[device.id] = device
+                continue
+            }
+
+            let latest = device.lastSeen >= current.lastSeen ? device : current
+            current.name = latest.name
+            current.ipAddress = latest.ipAddress
+            current.macAddress = latest.macAddress
+            current.vendor = latest.vendor ?? current.vendor
+            current.hostname = latest.hostname ?? current.hostname
+            current.iconName = latest.iconName ?? current.iconName
+            current.secondaryIconName = latest.secondaryIconName ?? current.secondaryIconName
+            current.status = latest.status
+            current.risk = latest.risk
+            current.role = current.role ?? latest.role
+            current.isKnown = current.isKnown || latest.isKnown
+            current.isGateway = current.isGateway || latest.isGateway
+            current.openPorts = Array(Set(current.openPorts).union(latest.openPorts)).sorted()
+            current.missedScans = min(current.missedScans, latest.missedScans)
+            current.firstSeen = min(current.firstSeen, latest.firstSeen)
+            current.lastSeen = max(current.lastSeen, latest.lastSeen)
+
+            devicesByID[device.id] = current
+        }
+
+        return Array(devicesByID.values)
+    }
+}
+
+private struct IPv4AddressSortKey: Comparable {
+    private let parts: [Int]
+    private let rawValue: String
+
+    init(_ rawValue: String) {
+        self.rawValue = rawValue
+        self.parts = rawValue.split(separator: ".").map { Int($0) ?? 0 }
+    }
+
+    static func < (lhs: IPv4AddressSortKey, rhs: IPv4AddressSortKey) -> Bool {
+        guard lhs.parts.count == 4, rhs.parts.count == 4 else {
+            return lhs.rawValue < rhs.rawValue
+        }
+
+        return lhs.parts.lexicographicallyPrecedes(rhs.parts)
     }
 }

@@ -51,7 +51,7 @@ struct DashboardView: View {
             }
 
             GridRow {
-                RecentlyChangedCard(changes: visibleRecentChanges, maximumItems: 5, fixedHeight: 328)
+                RecentlyChangedCard(changes: visibleRecentChanges, maximumItems: 8, fixedHeight: 328)
                     .padding(.top, 12)
                     .gridCellColumns(2)
 
@@ -68,12 +68,15 @@ struct DashboardView: View {
                 .gridCellColumns(1)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 1420, maxWidth: .infinity, alignment: .leading)
     }
 
     private var compactMetricGrid: some View {
         VStack(alignment: .leading, spacing: 24) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 24)], spacing: 24) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(minimum: 0), spacing: 14), count: 4),
+                spacing: 14
+            ) {
                 compactMetricCards
             }
             
@@ -89,9 +92,9 @@ struct DashboardView: View {
     private var compactLowerContent: some View {
         VStack(alignment: .leading, spacing: 24) {
             latestScanContent
-            RecentlyChangedCard(changes: visibleRecentChanges, maximumItems: 5)
+            RecentlyChangedCard(changes: visibleRecentChanges, maximumItems: 8, fixedHeight: 292)
             scheduleCard
-            WatchListCard(devices: appModel.devices)
+            WatchListCard(devices: appModel.devices, fixedHeight: 292)
         }
     }
 
@@ -311,7 +314,7 @@ private struct NetworkHealthCard: View {
                     .foregroundStyle(healthColor)
             }
 
-            ProgressView(value: healthScore)
+            ProgressView(value: knownCoverageScore)
                 .tint(healthColor)
 
             VStack(spacing: 7) {
@@ -333,6 +336,11 @@ private struct NetworkHealthCard: View {
     private var knownPercent: Int {
         guard devices > 0 else { return 0 }
         return Int((Double(devices - unknown) / Double(devices) * 100).rounded())
+    }
+
+    private var knownCoverageScore: Double {
+        guard devices > 0 else { return 0 }
+        return max(0.0, min(1.0, Double(devices - unknown) / Double(devices)))
     }
 
     private var healthScore: Double {
@@ -384,6 +392,7 @@ private struct HealthRow: View {
 
 private struct WatchListCard: View {
     let devices: [NetworkDevice]
+    private let maximumItems = 8
     var fixedHeight: CGFloat?
 
     var body: some View {
@@ -413,32 +422,40 @@ private struct WatchListCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 6)
             } else {
-                ForEach(attentionDevices) { device in
-                    HStack(spacing: 12) {
-                        Image(systemName: device.risk == .high ? "exclamationmark.triangle" : "questionmark.circle")
-                            .foregroundStyle(device.risk == .high ? .red : .orange)
-                            .frame(width: 24)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(attentionDevices) { device in
+                            HStack(spacing: 12) {
+                                Image(systemName: device.risk == .high ? "exclamationmark.triangle" : "questionmark.circle")
+                                    .foregroundStyle(device.risk == .high ? .red : .orange)
+                                    .frame(width: 24)
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(device.name)
-                                .font(.headline)
-                                .lineLimit(1)
-                            Text(device.ipAddress)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(device.name)
+                                        .font(.headline)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                    Text(device.ipAddress)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+
+                                Text(device.risk.title)
+                                    .font(.caption.weight(.bold))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 4)
+                                    .background((device.risk == .high ? Color.red : Color.orange).opacity(0.16), in: Capsule())
+                                    .foregroundStyle(device.risk == .high ? .red : .orange)
+                            }
+                            .padding(.vertical, 1)
                         }
-
-                        Spacer()
-
-                        Text(device.risk.title)
-                            .font(.caption.weight(.bold))
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background((device.risk == .high ? Color.red : Color.orange).opacity(0.16), in: Capsule())
-                            .foregroundStyle(device.risk == .high ? .red : .orange)
                     }
-                    .padding(.vertical, 4)
+                    .padding(.bottom, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .scrollIndicators(.visible)
             }
         }
         .padding(22)
@@ -459,7 +476,7 @@ private struct WatchListCard: View {
                 }
                 return left.lastSeen > right.lastSeen
             }
-            .prefix(5)
+            .prefix(maximumItems)
             .map { $0 }
     }
 }
@@ -477,7 +494,7 @@ private struct RecentlyChangedCard: View {
 
                 Spacer()
 
-                Text("\(changes.count)")
+                Text("\(displayChanges.count)")
                     .font(.caption.weight(.bold))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -496,25 +513,33 @@ private struct RecentlyChangedCard: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.vertical, 6)
             } else {
-                ForEach(displayChanges) { change in
-                    HStack(spacing: 12) {
-                        Image(systemName: iconName(for: change.kind))
-                            .foregroundStyle(.blue)
-                            .frame(width: 24)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(displayChanges) { change in
+                            HStack(spacing: 12) {
+                                Image(systemName: iconName(for: change.kind))
+                                    .foregroundStyle(.blue)
+                                    .frame(width: 24)
 
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(change.deviceName)
-                                .font(.headline)
-                                .lineLimit(1)
-                            Text("\(change.kind.title) • \(change.ipAddress)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(change.deviceName)
+                                        .font(.headline)
+                                        .lineLimit(1)
+                                        .truncationMode(.tail)
+                                    Text("\(change.kind.title) • \(change.ipAddress)")
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                Spacer()
+                            }
+                            .padding(.vertical, 1)
                         }
-
-                        Spacer()
                     }
-                    .padding(.vertical, 2)
+                    .padding(.bottom, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .scrollIndicators(.visible)
             }
         }
         .padding(22)
@@ -699,27 +724,29 @@ private struct CompactSummaryCard: View {
     let tint: Color
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(tint)
-                .frame(width: 38, height: 38)
+                .frame(width: 34, height: 34)
                 .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.callout.weight(.semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
                 Text(value)
-                    .font(.system(size: 32, weight: .semibold, design: .rounded))
+                    .font(.system(size: 30, weight: .semibold, design: .rounded))
                     .monospacedDigit()
             }
 
             Spacer()
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 86, alignment: .leading)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
         .overlay {
             RoundedRectangle(cornerRadius: 18)

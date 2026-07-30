@@ -6,6 +6,11 @@ struct DeviceInventoryImportResult: Sendable {
     let skipped: Int
 }
 
+struct NotificationTestResult: Sendable {
+    let message: String
+    let isError: Bool
+}
+
 struct DeviceInventoryDocument: Codable {
     static let format = "languard-device-inventory"
 
@@ -36,6 +41,8 @@ struct DeviceInventoryItem: Codable {
     var vendor: String?
     var hostname: String?
     var icon: String?
+    var secondaryIcon: String?
+    var role: String?
     var known: Bool
     var isGateway: Bool
     var status: String?
@@ -51,6 +58,8 @@ struct DeviceInventoryItem: Codable {
         self.vendor = device.vendor
         self.hostname = device.hostname
         self.icon = device.iconName
+        self.secondaryIcon = device.secondaryIconName
+        self.role = device.role?.rawValue
         self.known = device.isKnown
         self.isGateway = device.isGateway
         self.status = device.status.rawValue
@@ -84,17 +93,26 @@ struct DeviceInventoryItem: Codable {
             isKnown: known
         )
         let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackName = existing?.name ?? DeviceNameGuesser.displayName(hostname: hostname, macAddress: normalizedMAC)
+        let importedName = displayName.isEmpty ? fallbackName : displayName
+        let importedVendor = normalizedText(vendor) ?? existing?.vendor
+        let importedHostname = normalizedText(hostname) ?? existing?.hostname
+        let importedIcon = normalizedText(icon) ?? existing?.iconName
+        let importedSecondaryIcon = normalizedText(secondaryIcon) ?? existing?.secondaryIconName
+        let importedRole = normalizedRole ?? existing?.role
 
         return NetworkDevice(
             id: normalizedMAC,
-            name: displayName.isEmpty ? existing?.name ?? DeviceNameGuesser.displayName(hostname: hostname, macAddress: normalizedMAC) : displayName,
+            name: importedName,
             ipAddress: normalizedIP,
             macAddress: normalizedMAC,
-            vendor: normalizedText(vendor) ?? existing?.vendor,
-            hostname: normalizedText(hostname) ?? existing?.hostname,
-            iconName: normalizedText(icon) ?? existing?.iconName,
+            vendor: importedVendor,
+            hostname: importedHostname,
+            iconName: importedIcon,
+            secondaryIconName: importedSecondaryIcon,
             status: deviceStatus,
             risk: deviceRisk,
+            role: importedRole,
             isKnown: known,
             isGateway: isGateway,
             openPorts: normalizedPorts,
@@ -112,6 +130,13 @@ struct DeviceInventoryItem: Codable {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private var normalizedRole: DeviceRole? {
+        guard let role = normalizedText(role) else {
+            return nil
+        }
+        return DeviceRole(rawValue: role)
+    }
+
     private static func isValidIPv4Address(_ value: String) -> Bool {
         let octets = value.split(separator: ".")
         guard octets.count == 4 else { return false }
@@ -125,6 +150,8 @@ struct DeviceInventoryItem: Codable {
         case vendor
         case hostname
         case icon
+        case secondaryIcon = "secondary_icon"
+        case role
         case known
         case isGateway = "is_gateway"
         case status
