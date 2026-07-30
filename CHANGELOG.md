@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.16 - 2026-07-30
+
+- Fixed native macOS notification registration by signing the packaged app bundle with the stable LanGuard bundle identifier.
+- Added explicit notification permission and notification settings actions in the macOS Settings page.
+- Delayed notification permission prompts until the user enables or requests notifications from Settings.
+
 ## 1.0.15 - 2026-07-30
 
 - Added the native macOS Grouping page for role-based device views.

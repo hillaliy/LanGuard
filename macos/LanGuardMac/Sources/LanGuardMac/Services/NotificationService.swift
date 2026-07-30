@@ -3,10 +3,18 @@ import UserNotifications
 
 @MainActor
 protocol NotificationServicing: AnyObject {
+    func authorizationStatus() async -> AppNotificationAuthorizationStatus
     func requestAuthorization() async -> Bool
     func notifyNewDevice(_ device: NetworkDevice) async
     func notifyRiskyDevice(_ device: NetworkDevice) async
     func notifyTest() async throws
+}
+
+enum AppNotificationAuthorizationStatus: Sendable {
+    case disabledInDevelopment
+    case notDetermined
+    case denied
+    case authorized
 }
 
 enum NotificationServiceError: LocalizedError {
@@ -48,6 +56,20 @@ final class NotificationService: NSObject, NotificationServicing, UNUserNotifica
         self.center = center
         super.init()
         center.delegate = self
+    }
+
+    func authorizationStatus() async -> AppNotificationAuthorizationStatus {
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .notDetermined:
+            return .notDetermined
+        case .denied:
+            return .denied
+        case .authorized, .provisional, .ephemeral:
+            return .authorized
+        @unknown default:
+            return .denied
+        }
     }
 
     func requestAuthorization() async -> Bool {
@@ -127,6 +149,7 @@ final class NotificationService: NSObject, NotificationServicing, UNUserNotifica
 }
 
 final class DisabledNotificationService: NotificationServicing {
+    func authorizationStatus() async -> AppNotificationAuthorizationStatus { .disabledInDevelopment }
     func requestAuthorization() async -> Bool { false }
     func notifyNewDevice(_ device: NetworkDevice) async {}
     func notifyRiskyDevice(_ device: NetworkDevice) async {}

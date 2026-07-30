@@ -4,6 +4,27 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.16',
+    date: '2026-07-30',
+    items: [
+      'Fixed native macOS notification registration by signing the packaged app bundle with the stable LanGuard bundle identifier.',
+      'Added explicit notification permission and notification settings actions in the macOS Settings page.',
+      'Delayed notification permission prompts until the user enables or requests notifications from Settings.',
+    ],
+  },
+  {
+    version: '1.0.15',
+    date: '2026-07-30',
+    items: [
+      'Added the native macOS Grouping page for role-based device views.',
+      'Added temporary Guest Scan so client or guest networks can be scanned without saving devices, history, or inventory changes.',
+      'Added macOS device import/export, launch-at-login, an About page, menu bar status, and richer device detail editing.',
+      'Improved macOS discovery with bundled vendor data, better role and icon detection, offline grace handling, and network/broadcast address filtering.',
+      'Added more device icons, secondary device icons, manual role editing, and device deletion.',
+      'Polished the macOS dashboard, Devices filters, compact layouts, sidebar behavior, and empty states across small and full-screen windows.',
+    ],
+  },
+  {
     version: '1.0.14',
     date: '2026-07-29',
     items: [

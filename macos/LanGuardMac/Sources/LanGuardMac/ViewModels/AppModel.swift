@@ -134,6 +134,10 @@ final class AppModel {
         await notifications.requestAuthorization()
     }
 
+    func notificationPermissionStatus() async -> AppNotificationAuthorizationStatus {
+        await notifications.authorizationStatus()
+    }
+
     func sendTestNotification() async -> NotificationTestResult {
         guard await prepareNotifications() else {
             return NotificationTestResult(
