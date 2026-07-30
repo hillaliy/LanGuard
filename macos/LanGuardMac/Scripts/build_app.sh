@@ -9,6 +9,7 @@ APP_DIR="$ROOT_DIR/.build/app/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
+BUNDLE_IDENTIFIER="$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$ROOT_DIR/Packaging/Info.plist")"
 
 cd "$ROOT_DIR"
 
@@ -25,5 +26,7 @@ if [ -d "$ROOT_DIR/Resources" ]; then
 fi
 
 chmod +x "$MACOS_DIR/$PRODUCT_NAME"
+
+/usr/bin/codesign --force --deep --sign - --identifier "$BUNDLE_IDENTIFIER" "$APP_DIR"
 
 echo "Built $APP_DIR"

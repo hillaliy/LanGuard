@@ -68,6 +68,18 @@ struct SettingsView: View {
                     }
                     .disabled(isSendingTestNotification)
 
+                    Button {
+                        requestNotificationPermission()
+                    } label: {
+                        Label("Request Notification Permission", systemImage: "bell.badge.fill")
+                    }
+
+                    Button {
+                        openNotificationSettings()
+                    } label: {
+                        Label("Open Notification Settings", systemImage: "gear.badge")
+                    }
+
                     Text("Scan alerts are sent only for new unknown devices and unknown devices with risky ports.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -200,6 +212,7 @@ struct SettingsView: View {
         if newDeviceNotificationsEnabled || riskyPortNotificationsEnabled {
             Task {
                 await appModel.prepareNotifications()
+                await updateNotificationPermissionMessage()
             }
         }
     }
@@ -293,10 +306,56 @@ struct SettingsView: View {
 
         Task {
             let result = await appModel.sendTestNotification()
-            validationMessage = result.message
+            validationMessage = result.isError
+                ? "\(result.message) Open Notification Settings, allow LanGuard, then send another test."
+                : result.message
             validationMessageIsError = result.isError
             isSendingTestNotification = false
         }
+    }
+
+    private func requestNotificationPermission() {
+        Task {
+            await appModel.prepareNotifications()
+            await updateNotificationPermissionMessage()
+        }
+    }
+
+    private func updateNotificationPermissionMessage() async {
+        switch await appModel.notificationPermissionStatus() {
+        case .authorized:
+            validationMessage = "Notifications are allowed for LanGuard."
+            validationMessageIsError = false
+        case .notDetermined:
+            validationMessage = "macOS has not recorded a notification decision yet. Launch the installed LanGuard.app, then request permission again."
+            validationMessageIsError = true
+        case .denied:
+            validationMessage = "Notifications are blocked for LanGuard. Open Notification Settings and allow LanGuard."
+            validationMessageIsError = true
+        case .disabledInDevelopment:
+            validationMessage = "Notifications require the packaged LanGuard.app. They are disabled when running with swift run."
+            validationMessageIsError = true
+        }
+    }
+
+    private func openNotificationSettings() {
+        let settingsURLs = [
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=com.hillaliy.LanGuardMac",
+            "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+            "x-apple.systempreferences:com.apple.preference.notifications"
+        ]
+
+        for settingsURL in settingsURLs {
+            guard let url = URL(string: settingsURL) else { continue }
+            if NSWorkspace.shared.open(url) {
+                validationMessage = "Opened macOS Notification Settings. Allow notifications for LanGuard, then send another test."
+                validationMessageIsError = false
+                return
+            }
+        }
+
+        validationMessage = "Open macOS System Settings > Notifications > LanGuard and allow notifications."
+        validationMessageIsError = true
     }
 
     private func updateLaunchAtLogin(_ enabled: Bool) {

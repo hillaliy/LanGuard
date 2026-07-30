@@ -9,9 +9,6 @@ struct LanGuardMacApp: App {
         WindowGroup("LanGuard", id: "main") {
             ContentView()
                 .environment(appModel)
-                .task {
-                    await appModel.prepareNotifications()
-                }
         }
         .windowStyle(.hiddenTitleBar)
 
