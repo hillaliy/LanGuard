@@ -30,6 +30,19 @@ struct IPv4CIDRRange: Sendable {
         return address & mask == network
     }
 
+    func isUsableHost(_ ipAddress: String) -> Bool {
+        guard let address = Self.ipv4Value(ipAddress), contains(ipAddress) else {
+            return false
+        }
+
+        if prefix >= 31 {
+            return true
+        }
+
+        let broadcast = network | ~mask
+        return address != network && address != broadcast
+    }
+
     func usableHosts(limit: Int = 4_096) -> [String] {
         let broadcast = network | ~mask
         let start: UInt32

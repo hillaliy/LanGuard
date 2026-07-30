@@ -65,6 +65,12 @@ func vendorResolverFindsKnownOUI() {
 }
 
 @Test
+func vendorResolverIgnoresLocallyAdministeredMacAddresses() {
+    #expect(MACVendorResolver.isLocallyAdministered("ba:e6:e0:17:66:94"))
+    #expect(MACVendorResolver.vendor(for: "ba:e6:e0:17:66:94") == nil)
+}
+
+@Test
 func bundledVendorDatabaseParsesManufLines() {
     let contents = """
     # comment
@@ -93,4 +99,98 @@ func deviceProfilerUsesVendorAndPortsForUnknownDevice() {
     #expect(enriched.vendor == "Apple")
     #expect(enriched.name == "Apple Camera")
     #expect(enriched.iconName == "camera")
+}
+
+@Test
+func deviceProfilerClearsStaleVendorForRandomizedMacAddress() {
+    let device = NetworkDevice(
+        id: "ba:e6:e0:17:66:94",
+        name: "Apple Device",
+        ipAddress: "192.168.0.54",
+        macAddress: "ba:e6:e0:17:66:94",
+        vendor: "Apple"
+    )
+
+    let enriched = DeviceProfiler.enrich(device)
+
+    #expect(enriched.vendor == nil)
+    #expect(enriched.name == "Unknown Device 6694")
+}
+
+@Test
+func deviceProfilerDetectsSmartHomeDeviceIcons() {
+    #expect(DeviceProfiler.iconName(
+        name: "Kitchen Echo Speaker",
+        hostname: nil,
+        vendor: "Amazon",
+        openPorts: [],
+        isGateway: false
+    ) == "homepod")
+    #expect(DeviceProfiler.iconName(
+        name: "Living Room Power Strip",
+        hostname: nil,
+        vendor: nil,
+        openPorts: [],
+        isGateway: false
+    ) == "poweroutlet.strip")
+    #expect(DeviceProfiler.iconName(
+        name: "Aqara Hub",
+        hostname: nil,
+        vendor: "Aqara",
+        openPorts: [],
+        isGateway: false
+    ) == "point.3.connected.trianglepath.dotted")
+    #expect(DeviceProfiler.iconName(
+        name: "Shelly Relay Controller",
+        hostname: nil,
+        vendor: "Shelly",
+        openPorts: [],
+        isGateway: false
+    ) == "switch.2")
+    #expect(DeviceProfiler.iconName(
+        name: "Roborock S7 Robot Vacuum",
+        hostname: nil,
+        vendor: "Roborock",
+        openPorts: [],
+        isGateway: false
+    ) == "robotic.vacuum")
+    #expect(DeviceProfiler.iconName(
+        name: "Kitchen LED Strip",
+        hostname: nil,
+        vendor: nil,
+        openPorts: [],
+        isGateway: false
+    ) == "light.strip.2")
+}
+
+@Test
+func deviceProfilerDetectsDeviceRoles() {
+    #expect(DeviceProfiler.role(
+        name: "TP-Link Deco X60",
+        hostname: nil,
+        vendor: "TP-Link",
+        openPorts: [],
+        isGateway: false
+    ) == .meshRouter)
+    #expect(DeviceProfiler.role(
+        name: "Router",
+        hostname: nil,
+        vendor: nil,
+        openPorts: [80, 443],
+        isGateway: true
+    ) == .gateway)
+    #expect(DeviceProfiler.role(
+        name: "Front Door",
+        hostname: nil,
+        vendor: nil,
+        openPorts: [554],
+        isGateway: false
+    ) == .camera)
+    #expect(DeviceProfiler.role(
+        name: "Aqara Hub",
+        hostname: nil,
+        vendor: "Aqara",
+        openPorts: [],
+        isGateway: false
+    ) == .hub)
 }

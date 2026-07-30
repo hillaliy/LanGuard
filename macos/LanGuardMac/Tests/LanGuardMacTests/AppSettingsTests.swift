@@ -25,3 +25,12 @@ func cidrRangeBuildsUsableHostsWithoutNetworkAndBroadcast() {
 
     #expect(range?.usableHosts() == ["192.168.0.1", "192.168.0.2"])
 }
+
+@Test
+func cidrRangeRejectsNetworkAndBroadcastAsUsableHosts() {
+    let range = IPv4CIDRRange("192.168.0.0/24")
+
+    #expect(range?.isUsableHost("192.168.0.1") == true)
+    #expect(range?.isUsableHost("192.168.0.0") == false)
+    #expect(range?.isUsableHost("192.168.0.255") == false)
+}

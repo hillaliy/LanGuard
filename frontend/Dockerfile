@@ -1,6 +1,7 @@
-FROM node:24-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
 
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package*.json ./
 RUN npm ci

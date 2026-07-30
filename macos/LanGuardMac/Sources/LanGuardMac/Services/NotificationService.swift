@@ -3,9 +3,24 @@ import UserNotifications
 
 @MainActor
 protocol NotificationServicing: AnyObject {
-    func requestAuthorization() async
+    func requestAuthorization() async -> Bool
     func notifyNewDevice(_ device: NetworkDevice) async
     func notifyRiskyDevice(_ device: NetworkDevice) async
+    func notifyTest() async throws
+}
+
+enum NotificationServiceError: LocalizedError {
+    case disabledInDevelopment
+    case notAuthorized
+
+    var errorDescription: String? {
+        switch self {
+        case .disabledInDevelopment:
+            "Notifications require the packaged LanGuard.app. They are disabled when running with swift run."
+        case .notAuthorized:
+            "Notifications are not allowed for LanGuard in macOS System Settings."
+        }
+    }
 }
 
 enum NotificationServiceFactory {
@@ -20,27 +35,32 @@ enum NotificationServiceFactory {
     }
 }
 
-final class NotificationService: NotificationServicing {
+final class NotificationService: NSObject, NotificationServicing, UNUserNotificationCenterDelegate {
     private let center: UNUserNotificationCenter
+
+    override init() {
+        self.center = .current()
+        super.init()
+        center.delegate = self
+    }
 
     init(center: UNUserNotificationCenter) {
         self.center = center
+        super.init()
+        center.delegate = self
     }
 
-    convenience init() {
-        self.init(center: .current())
-    }
-
-    func requestAuthorization() async {
+    func requestAuthorization() async -> Bool {
         do {
-            _ = try await center.requestAuthorization(options: [.alert, .sound])
+            return try await center.requestAuthorization(options: [.alert, .sound])
         } catch {
             // Permission failures are non-fatal; the app can continue without notifications.
+            return false
         }
     }
 
     func notifyNewDevice(_ device: NetworkDevice) async {
-        await addNotification(
+        try? await addNotification(
             identifier: "new-device-\(device.id)-\(device.lastSeen.timeIntervalSince1970)",
             title: "New device found",
             body: "\(device.name) joined at \(device.ipAddress)"
@@ -49,14 +69,26 @@ final class NotificationService: NotificationServicing {
 
     func notifyRiskyDevice(_ device: NetworkDevice) async {
         let ports = device.openPorts.map(String.init).joined(separator: ", ")
-        await addNotification(
+        try? await addNotification(
             identifier: "risky-device-\(device.id)-\(device.lastSeen.timeIntervalSince1970)",
             title: "Risky ports found",
             body: "\(device.name) has high-risk ports open: \(ports)"
         )
     }
 
-    private func addNotification(identifier: String, title: String, body: String) async {
+    func notifyTest() async throws {
+        guard await isAuthorized else {
+            throw NotificationServiceError.notAuthorized
+        }
+
+        try await addNotification(
+            identifier: "test-notification-\(Date().timeIntervalSince1970)",
+            title: "LanGuard notifications are working",
+            body: "You will receive alerts for new unknown devices and unknown devices with risky ports."
+        )
+    }
+
+    private func addNotification(identifier: String, title: String, body: String) async throws {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
@@ -68,16 +100,37 @@ final class NotificationService: NotificationServicing {
             trigger: nil
         )
 
-        do {
-            try await center.add(request)
-        } catch {
-            // Notification delivery failures should not block scan results.
+        try await center.add(request)
+    }
+
+    private var isAuthorized: Bool {
+        get async {
+            let settings = await center.notificationSettings()
+            switch settings.authorizationStatus {
+            case .authorized, .provisional, .ephemeral:
+                return true
+            case .denied, .notDetermined:
+                return false
+            @unknown default:
+                return false
+            }
         }
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .list, .sound])
     }
 }
 
 final class DisabledNotificationService: NotificationServicing {
-    func requestAuthorization() async {}
+    func requestAuthorization() async -> Bool { false }
     func notifyNewDevice(_ device: NetworkDevice) async {}
     func notifyRiskyDevice(_ device: NetworkDevice) async {}
+    func notifyTest() async throws {
+        throw NotificationServiceError.disabledInDevelopment
+    }
 }

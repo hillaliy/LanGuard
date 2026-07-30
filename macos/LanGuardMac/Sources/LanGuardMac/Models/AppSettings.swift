@@ -7,6 +7,8 @@ struct AppSettings: Codable, Equatable, Sendable {
     var scheduledScanningEnabled: Bool
     var newDeviceNotificationsEnabled: Bool
     var riskyPortNotificationsEnabled: Bool
+    var cloudBackupEnabled: Bool
+    var cloudBackupFolderPath: String?
 
     static let defaultPorts = [22, 53, 80, 443, 554, 631, 8080, 8443, 9100]
 
@@ -16,17 +18,24 @@ struct AppSettings: Codable, Equatable, Sendable {
         tcpPorts: defaultPorts,
         scheduledScanningEnabled: false,
         newDeviceNotificationsEnabled: true,
-        riskyPortNotificationsEnabled: true
+        riskyPortNotificationsEnabled: true,
+        cloudBackupEnabled: false,
+        cloudBackupFolderPath: nil
     )
 
     var normalized: AppSettings {
-        AppSettings(
+        let normalizedBackupPath = cloudBackupFolderPath?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return AppSettings(
             defaultScanRange: defaultScanRange.trimmingCharacters(in: .whitespacesAndNewlines),
             scanIntervalMinutes: min(max(scanIntervalMinutes, 1), 1440),
             tcpPorts: Self.normalizedPorts(tcpPorts),
             scheduledScanningEnabled: scheduledScanningEnabled,
             newDeviceNotificationsEnabled: newDeviceNotificationsEnabled,
-            riskyPortNotificationsEnabled: riskyPortNotificationsEnabled
+            riskyPortNotificationsEnabled: riskyPortNotificationsEnabled,
+            cloudBackupEnabled: cloudBackupEnabled,
+            cloudBackupFolderPath: normalizedBackupPath?.isEmpty == false ? normalizedBackupPath : nil
         )
     }
 
@@ -56,6 +65,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         case scheduledScanningEnabled
         case newDeviceNotificationsEnabled
         case riskyPortNotificationsEnabled
+        case cloudBackupEnabled
+        case cloudBackupFolderPath
     }
 
     init(
@@ -64,7 +75,9 @@ struct AppSettings: Codable, Equatable, Sendable {
         tcpPorts: [Int],
         scheduledScanningEnabled: Bool,
         newDeviceNotificationsEnabled: Bool = Self.default.newDeviceNotificationsEnabled,
-        riskyPortNotificationsEnabled: Bool = Self.default.riskyPortNotificationsEnabled
+        riskyPortNotificationsEnabled: Bool = Self.default.riskyPortNotificationsEnabled,
+        cloudBackupEnabled: Bool = Self.default.cloudBackupEnabled,
+        cloudBackupFolderPath: String? = Self.default.cloudBackupFolderPath
     ) {
         self.defaultScanRange = defaultScanRange
         self.scanIntervalMinutes = scanIntervalMinutes
@@ -72,6 +85,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.scheduledScanningEnabled = scheduledScanningEnabled
         self.newDeviceNotificationsEnabled = newDeviceNotificationsEnabled
         self.riskyPortNotificationsEnabled = riskyPortNotificationsEnabled
+        self.cloudBackupEnabled = cloudBackupEnabled
+        self.cloudBackupFolderPath = cloudBackupFolderPath
     }
 
     init(from decoder: Decoder) throws {
@@ -82,6 +97,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         scheduledScanningEnabled = try container.decodeIfPresent(Bool.self, forKey: .scheduledScanningEnabled) ?? Self.default.scheduledScanningEnabled
         newDeviceNotificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .newDeviceNotificationsEnabled) ?? Self.default.newDeviceNotificationsEnabled
         riskyPortNotificationsEnabled = try container.decodeIfPresent(Bool.self, forKey: .riskyPortNotificationsEnabled) ?? Self.default.riskyPortNotificationsEnabled
+        cloudBackupEnabled = try container.decodeIfPresent(Bool.self, forKey: .cloudBackupEnabled) ?? Self.default.cloudBackupEnabled
+        cloudBackupFolderPath = try container.decodeIfPresent(String.self, forKey: .cloudBackupFolderPath) ?? Self.default.cloudBackupFolderPath
     }
 
     private static func normalizedPorts(_ ports: [Int]) -> [Int] {
