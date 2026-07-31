@@ -634,11 +634,11 @@ private struct DeviceDetailView: View {
         .frame(width: 560, height: 620)
         .alert("Delete \(originalDevice.name)?", isPresented: $isShowingDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
-            Button("Delete", role: .destructive) {
+            Button("Delete Device", role: .destructive) {
                 onDelete(originalDevice)
             }
         } message: {
-            Text("This removes the device from your saved inventory. It may appear again if a future scan discovers it.")
+            Text("This removes \(originalDevice.ipAddress) from your saved inventory. LanGuard can add it again if a future scan discovers it.")
         }
     }
 
