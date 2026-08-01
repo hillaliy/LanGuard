@@ -3,55 +3,67 @@ import SwiftUI
 struct AboutView: View {
     private let projectURL = URL(string: "https://github.com/hillaliy/LanGuard")!
     private let donationURL = URL(string: "https://www.paypal.me/hillaliy")!
+    private let releasesURL = URL(string: "https://github.com/hillaliy/LanGuard/releases")!
+
+    @State private var updateState: AboutUpdateState = .idle
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .center, spacing: 24) {
-                HeaderView(
-                    title: "About",
-                    subtitle: "LanGuard for macOS",
-                    version: AppVersion.current
-                )
-                .frame(maxWidth: 900)
+            VStack(spacing: 24) {
+                VStack(spacing: 12) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 22)
+                            .fill(.blue.opacity(0.14))
+                            .frame(width: 104, height: 104)
 
-                VStack(alignment: .center, spacing: 24) {
-                    VStack(spacing: 16) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 18)
-                                .fill(.blue.opacity(0.14))
-                                .frame(width: 86, height: 86)
-
-                            Image(systemName: "shield.lefthalf.filled.badge.checkmark")
-                                .font(.system(size: 50, weight: .semibold))
-                                .foregroundStyle(.blue)
-                        }
-
-                        VStack(spacing: 6) {
-                            Text("LanGuard")
-                                .font(.system(size: 36, weight: .semibold, design: .rounded))
-
-                            Text("Local network watch for macOS")
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
-                        }
+                        Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                            .font(.system(size: 60, weight: .semibold))
+                            .foregroundStyle(.blue)
                     }
 
-                    Text("LanGuard scans the local network, identifies devices, tracks changes, and highlights devices that may need attention.")
-                        .font(.body)
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text("LanGuard")
+                            .font(.system(size: 40, weight: .semibold, design: .rounded))
+
+                        Text("v\(AppVersion.current)")
+                            .font(.system(size: 15, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 11)
+                            .padding(.vertical, 5)
+                            .background(.quaternary.opacity(0.7), in: Capsule())
+                            .overlay {
+                                Capsule()
+                                    .stroke(.quaternary)
+                            }
+                            .offset(y: -5)
+                    }
+
+                    Text("Native local network watch for macOS")
+                        .font(.title3)
                         .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 14)
 
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 12)], spacing: 12) {
-                        AboutInfoCard(title: "Version", value: "v\(AppVersion.current)", systemImage: "tag")
+                VStack(spacing: 16) {
+                    AboutSummaryCard()
+
+                    AboutUpdateCard(
+                        updateState: updateState,
+                        releasesURL: releasesURL,
+                        onCheck: checkForUpdates
+                    )
+
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 14)], spacing: 14) {
                         AboutInfoCard(title: "Platform", value: "macOS 26+", systemImage: "macwindow")
-                        AboutInfoCard(title: "Privacy", value: "Local data", systemImage: "lock.shield")
+                        AboutInfoCard(title: "Data", value: "Stored locally", systemImage: "lock.shield")
+                        AboutInfoCard(title: "Mode", value: "Home and client scans", systemImage: "network")
                     }
 
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 14)], spacing: 14) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 14)], spacing: 14) {
                         AboutLinkButton(
                             title: "GitHub",
-                            subtitle: "hillaliy/LanGuard",
+                            subtitle: "Source code and releases",
                             icon: .github,
                             tint: .primary,
                             url: projectURL
@@ -65,25 +77,215 @@ struct AboutView: View {
                             url: donationURL
                         )
                     }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        AboutFeatureRow(systemImage: "network", text: "Discovers local network devices")
-                        AboutFeatureRow(systemImage: "clock.arrow.circlepath", text: "Tracks scan history and device changes")
-                        AboutFeatureRow(systemImage: "exclamationmark.shield", text: "Highlights unknown and higher-risk devices")
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(28)
-                .frame(maxWidth: 900)
-                .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(.quaternary)
-                }
+                .frame(maxWidth: 820)
             }
-            .padding(32)
+            .padding(.horizontal, 34)
+            .padding(.vertical, 34)
             .frame(maxWidth: .infinity, alignment: .center)
         }
+    }
+
+    private func checkForUpdates() {
+        updateState = .checking
+
+        Task {
+            do {
+                let result = try await VersionUpdateChecker.check(currentVersion: AppVersion.current)
+                await MainActor.run {
+                    updateState = result.isUpdateAvailable
+                        ? .updateAvailable(version: result.latestVersion, url: result.releaseURL)
+                        : .upToDate(version: result.latestVersion)
+                }
+            } catch {
+                await MainActor.run {
+                    updateState = .failed("Could not reach GitHub Releases.")
+                }
+            }
+        }
+    }
+}
+
+private enum AboutUpdateState: Equatable {
+    case idle
+    case checking
+    case upToDate(version: String)
+    case updateAvailable(version: String, url: URL)
+    case failed(String)
+
+    var title: String {
+        switch self {
+        case .idle:
+            "Check for updates"
+        case .checking:
+            "Checking GitHub Releases"
+        case .upToDate:
+            "LanGuard is up to date"
+        case .updateAvailable:
+            "New version available"
+        case .failed:
+            "Update check failed"
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .idle:
+            "Compare this app with the latest release on GitHub."
+        case .checking:
+            "Looking for the newest LanGuard release."
+        case .upToDate(let version):
+            "v\(version) is the latest release."
+        case .updateAvailable(let version, _):
+            "v\(version) is available."
+        case .failed(let message):
+            message
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .idle:
+            "arrow.triangle.2.circlepath"
+        case .checking:
+            "clock"
+        case .upToDate:
+            "checkmark.seal"
+        case .updateAvailable:
+            "arrow.down.circle"
+        case .failed:
+            "exclamationmark.triangle"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .idle, .checking:
+            .blue
+        case .upToDate:
+            .green
+        case .updateAvailable:
+            .orange
+        case .failed:
+            .red
+        }
+    }
+}
+
+private struct AboutSummaryCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("About LanGuard")
+                .font(.title3.weight(.semibold))
+
+            Text("LanGuard discovers devices on your local network, keeps a local inventory, tracks scan changes, and highlights unknown or risky devices without sending your device list to a server.")
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
+                AboutFeaturePill(systemImage: "desktopcomputer", text: "Device inventory")
+                AboutFeaturePill(systemImage: "clock.arrow.circlepath", text: "Scan history")
+                AboutFeaturePill(systemImage: "exclamationmark.shield", text: "Risk badges")
+                AboutFeaturePill(systemImage: "person.crop.circle", text: "Guest scan")
+            }
+        }
+        .padding(22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(.quaternary)
+        }
+    }
+}
+
+private struct AboutUpdateCard: View {
+    let updateState: AboutUpdateState
+    let releasesURL: URL
+    let onCheck: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: updateState.icon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(updateState.tint)
+                    .frame(width: 38, height: 38)
+                    .background(updateState.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 11))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(updateState.title)
+                        .font(.headline)
+                    Text(updateState.message)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 12)
+
+                if case .checking = updateState {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    onCheck()
+                } label: {
+                    Label("Check for Updates", systemImage: "arrow.triangle.2.circlepath")
+                }
+                .disabled(updateState == .checking)
+
+                Link(destination: updateReleaseURL) {
+                    Label(updateReleaseTitle, systemImage: "arrow.up.right.square")
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(.quaternary)
+        }
+    }
+
+    private var updateReleaseURL: URL {
+        if case .updateAvailable(_, let url) = updateState {
+            return url
+        }
+
+        return releasesURL
+    }
+
+    private var updateReleaseTitle: String {
+        if case .updateAvailable = updateState {
+            return "Open Release"
+        }
+
+        return "All Releases"
+    }
+}
+
+private struct AboutFeaturePill: View {
+    let systemImage: String
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: systemImage)
+            .font(.callout.weight(.medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.background, in: RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(.quaternary)
+            }
     }
 }
 
@@ -118,7 +320,7 @@ private struct AboutLinkButton: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.background, in: RoundedRectangle(cornerRadius: 14))
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
             .overlay {
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(.quaternary)
@@ -182,22 +384,11 @@ private struct AboutInfoCard: View {
             Spacer(minLength: 0)
         }
         .padding(12)
-        .background(.background, in: RoundedRectangle(cornerRadius: 14))
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
         .overlay {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(.quaternary)
         }
-    }
-}
-
-private struct AboutFeatureRow: View {
-    let systemImage: String
-    let text: String
-
-    var body: some View {
-        Label(text, systemImage: systemImage)
-            .font(.callout)
-            .foregroundStyle(.secondary)
     }
 }
 
