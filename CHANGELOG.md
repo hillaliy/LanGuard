@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.17 - 2026-08-01
+
+- Redesigned the native macOS About page with richer project details, support links, and a manual update check.
+- Added GitHub release version checking for the native macOS app.
+- Added icons to the macOS menu bar status items and quit action.
+
 ## 1.0.16 - 2026-07-30
 
 - Fixed native macOS notification registration by signing the packaged app bundle with the stable LanGuard bundle identifier.

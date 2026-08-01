@@ -46,18 +46,22 @@ private struct LanGuardMenuBarView: View {
 
         Divider()
 
-        Text("Devices: \(appModel.devices.count)")
-        Text("Online: \(appModel.onlineCount)")
-        Text("Open ports: \(appModel.openPortCount)")
+        Label("Devices: \(appModel.devices.count)", systemImage: "desktopcomputer")
+        Label("Online: \(appModel.onlineCount)", systemImage: "wifi")
+        Label("Offline: \(offlineCount)", systemImage: "wifi.slash")
+        Label("Unknown: \(appModel.unknownCount)", systemImage: "questionmark.circle")
+        Label("Open ports: \(appModel.openPortCount)", systemImage: "point.3.connected.trianglepath.dotted")
 
         if let latestScan = appModel.latestScan {
-            Text("Last scan: \(title(for: latestScan.status))")
+            Label("Last scan: \(title(for: latestScan.status))", systemImage: "clock.arrow.circlepath")
         }
 
         Divider()
 
-        Button("Quit LanGuard") {
+        Button {
             NSApp.terminate(nil)
+        } label: {
+            Label("Quit LanGuard", systemImage: "power")
         }
         .keyboardShortcut("q")
     }
@@ -65,6 +69,10 @@ private struct LanGuardMenuBarView: View {
     private func showMainWindow() {
         openWindow(id: "main")
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private var offlineCount: Int {
+        appModel.devices.filter { $0.status == .offline }.count
     }
 
     private func title(for status: ScanRecord.Status) -> String {
