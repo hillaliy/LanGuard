@@ -44,6 +44,7 @@ enum DeviceMerger {
             }
             merged.vendor = device.vendor ?? (MACVendorResolver.isLocallyAdministered(device.macAddress) ? nil : previous.vendor)
             merged.role = previous.role
+            merged.room = previous.room
             merged.isKnown = previous.isKnown
             merged.firstSeen = previous.firstSeen
             merged.status = .online
@@ -100,6 +101,7 @@ enum DeviceMerger {
             current.status = latest.status
             current.risk = latest.risk
             current.role = current.role ?? latest.role
+            current.room = current.room ?? latest.room
             current.isKnown = current.isKnown || latest.isKnown
             current.isGateway = current.isGateway || latest.isGateway
             current.openPorts = Array(Set(current.openPorts).union(latest.openPorts)).sorted()

@@ -7,6 +7,8 @@ struct SettingsView: View {
     @State private var defaultScanRange = AppSettings.default.defaultScanRange
     @State private var scanIntervalMinutes = AppSettings.default.scanIntervalMinutes
     @State private var tcpPorts = AppSettings.default.defaultPortsText
+    @State private var rooms = AppSettings.default.rooms
+    @State private var newRoomName = ""
     @State private var scheduledScanningEnabled = AppSettings.default.scheduledScanningEnabled
     @State private var newDeviceNotificationsEnabled = AppSettings.default.newDeviceNotificationsEnabled
     @State private var riskyPortNotificationsEnabled = AppSettings.default.riskyPortNotificationsEnabled
@@ -38,6 +40,41 @@ struct SettingsView: View {
                     TextField("TCP ports", text: $tcpPorts, axis: .vertical)
                         .lineLimit(2...4)
                         .textFieldStyle(.roundedBorder)
+                }
+
+                Section("Rooms") {
+                    Text("Create rooms to organize devices and filter the inventory.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+
+                    HStack {
+                        TextField("Room name", text: $newRoomName)
+                            .textFieldStyle(.roundedBorder)
+
+                        Button("Add", systemImage: "plus") {
+                            addRoom()
+                        }
+                        .disabled(newRoomName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+
+                    if rooms.isEmpty {
+                        Text("No rooms configured yet.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(rooms, id: \.self) { room in
+                            HStack {
+                                Text(room)
+                                Spacer()
+                                Button(role: .destructive) {
+                                    removeRoom(room)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.borderless)
+                                .help("Remove room")
+                            }
+                        }
+                    }
                 }
 
                 Section("System") {
@@ -86,7 +123,7 @@ struct SettingsView: View {
                 }
 
                 Section("Device Inventory") {
-                    Text("Export or import device names, icons, vendors, IP addresses, MAC addresses, and open ports.")
+                    Text("Export or import device names, icons, rooms, vendors, IP addresses, MAC addresses, and open ports.")
                         .foregroundStyle(.secondary)
 
                     HStack {
@@ -203,7 +240,8 @@ struct SettingsView: View {
             newDeviceNotificationsEnabled: newDeviceNotificationsEnabled,
             riskyPortNotificationsEnabled: riskyPortNotificationsEnabled,
             cloudBackupEnabled: cloudBackupEnabled,
-            cloudBackupFolderPath: backupPath.isEmpty ? nil : backupPath
+            cloudBackupFolderPath: backupPath.isEmpty ? nil : backupPath,
+            rooms: rooms
         ).normalized)
         apply(appModel.settings)
         validationMessage = nil
@@ -221,11 +259,28 @@ struct SettingsView: View {
         defaultScanRange = settings.defaultScanRange
         scanIntervalMinutes = settings.scanIntervalMinutes
         tcpPorts = settings.portsText
+        rooms = settings.rooms
         scheduledScanningEnabled = settings.scheduledScanningEnabled
         newDeviceNotificationsEnabled = settings.newDeviceNotificationsEnabled
         riskyPortNotificationsEnabled = settings.riskyPortNotificationsEnabled
         cloudBackupEnabled = settings.cloudBackupEnabled
         cloudBackupFolderPath = settings.cloudBackupFolderPath ?? ""
+    }
+
+    private func addRoom() {
+        let value = newRoomName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty,
+              !rooms.contains(where: { $0.caseInsensitiveCompare(value) == .orderedSame }) else {
+            return
+        }
+
+        rooms.append(value)
+        rooms.sort { $0.localizedStandardCompare($1) == .orderedAscending }
+        newRoomName = ""
+    }
+
+    private func removeRoom(_ room: String) {
+        rooms.removeAll { $0 == room }
     }
 
     private func exportInventory() {

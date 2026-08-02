@@ -12,6 +12,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
     var status: DeviceStatus
     var risk: DeviceRisk
     var role: DeviceRole?
+    var room: String?
     var isKnown: Bool
     var isGateway: Bool
     var openPorts: [Int]
@@ -31,6 +32,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         status: DeviceStatus = .unknown,
         risk: DeviceRisk = .low,
         role: DeviceRole? = nil,
+        room: String? = nil,
         isKnown: Bool = false,
         isGateway: Bool = false,
         openPorts: [Int] = [],
@@ -49,6 +51,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         self.status = status
         self.risk = risk
         self.role = role
+        self.room = room
         self.isKnown = isKnown
         self.isGateway = isGateway
         self.openPorts = openPorts.sorted()
@@ -69,6 +72,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         case status
         case risk
         case role
+        case room
         case isKnown
         case isGateway
         case openPorts
@@ -90,6 +94,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         status = try container.decodeIfPresent(DeviceStatus.self, forKey: .status) ?? .unknown
         risk = try container.decodeIfPresent(DeviceRisk.self, forKey: .risk) ?? .low
         role = try container.decodeIfPresent(DeviceRole.self, forKey: .role)
+        room = try container.decodeIfPresent(String.self, forKey: .room)
         isKnown = try container.decodeIfPresent(Bool.self, forKey: .isKnown) ?? false
         isGateway = try container.decodeIfPresent(Bool.self, forKey: .isGateway) ?? false
         openPorts = try container.decodeIfPresent([Int].self, forKey: .openPorts) ?? []

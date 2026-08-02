@@ -43,6 +43,7 @@ struct DeviceInventoryItem: Codable {
     var icon: String?
     var secondaryIcon: String?
     var role: String?
+    var room: String?
     var known: Bool
     var isGateway: Bool
     var status: String?
@@ -60,6 +61,7 @@ struct DeviceInventoryItem: Codable {
         self.icon = device.iconName
         self.secondaryIcon = device.secondaryIconName
         self.role = device.role?.rawValue
+        self.room = device.room
         self.known = device.isKnown
         self.isGateway = device.isGateway
         self.status = device.status.rawValue
@@ -100,6 +102,7 @@ struct DeviceInventoryItem: Codable {
         let importedIcon = normalizedText(icon) ?? existing?.iconName
         let importedSecondaryIcon = normalizedText(secondaryIcon) ?? existing?.secondaryIconName
         let importedRole = normalizedRole ?? existing?.role
+        let importedRoom = normalizedText(room) ?? existing?.room
 
         return NetworkDevice(
             id: normalizedMAC,
@@ -113,6 +116,7 @@ struct DeviceInventoryItem: Codable {
             status: deviceStatus,
             risk: deviceRisk,
             role: importedRole,
+            room: importedRoom,
             isKnown: known,
             isGateway: isGateway,
             openPorts: normalizedPorts,
@@ -152,6 +156,7 @@ struct DeviceInventoryItem: Codable {
         case icon
         case secondaryIcon = "secondary_icon"
         case role
+        case room
         case known
         case isGateway = "is_gateway"
         case status

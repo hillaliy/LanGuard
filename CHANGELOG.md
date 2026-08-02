@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.18 - 2026-08-02
+
+- Added native macOS room support for devices, settings, import/export, filtering, and grouping views.
+- Improved the macOS Devices page compact layout so search, filters, sorting, and the sidebar behave better in small windows.
+- Preserved room assignments during device discovery merges.
+
 ## 1.0.17 - 2026-08-01
 
 - Redesigned the native macOS About page with richer project details, support links, and a manual update check.

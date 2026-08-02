@@ -4,6 +4,7 @@ struct ContentView: View {
     @State private var selectedSection: AppSection = .dashboard
     @State private var isSidebarCompact = false
     @State private var selectedDeviceRoleFilter: DeviceRole?
+    @State private var selectedDeviceRoomFilter: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -30,10 +31,20 @@ struct ContentView: View {
         case .dashboard:
             DashboardView()
         case .devices:
-            DevicesView(roleFilter: $selectedDeviceRoleFilter)
+            DevicesView(
+                roleFilter: $selectedDeviceRoleFilter,
+                roomFilter: $selectedDeviceRoomFilter
+            )
         case .grouping:
-            GroupingView { role in
-                selectedDeviceRoleFilter = role
+            GroupingView { selection in
+                switch selection {
+                case .role(let role):
+                    selectedDeviceRoleFilter = role
+                    selectedDeviceRoomFilter = nil
+                case .room(let room):
+                    selectedDeviceRoleFilter = nil
+                    selectedDeviceRoomFilter = room
+                }
                 selectedSection = .devices
             }
         case .guestScan:
