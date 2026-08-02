@@ -1,8 +1,13 @@
 import SwiftUI
 
+enum DeviceRoomFilter {
+    static let unassigned = "__languard_unassigned__"
+}
+
 struct DevicesView: View {
     @Environment(AppModel.self) private var appModel
     @Binding private var roleFilter: DeviceRole?
+    @Binding private var roomFilter: String?
     @State private var editingDevice: NetworkDevice?
     @State private var searchText = ""
     @State private var statusFilter: DeviceStatus?
@@ -11,8 +16,12 @@ struct DevicesView: View {
     @State private var sortField: DeviceSortField = .name
     @State private var sortOrder: SortOrder = .forward
 
-    init(roleFilter: Binding<DeviceRole?> = .constant(nil)) {
+    init(
+        roleFilter: Binding<DeviceRole?> = .constant(nil),
+        roomFilter: Binding<String?> = .constant(nil)
+    ) {
         _roleFilter = roleFilter
+        _roomFilter = roomFilter
     }
 
     var body: some View {
@@ -36,7 +45,7 @@ struct DevicesView: View {
         }
         .padding(28)
         .sheet(item: $editingDevice) { device in
-            DeviceDetailView(device: device) { updatedDevice in
+            DeviceDetailView(device: device, rooms: appModel.settings.rooms) { updatedDevice in
                 appModel.updateDevice(updatedDevice)
                 editingDevice = nil
             } onDelete: { device in
@@ -128,6 +137,7 @@ struct DevicesView: View {
                         .frame(width: 320)
 
                     compactSortPicker
+                    compactRoomPicker
                     sortDirectionButton
                     clearFiltersButton
                 }
@@ -179,6 +189,7 @@ struct DevicesView: View {
         knownPicker
         riskPicker
         rolePicker
+        roomPicker
         sortPicker
         sortDirectionButton
         clearFiltersButton
@@ -262,6 +273,28 @@ struct DevicesView: View {
         .frame(width: 150)
     }
 
+    private var roomPicker: some View {
+        Picker("Room", selection: $roomFilter) {
+            Text("All Rooms").tag(String?.none)
+            Text("Unassigned").tag(String?.some(DeviceRoomFilter.unassigned))
+            ForEach(appModel.settings.rooms, id: \.self) { room in
+                Text(room).tag(String?.some(room))
+            }
+        }
+        .frame(width: 150)
+    }
+
+    private var compactRoomPicker: some View {
+        Picker("Room", selection: $roomFilter) {
+            Text("All Rooms").tag(String?.none)
+            Text("Unassigned").tag(String?.some(DeviceRoomFilter.unassigned))
+            ForEach(appModel.settings.rooms, id: \.self) { room in
+                Text(room).tag(String?.some(room))
+            }
+        }
+        .frame(width: 160)
+    }
+
     private var sortPicker: some View {
         Picker("Sort", selection: $sortField) {
             ForEach(DeviceSortField.allCases) { field in
@@ -299,6 +332,7 @@ struct DevicesView: View {
                 knownFilter = .all
                 riskFilter = nil
                 roleFilter = nil
+                roomFilter = nil
                 sortField = .name
                 sortOrder = .forward
             }
@@ -333,6 +367,15 @@ struct DevicesView: View {
                 return false
             }
 
+            if let roomFilter {
+                let currentRoom = device.room?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                if roomFilter == DeviceRoomFilter.unassigned {
+                    if !currentRoom.isEmpty { return false }
+                } else if currentRoom != roomFilter {
+                    return false
+                }
+            }
+
             switch knownFilter {
             case .all:
                 break
@@ -347,6 +390,7 @@ struct DevicesView: View {
                 device.name,
                 device.ipAddress,
                 device.macAddress,
+                device.room ?? "",
                 device.vendor ?? "",
                 device.hostname ?? "",
             ].contains { $0.localizedCaseInsensitiveContains(normalizedSearch) }
@@ -359,7 +403,7 @@ struct DevicesView: View {
     }
 
     private var hasActiveFilters: Bool {
-        !searchText.isEmpty || statusFilter != nil || knownFilter != .all || riskFilter != nil || roleFilter != nil || sortField != .name || sortOrder != .forward
+        !searchText.isEmpty || statusFilter != nil || knownFilter != .all || riskFilter != nil || roleFilter != nil || roomFilter != nil || sortField != .name || sortOrder != .forward
     }
 
     private func compare(_ left: NetworkDevice, _ right: NetworkDevice) -> Bool {
@@ -531,6 +575,7 @@ private extension DeviceRisk {
 
 private struct DeviceDetailView: View {
     let originalDevice: NetworkDevice
+    let rooms: [String]
     let onSave: (NetworkDevice) -> Void
     let onDelete: (NetworkDevice) -> Void
 
@@ -538,21 +583,25 @@ private struct DeviceDetailView: View {
     @State private var name: String
     @State private var isKnown: Bool
     @State private var role: DeviceRole?
+    @State private var room: String?
     @State private var iconName: String
     @State private var secondaryIconName: String
     @State private var isShowingDeleteConfirmation = false
 
     init(
         device: NetworkDevice,
+        rooms: [String] = [],
         onSave: @escaping (NetworkDevice) -> Void,
         onDelete: @escaping (NetworkDevice) -> Void
     ) {
         self.originalDevice = device
+        self.rooms = rooms
         self.onSave = onSave
         self.onDelete = onDelete
         _name = State(initialValue: device.name)
         _isKnown = State(initialValue: device.isKnown)
         _role = State(initialValue: device.role)
+        _room = State(initialValue: device.room)
         _iconName = State(initialValue: device.displayIconName)
         _secondaryIconName = State(initialValue: device.secondaryIconName ?? "")
     }
@@ -574,6 +623,13 @@ private struct DeviceDetailView: View {
                         ForEach(DeviceRole.alphabeticalCases) { role in
                             Text(role.title)
                                 .tag(DeviceRole?.some(role))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    Picker("Room", selection: $room) {
+                        Text("Unassigned").tag(String?.none)
+                        ForEach(rooms, id: \.self) { room in
+                            Text(room).tag(String?.some(room))
                         }
                     }
                     .pickerStyle(.menu)
@@ -618,6 +674,7 @@ private struct DeviceDetailView: View {
                     updatedDevice.name = trimmedName
                     updatedDevice.isKnown = isKnown
                     updatedDevice.role = role
+                    updatedDevice.room = room
                     updatedDevice.iconName = iconName
                     updatedDevice.secondaryIconName = sanitizedSecondaryIconName
                     updatedDevice.risk = DeviceRiskScorer.risk(

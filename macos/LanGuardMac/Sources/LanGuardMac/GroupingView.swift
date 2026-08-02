@@ -1,20 +1,44 @@
 import SwiftUI
 
+enum GroupingSelection {
+    case role(DeviceRole)
+    case room(String)
+}
+
+private enum GroupingMode: String, CaseIterable, Identifiable {
+    case rooms
+    case roles
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
 struct GroupingView: View {
     @Environment(AppModel.self) private var appModel
-    let onSelectGroup: (DeviceRole) -> Void
+    let onSelectGroup: (GroupingSelection) -> Void
+    @State private var mode: GroupingMode = .rooms
 
-    init(onSelectGroup: @escaping (DeviceRole) -> Void = { _ in }) {
+    init(onSelectGroup: @escaping (GroupingSelection) -> Void = { _ in }) {
         self.onSelectGroup = onSelectGroup
     }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                HeaderView(
-                    title: "Grouping",
-                    subtitle: "Devices grouped by role and network function."
-                )
+                HStack(alignment: .top) {
+                    HeaderView(
+                        title: "Grouping",
+                        subtitle: "Browse devices by room or role."
+                    )
+                    Spacer()
+                    Picker("Group by", selection: $mode) {
+                        ForEach(GroupingMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 220)
+                }
 
                 if appModel.devices.isEmpty {
                     emptyState
@@ -22,7 +46,11 @@ struct GroupingView: View {
                     LazyVStack(spacing: 18) {
                         ForEach(deviceGroups) { group in
                             DeviceGroupCard(group: group) {
-                                onSelectGroup(group.role)
+                                if let role = group.role {
+                                    onSelectGroup(.role(role))
+                                } else if let room = group.room {
+                                    onSelectGroup(.room(room))
+                                }
                             }
                         }
                     }
@@ -54,26 +82,56 @@ struct GroupingView: View {
     }
 
     private var deviceGroups: [DeviceGroup] {
-        let groupedDevices = Dictionary(grouping: appModel.devices, by: \.effectiveRole)
-
-        return groupedDevices.map { role, devices in
-            DeviceGroup(
-                role: role,
-                devices: devices.sorted(by: sortDevices)
-            )
+        switch mode {
+        case .roles:
+            let groupedDevices = Dictionary(grouping: appModel.devices, by: \.effectiveRole)
+            return groupedDevices.map { role, devices in
+                DeviceGroup(
+                    id: "role-\(role.rawValue)", title: role.title,
+                    iconName: role.iconName, role: role, room: nil,
+                    devices: devices.sorted(by: sortDevices)
+                )
+            }.sorted(by: sortGroups)
+        case .rooms:
+            let discoveredRooms = appModel.devices.compactMap { $0.room?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            let rooms = Set(appModel.settings.rooms).union(discoveredRooms).sorted {
+                $0.localizedStandardCompare($1) == .orderedAscending
+            }
+            var groups = rooms.map { room in
+                DeviceGroup(
+                    id: "room-\(room)", title: room,
+                    iconName: "rectangle.3.group", role: nil, room: room,
+                    devices: appModel.devices.filter {
+                        $0.room?.trimmingCharacters(in: .whitespacesAndNewlines) == room
+                    }.sorted(by: sortDevices)
+                )
+            }
+            let unassigned = appModel.devices.filter {
+                ($0.room?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "").isEmpty
+            }.sorted(by: sortDevices)
+            if !unassigned.isEmpty {
+                groups.append(DeviceGroup(
+                    id: "room-\(DeviceRoomFilter.unassigned)", title: "Unassigned",
+                    iconName: "square.dashed", role: nil,
+                    room: DeviceRoomFilter.unassigned, devices: unassigned
+                ))
+            }
+            return groups
         }
-        .sorted(by: sortGroups)
     }
 
     private func sortGroups(_ left: DeviceGroup, _ right: DeviceGroup) -> Bool {
-        let leftRank = groupRank(for: left.role)
-        let rightRank = groupRank(for: right.role)
+        guard let leftRole = left.role, let rightRole = right.role else {
+            return left.title.localizedStandardCompare(right.title) == .orderedAscending
+        }
+        let leftRank = groupRank(for: leftRole)
+        let rightRank = groupRank(for: rightRole)
 
         if leftRank != rightRank {
             return leftRank < rightRank
         }
 
-        return left.role.title.localizedStandardCompare(right.role.title) == .orderedAscending
+        return left.title.localizedStandardCompare(right.title) == .orderedAscending
     }
 
     private func groupRank(for role: DeviceRole) -> Int {
@@ -145,10 +203,12 @@ private struct GroupingIPv4AddressSortKey: Comparable {
 }
 
 private struct DeviceGroup: Identifiable {
-    let role: DeviceRole
+    let id: String
+    let title: String
+    let iconName: String
+    let role: DeviceRole?
+    let room: String?
     let devices: [NetworkDevice]
-
-    var id: String { role.rawValue }
     var onlineCount: Int { devices.filter { $0.status == .online }.count }
     var knownCount: Int { devices.filter(\.isKnown).count }
     var openPortCount: Int { devices.reduce(0) { $0 + $1.openPorts.count } }
@@ -161,10 +221,18 @@ private struct DeviceGroupCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 12) {
-                RoleIcon(role: group.role)
+                if let role = group.role {
+                    RoleIcon(role: role)
+                } else {
+                    Image(systemName: group.iconName)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.blue)
+                        .frame(width: 44, height: 44)
+                        .background(.blue.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                }
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(group.role.title)
+                    Text(group.title)
                         .font(.title3.weight(.bold))
                         .lineLimit(1)
 
@@ -190,7 +258,7 @@ private struct DeviceGroupCard: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-                .help("Show \(group.role.title.lowercased()) devices")
+                .help("Show \(group.title.lowercased()) devices")
             }
 
             HStack(spacing: 10) {

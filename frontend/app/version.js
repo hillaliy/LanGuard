@@ -4,6 +4,15 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.18',
+    date: '2026-08-02',
+    items: [
+      'Added native macOS room support for devices, settings, import/export, filtering, and grouping views.',
+      'Improved the macOS Devices page compact layout so search, filters, sorting, and the sidebar behave better in small windows.',
+      'Preserved room assignments during device discovery merges.',
+    ],
+  },
+  {
     version: '1.0.17',
     date: '2026-08-01',
     items: [
