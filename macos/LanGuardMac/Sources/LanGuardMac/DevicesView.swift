@@ -38,7 +38,7 @@ struct DevicesView: View {
 
                 ViewThatFits(in: .horizontal) {
                     devicesTable
-                        .frame(minWidth: 1280, maxWidth: .infinity)
+                        .frame(minWidth: 1360, maxWidth: .infinity)
                     compactDeviceList
                 }
             }
@@ -78,7 +78,16 @@ struct DevicesView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .width(min: 260, ideal: 360, max: 520)
+            .width(min: 240, ideal: 320, max: 480)
+
+            TableColumn("Room") { device in
+                let title = roomTitle(for: device)
+                Text(title)
+                    .foregroundStyle(title == "Unassigned" ? .secondary : .primary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .width(min: 110, ideal: 140, max: 190)
 
             TableColumn("IP") { device in
                 Text(device.ipAddress)
@@ -456,6 +465,11 @@ struct DevicesView: View {
         return ports.map(String.init).joined(separator: ", ")
     }
 
+    private func roomTitle(for device: NetworkDevice) -> String {
+        let room = device.room?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return room.isEmpty ? "Unassigned" : room
+    }
+
     private func riskColor(for risk: DeviceRisk) -> Color {
         switch risk {
         case .low:
@@ -514,6 +528,11 @@ private struct CompactDeviceRow: View {
     let portSummary: String
     let riskColor: Color
 
+    private var roomTitle: String {
+        let room = device.room?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return room.isEmpty ? "Unassigned" : room
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -536,22 +555,30 @@ private struct CompactDeviceRow: View {
                     .foregroundStyle(riskColor)
             }
 
-            HStack(spacing: 12) {
-                Text(device.status.title)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                Text(device.ipAddress)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                Text(device.macAddress)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(portSummary)
-                    .lineLimit(1)
-                Text(device.isKnown ? "Known" : "New")
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 12) {
+                    Text(device.status.title)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                    Text("Room: \(roomTitle)")
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(device.ipAddress)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                HStack(spacing: 12) {
+                    Text(device.macAddress)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(portSummary)
+                        .lineLimit(1)
+                    Text(device.isKnown ? "Known" : "New")
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
             .font(.caption)
             .foregroundStyle(.secondary)

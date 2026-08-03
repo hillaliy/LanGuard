@@ -18,10 +18,14 @@ class Device(models.Model):
         NONE = "none", "None"
 
     icon = models.CharField(max_length=255, default="plus")
+    secondary_icon = models.CharField(max_length=255, blank=True, default="")
     name = models.CharField(max_length=100, default="Device")
+    hostname = models.CharField(max_length=255, blank=True, default="")
     ip = models.GenericIPAddressField()
     mac = models.CharField(max_length=17, unique=True)
     vendor = models.CharField(max_length=255, blank=True, default="")
+    role = models.CharField(max_length=32, blank=True, default="device")
+    room = models.CharField(max_length=100, blank=True, default="")
     online = models.BooleanField(default=True)
     status = models.CharField(
         max_length=32,

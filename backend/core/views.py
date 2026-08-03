@@ -34,6 +34,7 @@ from .serializers import (
     ScanRunSerializer,
     UserManagementSerializer,
     UserSerializer,
+    device_risk,
 )
 from .models import (
     AppSettings,
@@ -55,6 +56,47 @@ from .scan import scan, validate_ip_range
 LOGGER = logging.getLogger(__name__)
 
 INVENTORY_FORMAT = "languard-device-inventory"
+
+DOCKER_TO_MAC_ICON_ALIASES = {
+    "unknown": "questionmark.circle",
+    "desktop": "desktopcomputer",
+    "router": "wifi.router",
+    "smart-hub": "point.3.connected.trianglepath.dotted",
+    "phone": "iphone",
+    "tablet": "ipad",
+    "smart-watch": "applewatch",
+    "laptop": "macbook",
+    "tv": "tv",
+    "streamer": "airplayvideo",
+    "security-camera": "camera",
+    "shutter": "window.shade.closed",
+    "blinds": "blinds.horizontal.closed",
+    "light": "lightbulb",
+    "led-strip": "light.strip.2",
+    "desk-lamp": "lamp.desk",
+    "ceiling-light": "lamp.ceiling",
+    "air-conditioner": "air.conditioner.horizontal",
+    "fan": "fan",
+    "ceiling-fan": "fan.ceiling",
+    "thermostat": "thermometer.medium",
+    "speaker": "homepod",
+    "printer": "printer",
+    "lock": "lock",
+    "robot-vacuum": "robotic.vacuum",
+    "power-strip": "poweroutlet.strip",
+    "server": "server.rack",
+}
+MAC_TO_DOCKER_ICON_ALIASES = {value: key for key, value in DOCKER_TO_MAC_ICON_ALIASES.items()}
+
+
+def export_inventory_icon(icon):
+    value = str(icon or "").strip()
+    return DOCKER_TO_MAC_ICON_ALIASES.get(value, value)
+
+
+def import_inventory_icon(icon, fallback="unknown"):
+    value = str(icon or "").strip()
+    return (MAC_TO_DOCKER_ICON_ALIASES.get(value, value)[:255] or fallback)
 
 
 DEVICE_ORDERING_FIELDS = {
@@ -182,7 +224,11 @@ def inventory_device_payload(device):
         "mac": device.mac,
         "vendor": device.vendor,
         "hostname": getattr(device, "hostname", ""),
-        "icon": device.icon,
+        "icon": export_inventory_icon(device.icon),
+        "secondary_icon": export_inventory_icon(getattr(device, "secondary_icon", "")),
+        "role": getattr(device, "role", "") or ("gateway" if device.is_gateway else "device"),
+        "room": getattr(device, "room", ""),
+        "risk": device_risk(device)["level"],
         "known": device.known,
         "is_gateway": device.is_gateway,
         "status": device.status,
@@ -258,6 +304,10 @@ def import_inventory_devices(payload):
             continue
 
         name = str(item.get("name") or "Device").strip()[:100] or "Device"
+        hostname = str(item.get("hostname") or item.get("hostName") or "").strip()[:255]
+        is_gateway = bool(item.get("is_gateway", item.get("isGateway", False)))
+        role = str(item.get("role") or ("gateway" if is_gateway else "device")).strip()[:32] or "device"
+        room = str(item.get("room") or "").strip()[:100]
         first_seen = parse_inventory_datetime(
             item.get("first_seen") or item.get("firstSeen"),
             now,
@@ -275,10 +325,16 @@ def import_inventory_devices(payload):
             "name": name,
             "ip": ip,
             "vendor": str(item.get("vendor") or "").strip()[:255],
-            "icon": str(item.get("icon") or item.get("iconName") or "unknown").strip()[:255]
-            or "unknown",
+            "icon": import_inventory_icon(item.get("icon") or item.get("iconName")),
+            "secondary_icon": import_inventory_icon(
+                item.get("secondary_icon") or item.get("secondaryIcon") or item.get("secondaryIconName"),
+                "",
+            ),
+            "hostname": hostname,
+            "role": role,
+            "room": room,
             "known": bool(item.get("known", item.get("isKnown", False))),
-            "is_gateway": bool(item.get("is_gateway", item.get("isGateway", False))),
+            "is_gateway": is_gateway,
             "online": device_status != Device.Status.OFFLINE,
             "status": device_status,
             "lastseen": last_seen,
@@ -302,6 +358,10 @@ def import_inventory_devices(payload):
                     "ip",
                     "vendor",
                     "icon",
+                    "secondary_icon",
+                    "hostname",
+                    "role",
+                    "room",
                     "known",
                     "is_gateway",
                     "online",

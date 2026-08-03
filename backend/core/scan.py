@@ -733,6 +733,12 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
         device.online = True
         device.lastseen = scan_started_at
         device.missed_scans = 0
+        if hostname and device.hostname != hostname[:255]:
+            device.hostname = hostname[:255]
+            update_fields.append("hostname")
+        if is_gateway and device.role != "gateway":
+            device.role = "gateway"
+            update_fields.append("role")
         set_device_status(
             device,
             Device.Status.ONLINE,
@@ -776,6 +782,8 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
             ip=ip,
             mac=mac,
             vendor=vendor_name,
+            hostname=hostname[:255] if hostname else "",
+            role="gateway" if is_gateway else "device",
             known=is_gateway,
             is_gateway=is_gateway,
             lastseen=scan_started_at,

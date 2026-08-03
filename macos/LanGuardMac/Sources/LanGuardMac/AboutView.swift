@@ -5,6 +5,7 @@ struct AboutView: View {
     private let donationURL = URL(string: "https://www.paypal.me/hillaliy")!
     private let releasesURL = URL(string: "https://github.com/hillaliy/LanGuard/releases")!
 
+    @Environment(AppModel.self) private var appModel
     @State private var updateState: AboutUpdateState = .idle
 
     var body: some View {
@@ -84,25 +85,50 @@ struct AboutView: View {
             .padding(.vertical, 34)
             .frame(maxWidth: .infinity, alignment: .center)
         }
+        .onAppear {
+            syncUpdateStateFromSettings()
+        }
+        .onChange(of: appModel.settings.versionUpdate) { _, versionUpdate in
+            guard updateState != .checking else { return }
+            updateState = AboutUpdateState(versionUpdate)
+        }
     }
 
     private func checkForUpdates() {
         updateState = .checking
 
         Task {
-            do {
-                let result = try await VersionUpdateChecker.check(currentVersion: AppVersion.current)
-                await MainActor.run {
-                    updateState = result.isUpdateAvailable
-                        ? .updateAvailable(version: result.latestVersion, url: result.releaseURL)
-                        : .upToDate(version: result.latestVersion)
-                }
-            } catch {
-                await MainActor.run {
+            let result = await appModel.checkForUpdates()
+
+            await MainActor.run {
+                switch result {
+                case .success(let status):
+                    updateState = status.isUpdateAvailable
+                        ? .updateAvailable(version: status.latestVersion, url: status.releaseURL)
+                        : .upToDate(version: status.latestVersion)
+                case .failure:
                     updateState = .failed("Could not reach GitHub Releases.")
                 }
             }
         }
+    }
+
+    private func syncUpdateStateFromSettings() {
+        guard updateState != .checking else { return }
+        updateState = AboutUpdateState(appModel.settings.versionUpdate)
+    }
+}
+
+private extension AboutUpdateState {
+    init(_ versionUpdate: AppVersionUpdate?) {
+        guard let versionUpdate else {
+            self = .idle
+            return
+        }
+
+        self = versionUpdate.isUpdateAvailable
+            ? .updateAvailable(version: versionUpdate.latestVersion, url: versionUpdate.releaseURL)
+            : .upToDate(version: versionUpdate.latestVersion)
     }
 }
 

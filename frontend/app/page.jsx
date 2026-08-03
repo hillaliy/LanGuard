@@ -996,12 +996,12 @@ function DeviceField({ label, value, editable = false, required = false, onChang
   );
 }
 
-function DeviceIconPicker({ value, onChange }) {
+function DeviceIconPicker({ value, onChange, label = 'Icon' }) {
   const selectedIcon = normalizeDeviceIcon(value);
 
   return (
     <Box className="device-field icon-picker-field">
-      <Text size="xs" c="dimmed">Icon</Text>
+      <Text size="xs" c="dimmed">{label}</Text>
       <div className="icon-picker-grid">
         {deviceIconOptions.map((option) => {
           const Icon = option.icon;
@@ -1027,7 +1027,11 @@ function DeviceIconPicker({ value, onChange }) {
 
 function DeviceModal({ device, opened, onClose, onSaved, timeZone }) {
   const [icon, setIcon] = useState('');
+  const [secondaryIcon, setSecondaryIcon] = useState('');
   const [name, setName] = useState('');
+  const [hostname, setHostname] = useState('');
+  const [role, setRole] = useState('device');
+  const [room, setRoom] = useState('');
   const [known, setKnown] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -1036,7 +1040,11 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone }) {
   useEffect(() => {
     if (device) {
       setIcon(device.icon || '');
+      setSecondaryIcon(device.secondary_icon || '');
       setName(device.name || '');
+      setHostname(device.hostname || '');
+      setRole(device.role || 'device');
+      setRoom(device.room || '');
       setKnown(Boolean(device.known));
       setError('');
     }
@@ -1053,7 +1061,11 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone }) {
         method: 'PUT',
         body: {
           icon,
+          secondary_icon: secondaryIcon || '',
           name,
+          role,
+          room,
+          hostname,
           known,
         },
       });
@@ -1131,7 +1143,18 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone }) {
             label="MAC address"
             value={device?.mac || '-'}
           />
+          <DeviceField label="Hostname" value={hostname || '-'} />
+          <DeviceField label="Room" value={room} editable onChange={setRoom} />
+          <Box className="device-field">
+            <Text size="xs" c="dimmed">Role</Text>
+            <select className="device-field-input" value={role} onChange={(event) => setRole(event.currentTarget.value)}>
+              {['device', 'gateway', 'router', 'hub', 'camera', 'server', 'controller', 'other'].map((value) => (
+                <option key={value} value={value}>{value.replace(/-/g, ' ')}</option>
+              ))}
+            </select>
+          </Box>
           <DeviceIconPicker value={icon} onChange={setIcon} />
+          <DeviceIconPicker label="Secondary icon" value={secondaryIcon} onChange={setSecondaryIcon} />
         </SimpleGrid>
 
         <Group>
@@ -2402,6 +2425,8 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           onChange={setDeviceOrdering}
                           className="device-name-cell"
                         />
+                        <Table.Th className="device-room-cell">Room</Table.Th>
+                        <Table.Th className="device-role-cell">Role</Table.Th>
                         <SortableHeader
                           field="ip"
                           label="IP"
@@ -2440,6 +2465,8 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                               </span>
                             </Group>
                           </Table.Td>
+                          <Table.Td className="device-room-cell">{device.room || '-'}</Table.Td>
+                          <Table.Td className="device-role-cell">{device.role || 'device'}</Table.Td>
                           <Table.Td className="device-ip-cell">{device.ip}</Table.Td>
                           <Table.Td className="device-mac-cell">{device.mac}</Table.Td>
                           <Table.Td className="device-ports-cell">
@@ -2504,6 +2531,14 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           <Box>
                             <Text size="xs" c="dimmed">Last seen</Text>
                             <Text size="sm">{formatDate(device.lastseen, displayTimeZone)}</Text>
+                          </Box>
+                          <Box className="device-mobile-wide">
+                            <Text size="xs" c="dimmed">Room</Text>
+                            <Text size="sm">{device.room || '-'}</Text>
+                          </Box>
+                          <Box className="device-mobile-wide">
+                            <Text size="xs" c="dimmed">Role</Text>
+                            <Text size="sm">{device.role || 'device'}</Text>
                           </Box>
                           <Box className="device-mobile-wide">
                             <Text size="xs" c="dimmed">MAC</Text>
