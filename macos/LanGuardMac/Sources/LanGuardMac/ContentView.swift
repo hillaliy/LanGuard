@@ -1,26 +1,60 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
+    @Environment(AppModel.self) private var appModel
     @State private var selectedSection: AppSection = .dashboard
     @State private var isSidebarCompact = false
     @State private var selectedDeviceRoleFilter: DeviceRole?
     @State private var selectedDeviceRoomFilter: String?
+    @State private var dismissedUpdateVersion: String?
 
     var body: some View {
-        HStack(spacing: 0) {
-            AppSidebar(
-                selectedSection: $selectedSection,
-                isCompact: $isSidebarCompact
-            )
-            .fixedSize(horizontal: true, vertical: false)
-            .layoutPriority(1)
+        ZStack {
+            HStack(spacing: 0) {
+                AppSidebar(
+                    selectedSection: $selectedSection,
+                    isCompact: $isSidebarCompact
+                )
+                .fixedSize(horizontal: true, vertical: false)
+                .layoutPriority(1)
 
-            Divider()
+                Divider()
 
-            selectedContent
-                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-                .layoutPriority(0)
+                selectedContent
+                    .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                    .layoutPriority(0)
+            }
+
+            if let update = appModel.settings.versionUpdate,
+               update.isUpdateAvailable,
+               dismissedUpdateVersion != update.latestVersion {
+                Color.black.opacity(0.28).ignoresSafeArea()
+                VStack(spacing: 14) {
+                    Image(systemName: "shield.lefthalf.filled.badge.checkmark")
+                        .font(.system(size: 42))
+                        .foregroundStyle(.blue)
+                    Text("LanGuard")
+                        .font(.title2.weight(.semibold))
+                    Text("A new version is available")
+                        .font(.headline)
+                    Text("Version \(update.latestVersion) is ready. Click below to download the new version.")
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Button("Later") { dismissedUpdateVersion = update.latestVersion }
+                        Button("Download update") {
+                            NSWorkspace.shared.open(update.releaseURL)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding(28)
+                .frame(width: 380)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+                .shadow(radius: 24)
+            }
         }
         .frame(minWidth: 780, minHeight: 640)
     }

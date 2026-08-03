@@ -157,6 +157,29 @@ final class AppModel {
         }
     }
 
+    func runInitialVersionCheckIfNeeded() {
+        guard !settings.didRunInitialVersionCheck else { return }
+
+        settings.didRunInitialVersionCheck = true
+        saveCurrentState()
+
+        Task { [weak self] in
+            _ = await self?.checkForUpdates()
+        }
+    }
+
+    @discardableResult
+    func checkForUpdates() async -> Result<VersionUpdateStatus, Error> {
+        do {
+            let status = try await VersionUpdateChecker.check(currentVersion: AppVersion.current)
+            settings.versionUpdate = AppVersionUpdate(status: status)
+            saveCurrentState()
+            return .success(status)
+        } catch {
+            return .failure(error)
+        }
+    }
+
     func updateDevice(_ updatedDevice: NetworkDevice) {
         guard let index = devices.firstIndex(where: { $0.id == updatedDevice.id }) else {
             return
@@ -172,7 +195,10 @@ final class AppModel {
     }
 
     func updateSettings(_ updatedSettings: AppSettings) {
-        settings = updatedSettings
+        var normalizedSettings = updatedSettings.normalized
+        normalizedSettings.didRunInitialVersionCheck = settings.didRunInitialVersionCheck
+        normalizedSettings.versionUpdate = settings.versionUpdate
+        settings = normalizedSettings
         saveCurrentState()
         configureScheduledScanning()
     }
@@ -240,6 +266,7 @@ final class AppModel {
                 settings = snapshot.settings
                 didLoadSavedState = true
                 configureScheduledScanning()
+                runInitialVersionCheckIfNeeded()
                 lastErrorMessage = nil
             } catch {
                 lastErrorMessage = "Could not load saved LanGuard data: \(error.localizedDescription)"

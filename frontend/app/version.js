@@ -4,7 +4,7 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
-    version: '1.0.18',
+    version: '1.0.19',
     date: '2026-08-02',
     items: [
       'Added native macOS room support for devices, settings, import/export, filtering, and grouping views.',

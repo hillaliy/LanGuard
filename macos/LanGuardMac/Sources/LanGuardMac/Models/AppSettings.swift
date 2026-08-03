@@ -10,6 +10,8 @@ struct AppSettings: Codable, Equatable, Sendable {
     var cloudBackupEnabled: Bool
     var cloudBackupFolderPath: String?
     var rooms: [String]
+    var didRunInitialVersionCheck: Bool
+    var versionUpdate: AppVersionUpdate?
 
     static let defaultPorts = [22, 53, 80, 443, 554, 631, 8080, 8443, 9100]
 
@@ -22,7 +24,9 @@ struct AppSettings: Codable, Equatable, Sendable {
         riskyPortNotificationsEnabled: true,
         cloudBackupEnabled: false,
         cloudBackupFolderPath: nil,
-        rooms: []
+        rooms: [],
+        didRunInitialVersionCheck: false,
+        versionUpdate: nil
     )
 
     var normalized: AppSettings {
@@ -38,7 +42,9 @@ struct AppSettings: Codable, Equatable, Sendable {
             riskyPortNotificationsEnabled: riskyPortNotificationsEnabled,
             cloudBackupEnabled: cloudBackupEnabled,
             cloudBackupFolderPath: normalizedBackupPath?.isEmpty == false ? normalizedBackupPath : nil,
-            rooms: Self.normalizedRooms(rooms)
+            rooms: Self.normalizedRooms(rooms),
+            didRunInitialVersionCheck: didRunInitialVersionCheck,
+            versionUpdate: versionUpdate
         )
     }
 
@@ -71,6 +77,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         case cloudBackupEnabled
         case cloudBackupFolderPath
         case rooms
+        case didRunInitialVersionCheck
+        case versionUpdate
     }
 
     init(
@@ -82,7 +90,9 @@ struct AppSettings: Codable, Equatable, Sendable {
         riskyPortNotificationsEnabled: Bool = Self.default.riskyPortNotificationsEnabled,
         cloudBackupEnabled: Bool = Self.default.cloudBackupEnabled,
         cloudBackupFolderPath: String? = Self.default.cloudBackupFolderPath,
-        rooms: [String] = Self.default.rooms
+        rooms: [String] = Self.default.rooms,
+        didRunInitialVersionCheck: Bool = Self.default.didRunInitialVersionCheck,
+        versionUpdate: AppVersionUpdate? = Self.default.versionUpdate
     ) {
         self.defaultScanRange = defaultScanRange
         self.scanIntervalMinutes = scanIntervalMinutes
@@ -93,6 +103,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         self.cloudBackupEnabled = cloudBackupEnabled
         self.cloudBackupFolderPath = cloudBackupFolderPath
         self.rooms = rooms
+        self.didRunInitialVersionCheck = didRunInitialVersionCheck
+        self.versionUpdate = versionUpdate
     }
 
     init(from decoder: Decoder) throws {
@@ -106,6 +118,8 @@ struct AppSettings: Codable, Equatable, Sendable {
         cloudBackupEnabled = try container.decodeIfPresent(Bool.self, forKey: .cloudBackupEnabled) ?? Self.default.cloudBackupEnabled
         cloudBackupFolderPath = try container.decodeIfPresent(String.self, forKey: .cloudBackupFolderPath) ?? Self.default.cloudBackupFolderPath
         rooms = try container.decodeIfPresent([String].self, forKey: .rooms) ?? Self.default.rooms
+        didRunInitialVersionCheck = try container.decodeIfPresent(Bool.self, forKey: .didRunInitialVersionCheck) ?? Self.default.didRunInitialVersionCheck
+        versionUpdate = try container.decodeIfPresent(AppVersionUpdate.self, forKey: .versionUpdate) ?? Self.default.versionUpdate
     }
 
     private static func normalizedPorts(_ ports: [Int]) -> [Int] {

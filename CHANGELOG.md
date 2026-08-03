@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.19 - 2026-08-03
+
+- Added Docker support for rooms, roles, hostnames, gateway metadata, and primary/secondary device icons.
+- Made device import/export compatible between the Docker and native macOS applications.
+- Added a centered native macOS update prompt with a direct release download action.
+
 ## 1.0.18 - 2026-08-02
 
 - Added native macOS room support for devices, settings, import/export, filtering, and grouping views.
