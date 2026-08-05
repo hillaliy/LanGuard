@@ -12,6 +12,15 @@ struct LanGuardMacApp: App {
         }
         .windowStyle(.hiddenTitleBar)
 
+        Window("About LanGuard", id: "about") {
+            AboutView()
+                .environment(appModel)
+                .frame(minWidth: 320, idealWidth: 340, maxWidth: 380,
+                       minHeight: 340, idealHeight: 360, maxHeight: 390)
+        }
+        .defaultSize(width: 340, height: 360)
+        .windowResizability(.contentSize)
+
         MenuBarExtra {
             LanGuardMenuBarView()
                 .environment(appModel)
@@ -22,6 +31,9 @@ struct LanGuardMacApp: App {
 
         Settings {
             SettingsView()
+        }
+        .commands {
+            AboutCommands()
         }
     }
 }
@@ -35,6 +47,12 @@ private struct LanGuardMenuBarView: View {
             showMainWindow()
         } label: {
             Label("Show LanGuard", systemImage: "macwindow")
+        }
+
+        Button {
+            showAboutWindow()
+        } label: {
+            Label("About LanGuard", systemImage: "info.circle")
         }
 
         Button {
@@ -71,6 +89,11 @@ private struct LanGuardMenuBarView: View {
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    private func showAboutWindow() {
+        openWindow(id: "about")
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private var offlineCount: Int {
         appModel.devices.filter { $0.status == .offline }.count
     }
@@ -83,6 +106,19 @@ private struct LanGuardMenuBarView: View {
             "Completed"
         case .failed:
             "Failed"
+        }
+    }
+}
+
+private struct AboutCommands: Commands {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some Commands {
+        CommandGroup(replacing: .appInfo) {
+            Button("About LanGuard") {
+                openWindow(id: "about")
+                NSApp.activate(ignoringOtherApps: true)
+            }
         }
     }
 }
