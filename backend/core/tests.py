@@ -1,4 +1,5 @@
 from datetime import timedelta
+import socket
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
@@ -24,9 +25,11 @@ from .notifications import notify_event, retry_failed_notifications
 from .scan import (
     clear_stale_gateways,
     create_event,
+    clean_hostname,
     default_gateway_from_proc_route,
     discover_devices,
     guess_device_identity,
+    get_hostname,
     mark_missing_devices_offline,
     normalize_scan_ports,
     sync_discovered_device,
@@ -65,6 +68,18 @@ class ProductionSettingsTests(SimpleTestCase):
             False,
             ["languard.local", "192.168.1.10"],
         )
+
+
+class HostnameResolutionTests(SimpleTestCase):
+    def test_clean_hostname_normalizes_dns_name(self):
+        self.assertEqual(clean_hostname("living-room-device.local."), "living room device")
+
+    def test_clean_hostname_returns_blank_when_unavailable(self):
+        self.assertEqual(clean_hostname(""), "")
+
+    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    def test_get_hostname_returns_blank_when_reverse_dns_is_unavailable(self, _):
+        self.assertEqual(get_hostname("192.168.1.10"), "")
 
 
 class ApiDocsAccessTests(SimpleTestCase):
@@ -1603,6 +1618,47 @@ class ScanApiTests(TestCase):
         imported = Device.objects.get(mac="bb:bb:bb:bb:bb:bb")
         self.assertEqual(imported.name, "Camera")
         self.assertEqual(imported.ports.get().port, 554)
+
+    def test_device_inventory_import_accepts_macos_export_shape(self):
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "exported_at": 790000000,
+                "devices": [
+                    {
+                        "name": "Guest Sensor",
+                        "ip": "192.168.1.70",
+                        "mac": "AA-BB-CC-DD-EE-FF",
+                        "vendor": "Example",
+                        "hostname": "sensor.local",
+                        "icon": "thermometer.medium",
+                        "secondary_icon": "light.strip.2",
+                        "role": "sensor",
+                        "room": "Kitchen",
+                        "known": True,
+                        "is_gateway": False,
+                        "status": "online",
+                        "open_ports": [80, "443", 80],
+                        "first_seen": 790000000,
+                        "last_seen": 790000060,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        imported = Device.objects.get(mac="aa:bb:cc:dd:ee:ff")
+        self.assertEqual(imported.icon, "thermostat")
+        self.assertEqual(imported.secondary_icon, "led-strip")
+        self.assertEqual(imported.role, "sensor")
+        self.assertEqual(imported.room, "Kitchen")
+        self.assertEqual(
+            list(imported.ports.filter(open=True).values_list("port", flat=True)),
+            [80, 443],
+        )
 
     def test_scan_runs_endpoint_returns_history(self):
         response = self.client.get("/api/v1/scan/runs/")

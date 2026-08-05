@@ -29,6 +29,11 @@ func arpParserIgnoresInvalidLines() {
 }
 
 @Test
+func hostnameResolverRejectsInvalidAddress() {
+    #expect(HostnameResolver.resolve(ipAddress: "not-an-ip") == nil)
+}
+
+@Test
 func routeParserFindsDefaultGateway() {
     let output = """
        route to: default

@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.20',
+    date: '2026-08-05',
+    items: [
+      'Added hostname discovery to native macOS network scans and preserved known hostnames when reverse lookup is unavailable.',
+      'Improved Docker hostname lookup handling so unresolved names remain blank instead of producing misleading device names.',
+      'Improved Docker inventory import compatibility for macOS exports, including dates, booleans, MAC addresses, roles, and rooms.',
+      'Added room and role columns to the Docker device table.',
+    ],
+  },
+  {
     version: '1.0.19',
     date: '2026-08-02',
     items: [

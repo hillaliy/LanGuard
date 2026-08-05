@@ -281,36 +281,50 @@ textarea {
 }
 
 .device-name-cell {
-  width: 19%;
+  width: 18%;
+}
+
+.device-room-cell {
+  width: 9%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-role-cell {
+  width: 8%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .device-ip-cell {
-  width: 12%;
+  width: 11%;
   white-space: nowrap;
 }
 
 .device-mac-cell {
-  width: 16%;
+  width: 14%;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
 .device-ports-cell {
-  width: 12%;
+  width: 9%;
 }
 
 .device-risk-cell {
-  width: 8%;
+  width: 7%;
   white-space: nowrap;
 }
 
 .device-lastseen-cell {
-  width: 14%;
+  width: 9%;
   white-space: nowrap;
 }
 
 .device-known-cell {
-  width: 9%;
+  width: 5%;
   white-space: nowrap;
 }
 
