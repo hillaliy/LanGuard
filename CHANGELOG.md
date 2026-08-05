@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.21 - 2026-08-05
+
+- Refined the native macOS About window into a compact, centered layout.
+- Centered update status and clarified the update and release actions.
+- Added About LanGuard access from the app menu and menu bar.
+
 ## 1.0.20 - 2026-08-05
 
 - Added hostname discovery to native macOS network scans and preserved known hostnames when reverse lookup is unavailable.

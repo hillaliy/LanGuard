@@ -87,8 +87,6 @@ struct ContentView: View {
             ScanHistoryView()
         case .settings:
             SettingsView()
-        case .about:
-            AboutView()
         }
     }
 }
@@ -100,7 +98,6 @@ private enum AppSection: String, CaseIterable, Identifiable {
     case guestScan
     case scanHistory
     case settings
-    case about
 
     var id: String { rawValue }
 
@@ -112,7 +109,6 @@ private enum AppSection: String, CaseIterable, Identifiable {
         case .guestScan: "Guest Scan"
         case .scanHistory: "Scan History"
         case .settings: "Settings"
-        case .about: "About"
         }
     }
 
@@ -124,7 +120,6 @@ private enum AppSection: String, CaseIterable, Identifiable {
         case .guestScan: "person.crop.circle"
         case .scanHistory: "clock.arrow.circlepath"
         case .settings: "gearshape"
-        case .about: "info.circle"
         }
     }
 }
