@@ -152,16 +152,16 @@ def get_hostname(ip):
     try:
         hostname, _, _ = socket.gethostbyaddr(ip)
         return clean_hostname(hostname)
-    except socket.herror as e:
+    except (socket.herror, socket.gaierror, TimeoutError, OSError) as e:
         LOGGER.debug("Hostname lookup failed for %s: %s", ip, e)
-        return DEFAULT_DEVICE_NAME
+        return ""
 
 
 def clean_hostname(hostname):
     hostname = (hostname or "").strip().rstrip(".")
     if not hostname:
-        return DEFAULT_DEVICE_NAME
-    return hostname.split(".")[0].replace("-", " ").strip() or DEFAULT_DEVICE_NAME
+        return ""
+    return hostname.split(".")[0].replace("-", " ").strip()
 
 
 def short_vendor(vendor):

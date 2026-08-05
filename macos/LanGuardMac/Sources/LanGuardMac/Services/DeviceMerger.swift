@@ -43,6 +43,7 @@ enum DeviceMerger {
                 merged.secondaryIconName = device.secondaryIconName
             }
             merged.vendor = device.vendor ?? (MACVendorResolver.isLocallyAdministered(device.macAddress) ? nil : previous.vendor)
+            merged.hostname = preferredHostname(device.hostname, fallback: previous.hostname)
             merged.role = previous.role
             merged.room = previous.room
             merged.isKnown = previous.isKnown
@@ -95,7 +96,7 @@ enum DeviceMerger {
             current.ipAddress = latest.ipAddress
             current.macAddress = latest.macAddress
             current.vendor = latest.vendor ?? current.vendor
-            current.hostname = latest.hostname ?? current.hostname
+            current.hostname = preferredHostname(latest.hostname, fallback: current.hostname)
             current.iconName = latest.iconName ?? current.iconName
             current.secondaryIconName = latest.secondaryIconName ?? current.secondaryIconName
             current.status = latest.status
@@ -113,6 +114,11 @@ enum DeviceMerger {
         }
 
         return Array(devicesByID.values)
+    }
+
+    private static func preferredHostname(_ candidate: String?, fallback: String?) -> String? {
+        guard let candidate, !candidate.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return fallback }
+        return candidate
     }
 }
 

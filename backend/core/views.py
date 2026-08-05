@@ -2,7 +2,7 @@ import ipaddress
 import json
 import urllib.error
 import urllib.request
-from datetime import timezone as datetime_timezone
+from datetime import datetime, timezone as datetime_timezone
 
 from drf_spectacular.utils import OpenApiTypes, extend_schema, inline_serializer
 from rest_framework import status, generics, permissions
@@ -18,6 +18,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.http import JsonResponse
+from django.db import DatabaseError, IntegrityError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
@@ -240,10 +241,47 @@ def inventory_device_payload(device):
     }
 
 
+SWIFT_REFERENCE_DATE_OFFSET = 978307200
+
+
+def normalize_inventory_mac(value):
+    normalized = str(value or "").strip().lower().replace("-", ":")
+    parts = normalized.split(":")
+    if len(parts) != 6 or any(len(part) != 2 for part in parts):
+        return ""
+    try:
+        if any(int(part, 16) > 255 for part in parts):
+            return ""
+    except ValueError:
+        return ""
+    return ":".join(parts)
+
+
+def parse_inventory_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "on"}:
+            return True
+        if normalized in {"false", "0", "no", "off", ""}:
+            return False
+    return bool(value) if value is not None else default
+
+
 def parse_inventory_datetime(value, fallback):
-    if not value:
+    if value in (None, ""):
         return fallback
-    parsed = parse_datetime(str(value))
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            parsed = datetime.fromtimestamp(
+                float(value) + SWIFT_REFERENCE_DATE_OFFSET,
+                tz=datetime_timezone.utc,
+            )
+        except (OverflowError, OSError, TypeError, ValueError):
+            return fallback
+    else:
+        parsed = parse_datetime(str(value))
     if parsed is None:
         return fallback
     if timezone.is_naive(parsed):
@@ -291,7 +329,7 @@ def import_inventory_devices(payload):
             skipped += 1
             continue
 
-        mac = str(item.get("mac") or item.get("macAddress") or "").strip().lower()
+        mac = normalize_inventory_mac(item.get("mac") or item.get("macAddress"))
         ip = str(item.get("ip") or item.get("ipAddress") or "").strip()
         if not mac or not ip:
             skipped += 1
@@ -305,7 +343,7 @@ def import_inventory_devices(payload):
 
         name = str(item.get("name") or "Device").strip()[:100] or "Device"
         hostname = str(item.get("hostname") or item.get("hostName") or "").strip()[:255]
-        is_gateway = bool(item.get("is_gateway", item.get("isGateway", False)))
+        is_gateway = parse_inventory_bool(item.get("is_gateway", item.get("isGateway", False)))
         role = str(item.get("role") or ("gateway" if is_gateway else "device")).strip()[:32] or "device"
         room = str(item.get("room") or "").strip()[:100]
         first_seen = parse_inventory_datetime(
@@ -316,7 +354,7 @@ def import_inventory_devices(payload):
             item.get("last_seen") or item.get("lastSeen"),
             first_seen,
         )
-        raw_status = item.get("status")
+        raw_status = str(item.get("status") or "").strip().lower()
         device_status = (
             raw_status if raw_status in Device.Status.values else Device.Status.OFFLINE
         )
@@ -333,7 +371,7 @@ def import_inventory_devices(payload):
             "hostname": hostname,
             "role": role,
             "room": room,
-            "known": bool(item.get("known", item.get("isKnown", False))),
+            "known": parse_inventory_bool(item.get("known", item.get("isKnown", False))),
             "is_gateway": is_gateway,
             "online": device_status != Device.Status.OFFLINE,
             "status": device_status,
@@ -405,7 +443,28 @@ def inventory_export_response():
 
 
 def inventory_import_response(payload):
-    result = import_inventory_devices(payload)
+    try:
+        result = import_inventory_devices(payload)
+    except ValidationError:
+        raise
+    except (IntegrityError, DatabaseError):
+        LOGGER.exception("Inventory import failed because of a database error")
+        return Response(
+            {
+                "status": "ERROR",
+                "detail": "Inventory import failed because the database schema is out of date or the data is invalid. Run migrations and try again.",
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    except Exception:
+        LOGGER.exception("Inventory import failed")
+        return Response(
+            {
+                "status": "ERROR",
+                "detail": "Inventory import failed. Check the backend logs for details.",
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     return Response(
         {
             "status": "OK",
