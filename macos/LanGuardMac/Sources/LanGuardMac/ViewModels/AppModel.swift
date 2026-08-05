@@ -22,6 +22,7 @@ final class AppModel {
     var nextScheduledScanAt: Date?
     var lastErrorMessage: String?
     private var didLoadSavedState = false
+    private var didStartVersionCheck = false
 
     init(
         scanner: NetworkScanning = LocalNetworkScanner(),
@@ -158,10 +159,9 @@ final class AppModel {
     }
 
     func runInitialVersionCheckIfNeeded() {
-        guard !settings.didRunInitialVersionCheck else { return }
+        guard !didStartVersionCheck else { return }
 
-        settings.didRunInitialVersionCheck = true
-        saveCurrentState()
+        didStartVersionCheck = true
 
         Task { [weak self] in
             _ = await self?.checkForUpdates()
