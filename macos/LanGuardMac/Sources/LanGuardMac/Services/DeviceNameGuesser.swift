@@ -40,15 +40,6 @@ enum DeviceNameGuesser {
         }
 
         if let vendor {
-            if vendor == "Espressif" {
-                return "Espressif Smart Device"
-            }
-            if vendor == "Apple" {
-                return "Apple Device"
-            }
-            if vendor == "Xiaomi" {
-                return "Xiaomi Device"
-            }
             return "\(vendor) Device"
         }
 

@@ -286,6 +286,8 @@ def parse_inventory_datetime(value, fallback):
         return fallback
     if timezone.is_naive(parsed):
         parsed = timezone.make_aware(parsed, datetime_timezone.utc)
+    if not settings.USE_TZ:
+        return timezone.make_naive(parsed, datetime_timezone.utc)
     return parsed
 
 

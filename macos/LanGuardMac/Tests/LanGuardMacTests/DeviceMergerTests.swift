@@ -82,7 +82,7 @@ func deviceMergerCoalescesDuplicateDiscoveredDevices() {
         name: "Living Room TV",
         ipAddress: "192.168.0.52",
         macAddress: "90:dd:5d:b7:bd:01",
-        vendor: "Apple",
+        vendor: "Apple, Inc.",
         openPorts: [443],
         firstSeen: Date(timeIntervalSince1970: 120),
         lastSeen: Date(timeIntervalSince1970: 120)
@@ -94,7 +94,7 @@ func deviceMergerCoalescesDuplicateDiscoveredDevices() {
     #expect(result.newDevices.count == 1)
     #expect(result.devices.first?.name == "Living Room TV")
     #expect(result.devices.first?.ipAddress == "192.168.0.52")
-    #expect(result.devices.first?.vendor == "Apple")
+    #expect(result.devices.first?.vendor == "Apple, Inc.")
     #expect(result.devices.first?.openPorts == [80, 443])
 }
 
@@ -193,7 +193,7 @@ func deviceMergerRefreshesNameAndIconUntilDeviceIsKnown() {
         name: "Apple Camera",
         ipAddress: "192.168.0.51",
         macAddress: "90:dd:5d:b7:bd:01",
-        vendor: "Apple",
+        vendor: "Apple, Inc.",
         iconName: "camera",
         openPorts: [554]
     )
@@ -202,7 +202,135 @@ func deviceMergerRefreshesNameAndIconUntilDeviceIsKnown() {
 
     #expect(result.devices.first?.name == "Apple Camera")
     #expect(result.devices.first?.iconName == "camera")
-    #expect(result.devices.first?.vendor == "Apple")
+    #expect(result.devices.first?.vendor == "Apple, Inc.")
+}
+
+@Test
+func deviceMergerRefreshesReadOnlyNetworkDetailsForKnownDevices() {
+    let existing = NetworkDevice(
+        id: "90:dd:5d:b7:bd:01",
+        name: "Living Room TV",
+        ipAddress: "192.168.0.51",
+        macAddress: "90:dd:5d:b7:bd:01",
+        vendor: "Apple",
+        hostname: "living-room-tv",
+        isKnown: true
+    )
+    let discovered = NetworkDevice(
+        id: "90:dd:5d:b7:bd:01",
+        name: "Samsung TV",
+        ipAddress: "192.168.0.51",
+        macAddress: "90:dd:5d:b7:bd:01",
+        vendor: "Samsung",
+        hostname: "bedroom-tv"
+    )
+
+    let result = DeviceMerger.merge(existing: [existing], discovered: [discovered])
+
+    #expect(result.devices.first?.name == "Living Room TV")
+    #expect(result.devices.first?.vendor == "Samsung")
+    #expect(result.devices.first?.hostname == "bedroom tv")
+    #expect(result.devices.first?.isKnown == true)
+}
+
+@Test
+func deviceMergerUpdatesKnownCameraVendorFromLatestScan() {
+    let existing = NetworkDevice(
+        id: "bc:5e:33:b0:02:04",
+        name: "מצלמה 1",
+        ipAddress: "192.168.0.31",
+        macAddress: "bc:5e:33:b0:02:04",
+        vendor: "Apple",
+        isKnown: true,
+        openPorts: [80, 443, 554, 8443]
+    )
+    let discovered = NetworkDevice(
+        id: "bc:5e:33:b0:02:04",
+        name: "Hikvision Camera",
+        ipAddress: "192.168.0.31",
+        macAddress: "bc:5e:33:b0:02:04",
+        vendor: "Hikvision",
+        openPorts: [80, 443, 554, 8443]
+    )
+
+    let result = DeviceMerger.merge(existing: [existing], discovered: [discovered])
+
+    #expect(result.devices.first?.name == "מצלמה 1")
+    #expect(result.devices.first?.vendor == "Hikvision")
+    #expect(result.devices.first?.detectedRole == .camera)
+}
+
+@Test
+func deviceMergerReplacesStaleVendorWhenScanProvidesUpdatedVendor() {
+    let existing = NetworkDevice(
+        id: "90:dd:5d:b7:bd:01",
+        name: "Living Room Tablet",
+        ipAddress: "192.168.0.58",
+        macAddress: "90:dd:5d:b7:bd:01",
+        vendor: "Apple",
+        hostname: "old-hostname",
+        isKnown: true
+    )
+    let discovered = NetworkDevice(
+        id: "90:dd:5d:b7:bd:01",
+        name: "Samsung Device",
+        ipAddress: "192.168.0.58",
+        macAddress: "90:dd:5d:b7:bd:01",
+        vendor: "Samsung",
+        hostname: "new-hostname"
+    )
+
+    let result = DeviceMerger.merge(existing: [existing], discovered: [discovered])
+
+    #expect(result.devices.first?.name == "Living Room Tablet")
+    #expect(result.devices.first?.vendor == "Samsung")
+    #expect(result.devices.first?.hostname == "new hostname")
+}
+
+@Test
+func deviceMergerClearsStaleVendorWhenLatestScanHasNoVendor() {
+    let existing = NetworkDevice(
+        id: "00:11:22:33:44:55",
+        name: "Bedroom AC",
+        ipAddress: "192.168.0.70",
+        macAddress: "00:11:22:33:44:55",
+        vendor: "Apple, Inc.",
+        isKnown: true
+    )
+    let discovered = NetworkDevice(
+        id: "00:11:22:33:44:55",
+        name: "Unknown Device 4455",
+        ipAddress: "192.168.0.70",
+        macAddress: "00:11:22:33:44:55"
+    )
+
+    let result = DeviceMerger.merge(existing: [existing], discovered: [discovered])
+
+    #expect(result.devices.first?.name == "Bedroom AC")
+    #expect(result.devices.first?.vendor == nil)
+}
+
+@Test
+func deviceMergerClearsInvalidStoredHostname() {
+    let existing = NetworkDevice(
+        id: "00:11:22:33:44:55",
+        name: "Apple Watch",
+        ipAddress: "192.168.0.79",
+        macAddress: "00:11:22:33:44:55",
+        hostname: "0",
+        isKnown: true
+    )
+    let discovered = NetworkDevice(
+        id: "00:11:22:33:44:55",
+        name: "Unknown Device 4455",
+        ipAddress: "192.168.0.79",
+        macAddress: "00:11:22:33:44:55"
+    )
+
+    let result = DeviceMerger.merge(existing: [existing], discovered: [discovered])
+
+    #expect(result.devices.first?.name == "Apple Watch")
+    #expect(result.devices.first?.hostname == nil)
 }
 
 @Test

@@ -2,8 +2,10 @@ import Foundation
 
 enum DeviceProfiler {
     static func enrich(_ device: NetworkDevice) -> NetworkDevice {
-        let resolvedVendor = MACVendorResolver.vendor(for: device.macAddress)
-        let vendor = resolvedVendor ?? (MACVendorResolver.isLocallyAdministered(device.macAddress) ? nil : device.vendor)
+        let vendor = MACVendorResolver.preferredVendor(
+            macAddress: device.macAddress,
+            observedVendor: device.vendor
+        )
         let iconName = device.iconName ?? iconName(
             name: device.name,
             hostname: device.hostname,
@@ -45,7 +47,7 @@ enum DeviceProfiler {
             .compactMap { $0?.lowercased() }
             .joined(separator: " ")
 
-        if profileText.contains("deco") || profileText.contains("mesh") {
+        if profileText.contains("mesh") {
             return .meshRouter
         }
 
@@ -53,18 +55,12 @@ enum DeviceProfiler {
             || profileText.contains("gateway")
             || profileText.contains("access point")
             || profileText.contains("wifi ap")
-            || profileText.contains("wireless ap")
-            || profileText.contains("ubiquiti")
-            || profileText.contains("unifi") {
+            || profileText.contains("wireless ap") {
             return .router
         }
 
         if profileText.contains("hub")
-            || profileText.contains("bridge")
-            || profileText.contains("aqara")
-            || profileText.contains("lumi gateway")
-            || profileText.contains("hue bridge")
-            || profileText.contains("smartthings") {
+            || profileText.contains("bridge") {
             return .hub
         }
 
@@ -77,24 +73,21 @@ enum DeviceProfiler {
         }
 
         if profileText.contains("server")
-            || profileText.contains("raspberry pi")
             || profileText.contains("nas") {
             return .server
         }
 
-        if profileText.contains("macbook")
-            || profileText.contains("imac")
-            || profileText.contains("desktop")
+        if profileText.contains("desktop")
             || profileText.contains("computer")
             || profileText.contains("pc") {
             return .computer
         }
 
-        if profileText.contains("iphone") || profileText.contains("phone") {
+        if profileText.contains("phone") {
             return .phone
         }
 
-        if profileText.contains("ipad") || profileText.contains("tablet") {
+        if profileText.contains("tablet") {
             return .tablet
         }
 
@@ -102,23 +95,17 @@ enum DeviceProfiler {
             return .watch
         }
 
-        if profileText.contains("apple tv") || profileText.contains("tv") || profileText.contains("television") {
+        if profileText.contains("tv") || profileText.contains("television") {
             return .tv
         }
 
         if profileText.contains("streamer")
-            || profileText.contains("chromecast")
-            || profileText.contains("fire tv")
-            || profileText.contains("airplay") {
+            || profileText.contains("streaming") {
             return .streamer
         }
 
-        if profileText.contains("homepod")
-            || profileText.contains("speaker")
-            || profileText.contains("sonos")
-            || profileText.contains("echo")
-            || profileText.contains("alexa")
-            || profileText.contains("google home") {
+        if profileText.contains("speaker")
+            || profileText.contains("audio") {
             return .speaker
         }
 
@@ -127,9 +114,7 @@ enum DeviceProfiler {
             || profileText.contains("air conditioner")
             || profileText.contains("air-conditioning")
             || profileText.contains("aircon")
-            || profileText.contains("midea")
-            || profileText.contains("gree")
-            || profileText.contains("daikin") {
+            || profileText.contains("hvac") {
             return .climate
         }
 
@@ -156,18 +141,12 @@ enum DeviceProfiler {
 
         if profileText.contains("controller")
             || profileText.contains("control")
-            || profileText.contains("relay")
-            || profileText.contains("shelly")
-            || profileText.contains("switchbot") {
+            || profileText.contains("relay") {
             return .controller
         }
 
         if profileText.contains("vacuum")
-            || profileText.contains("roborock")
-            || profileText.contains("roomba")
-            || profileText.contains("irobot")
-            || profileText.contains("dreame")
-            || profileText.contains("ecovacs") {
+            || profileText.contains("robotic cleaner") {
             return .robotVacuum
         }
 
@@ -200,14 +179,9 @@ enum DeviceProfiler {
             .compactMap { $0?.lowercased() }
             .joined(separator: " ")
 
-        if profileText.contains("homepod")
-            || profileText.contains("smart speaker")
+        if profileText.contains("smart speaker")
             || profileText.contains("speaker")
-            || profileText.contains("sonos")
-            || profileText.contains("echo")
-            || profileText.contains("alexa")
-            || profileText.contains("nest audio")
-            || profileText.contains("google home") {
+            || profileText.contains("audio") {
             return "homepod"
         }
 
@@ -224,43 +198,29 @@ enum DeviceProfiler {
         if profileText.contains("robot vacuum")
             || profileText.contains("robotic vacuum")
             || profileText.contains("vacuum")
-            || profileText.contains("roborock")
-            || profileText.contains("roomba")
-            || profileText.contains("irobot")
-            || profileText.contains("dreame")
-            || profileText.contains("ecovacs")
-            || profileText.contains("deebot")
-            || profileText.contains("robovac") {
+            || profileText.contains("robotic cleaner") {
             return "robotic.vacuum"
         }
 
         if profileText.contains("hub")
-            || profileText.contains("bridge")
-            || profileText.contains("aqara hub")
-            || profileText.contains("lumi gateway")
-            || profileText.contains("hue bridge")
-            || profileText.contains("smartthings") {
+            || profileText.contains("bridge") {
             return "point.3.connected.trianglepath.dotted"
         }
 
         if profileText.contains("controller")
             || profileText.contains("control")
-            || profileText.contains("relay")
-            || profileText.contains("shelly")
-            || profileText.contains("switchbot") {
+            || profileText.contains("relay") {
             return "switch.2"
         }
 
-        if profileText.contains("thermostat") || profileText.contains("temperature") || profileText.contains("ecobee") {
+        if profileText.contains("thermostat") || profileText.contains("temperature") {
             return "thermometer.medium"
         }
 
         if profileText.contains("air conditioner")
             || profileText.contains("air-conditioning")
             || profileText.contains("aircon")
-            || profileText.contains("midea")
-            || profileText.contains("gree")
-            || profileText.contains("daikin") {
+            || profileText.contains("hvac") {
             return "air.conditioner.horizontal"
         }
 
@@ -307,19 +267,6 @@ enum DeviceProfiler {
             return "camera"
         }
 
-        switch vendor {
-        case "Apple":
-            return "apple.logo"
-        case "Google", "Amazon", "Hon Hai":
-            return "display"
-        case "TP-Link", "Ubiquiti":
-            return "wifi.router"
-        case "Espressif", "Xiaomi", "Aqara", "Lumi":
-            return "lightbulb"
-        case "Raspberry Pi":
-            return "server.rack"
-        default:
-            return DeviceIconCatalog.fallback
-        }
+        return DeviceIconCatalog.fallback
     }
 }

@@ -22,9 +22,38 @@ enum HostnameResolver {
 
         guard status == 0 else { return nil }
         let hostname = String(decoding: host.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+        return clean(hostname, ipAddress: ipAddress)
+    }
+
+    static func clean(_ hostname: String?, ipAddress: String? = nil) -> String? {
+        let cleaned = (hostname ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        guard !hostname.isEmpty, hostname != ipAddress, !hostname.contains("in-addr.arpa") else { return nil }
-        return hostname.split(separator: ".").first?.replacingOccurrences(of: "-", with: " ")
+        let lowered = cleaned.lowercased()
+        guard !cleaned.isEmpty,
+              cleaned != "?",
+              cleaned != ipAddress,
+              !cleaned.hasPrefix(";"),
+              !cleaned.allSatisfy(\.isNumber),
+              lowered != "in",
+              lowered != "internet",
+              lowered != "ptr",
+              lowered != "a",
+              lowered != "aaaa",
+              !lowered.contains("connection timed out"),
+              !lowered.contains("no servers could be reached"),
+              !lowered.contains("communications error"),
+              !lowered.contains("operation timed out"),
+              !lowered.contains("timed out"),
+              !lowered.contains("nxdomain"),
+              !lowered.contains("server can't find"),
+              !lowered.contains("not found"),
+              !lowered.contains("in-addr.arpa") else {
+            return nil
+        }
+        return cleaned
+            .split(separator: ".")
+            .first?
+            .replacingOccurrences(of: "-", with: " ")
     }
 }

@@ -45,7 +45,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         self.ipAddress = ipAddress
         self.macAddress = macAddress
         self.vendor = vendor
-        self.hostname = hostname
+        self.hostname = HostnameResolver.clean(hostname, ipAddress: ipAddress)
         self.iconName = iconName
         self.secondaryIconName = secondaryIconName
         self.status = status
@@ -88,7 +88,8 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         ipAddress = try container.decode(String.self, forKey: .ipAddress)
         macAddress = try container.decode(String.self, forKey: .macAddress)
         vendor = try container.decodeIfPresent(String.self, forKey: .vendor)
-        hostname = try container.decodeIfPresent(String.self, forKey: .hostname)
+        let decodedHostname = try container.decodeIfPresent(String.self, forKey: .hostname)
+        hostname = HostnameResolver.clean(decodedHostname, ipAddress: ipAddress)
         iconName = try container.decodeIfPresent(String.self, forKey: .iconName)
         secondaryIconName = try container.decodeIfPresent(String.self, forKey: .secondaryIconName)
         status = try container.decodeIfPresent(DeviceStatus.self, forKey: .status) ?? .unknown

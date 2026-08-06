@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.22 - 2026-08-06
+
+- Replaced bundled vendor lookup data with Wireshark manuf parsing and preserved original vendor names.
+- Improved hostname discovery with DNS PTR, mDNS, LLMNR, NetBIOS, SSDP, HTTP metadata, HomeKit/HAA service discovery, and SNMP metadata.
+- Refreshed read-only vendor and hostname fields on every scan, including known devices.
+- Improved compact macOS dashboard cards and simplified the About window chrome.
+- Cleaned Docker vendor handling to avoid manual brand aliases and stale vendor names.
+
 ## 1.0.21 - 2026-08-05
 
 - Refined the native macOS About window into a compact, centered layout.

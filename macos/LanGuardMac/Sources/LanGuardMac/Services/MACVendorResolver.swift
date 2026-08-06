@@ -6,8 +6,35 @@ enum MACVendorResolver {
             return nil
         }
 
+        let macHex = normalizedHex(macAddress)
         let prefix = normalizedPrefix(macAddress)
-        return BundledVendorDatabase.shared.vendor(forPrefix: prefix) ?? vendors[prefix]
+        return displayVendor(BundledVendorDatabase.shared.vendor(forMACHex: macHex) ?? vendors[prefix])
+    }
+
+    static func preferredVendor(
+        macAddress: String,
+        observedVendor: String?
+    ) -> String? {
+        if isLocallyAdministered(macAddress) {
+            return nil
+        }
+
+        if let observedDisplayVendor = displayVendor(observedVendor) {
+            return observedDisplayVendor
+        }
+
+        if let resolved = vendor(for: macAddress) {
+            return resolved
+        }
+
+        return nil
+    }
+
+    static func displayVendor(_ vendor: String?) -> String? {
+        guard let cleaned = vendor?.trimmingCharacters(in: .whitespacesAndNewlines), !cleaned.isEmpty else {
+            return nil
+        }
+        return cleaned
     }
 
     static func isLocallyAdministered(_ macAddress: String) -> Bool {
@@ -41,45 +68,57 @@ enum MACVendorResolver {
             .joined(separator: ":")
     }
 
+    private static func normalizedHex(_ macAddress: String) -> String {
+        macAddress
+            .lowercased()
+            .filter(\.isHexDigit)
+    }
+
     private static let vendors: [String: String] = [
-        "00:1a:11": "Google",
-        "00:1b:63": "Apple",
-        "00:1e:c2": "Apple",
-        "00:25:00": "Apple",
-        "04:bc:6d": "Apple",
-        "0c:db:ea": "Apple",
-        "24:a1:60": "Espressif",
-        "28:6c:07": "Apple",
-        "38:e1:3d": "Apple",
-        "3c:5a:b4": "Google",
-        "44:65:0d": "Amazon",
-        "50:c7:bf": "TP-Link",
-        "54:ef:44": "Samsung",
-        "5c:e5:0c": "Xiaomi",
-        "68:ff:7b": "TP-Link",
-        "70:03:9f": "Apple",
-        "74:da:88": "TP-Link",
-        "8c:85:90": "Apple",
-        "90:dd:5d": "Apple",
-        "94:9f:3e": "Sonos",
-        "9c:93:4e": "Hon Hai",
-        "a4:ae:12": "Espressif",
-        "b8:27:eb": "Raspberry Pi",
-        "bc:5e:33": "Apple",
-        "c0:6d:ed": "Apple",
-        "d8:3a:dd": "Raspberry Pi",
-        "dc:a6:32": "Raspberry Pi",
-        "e4:5f:01": "Raspberry Pi",
-        "ec:71:db": "Apple",
-        "f0:c9:d1": "Midea",
-        "f4:34:f0": "Apple",
+        "00:1a:11": "Google, Inc.",
+        "00:1b:63": "Apple, Inc.",
+        "00:1e:c2": "Apple, Inc.",
+        "00:25:00": "Apple, Inc.",
+        "04:bc:6d": "Apple, Inc.",
+        "0c:db:ea": "Apple, Inc.",
+        "24:a1:60": "Espressif Inc.",
+        "28:6c:07": "Apple, Inc.",
+        "38:e1:3d": "Apple, Inc.",
+        "3c:5a:b4": "Google, Inc.",
+        "44:65:0d": "Amazon Technologies Inc.",
+        "50:c7:bf": "TP-Link Technologies Co., Ltd.",
+        "54:ef:44": "Samsung Electronics Co., Ltd.",
+        "5c:e5:0c": "Xiaomi Communications Co., Ltd.",
+        "68:ff:7b": "TP-Link Technologies Co., Ltd.",
+        "70:03:9f": "Apple, Inc.",
+        "74:da:88": "TP-Link Technologies Co., Ltd.",
+        "8c:85:90": "Apple, Inc.",
+        "90:dd:5d": "Apple, Inc.",
+        "90:ee:c7": "Samsung Electronics Co., Ltd.",
+        "94:9f:3e": "Sonos, Inc.",
+        "9c:93:4e": "Hon Hai Precision Industry Co., Ltd.",
+        "a4:ae:12": "Espressif Inc.",
+        "b8:27:eb": "Raspberry Pi Foundation",
+        "bc:5e:33": "Hangzhou Hikvision Digital Technology Co., Ltd.",
+        "c0:6d:ed": "Hangzhou Hikvision Digital Technology Co., Ltd.",
+        "d8:3a:dd": "Raspberry Pi Foundation",
+        "dc:a6:32": "Raspberry Pi Trading Ltd.",
+        "e4:5f:01": "Raspberry Pi Trading Ltd.",
+        "ec:71:db": "Apple, Inc.",
+        "f0:c9:d1": "GD Midea Air-Conditioning Equipment Co., Ltd.",
+        "f4:34:f0": "Apple, Inc.",
     ]
+
 }
 
 final class BundledVendorDatabase: @unchecked Sendable {
     static let shared = BundledVendorDatabase()
 
     private let vendors: [String: String]
+
+    init(vendors: [String: String]) {
+        self.vendors = vendors
+    }
 
     private init(bundle: Bundle = .main) {
         guard
@@ -93,8 +132,14 @@ final class BundledVendorDatabase: @unchecked Sendable {
         vendors = Self.parse(contents)
     }
 
-    func vendor(forPrefix prefix: String) -> String? {
-        vendors[prefix]
+    func vendor(forMACHex macHex: String) -> String? {
+        for length in stride(from: min(macHex.count, 12), through: 6, by: -1) {
+            let prefix = String(macHex.prefix(length))
+            if let vendor = vendors[prefix] {
+                return vendor
+            }
+        }
+        return nil
     }
 
     static func parse(_ contents: String) -> [String: String] {
@@ -111,33 +156,34 @@ final class BundledVendorDatabase: @unchecked Sendable {
                 continue
             }
 
-            let prefix = normalizeManufPrefix(String(parts[0]))
-            guard prefix.split(separator: ":").count == 3 else {
+            guard let prefix = normalizeManufPrefix(String(parts[0])) else {
                 continue
             }
 
-            parsedVendors[prefix] = String(parts[1])
+            if parts.count > 2 {
+                parsedVendors[prefix] = parts.dropFirst(2).joined(separator: " ")
+            } else {
+                parsedVendors[prefix] = String(parts[1])
+            }
         }
 
         return parsedVendors
     }
 
-    private static func normalizeManufPrefix(_ rawPrefix: String) -> String {
-        let prefixWithoutMask = rawPrefix
-            .split(separator: "/")
-            .first
-            .map(String.init) ?? rawPrefix
-
-        let normalized = prefixWithoutMask
-            .replacingOccurrences(of: "-", with: ":")
+    private static func normalizeManufPrefix(_ rawPrefix: String) -> String? {
+        let parts = rawPrefix.split(separator: "/", maxSplits: 1).map(String.init)
+        let addressHex = parts.first?
             .lowercased()
+            .filter(\.isHexDigit) ?? ""
+        guard addressHex.count >= 6 else {
+            return nil
+        }
 
-        return normalized
-            .split(separator: ":")
-            .prefix(3)
-            .map { part in
-                part.count == 1 ? "0\(part)" : String(part)
-            }
-            .joined(separator: ":")
+        if parts.count == 2, let mask = Int(parts[1]), mask > 0 {
+            let significantNibbles = min(addressHex.count, max(6, Int(ceil(Double(mask) / 4.0))))
+            return String(addressHex.prefix(significantNibbles))
+        }
+
+        return String(addressHex.prefix(6))
     }
 }
