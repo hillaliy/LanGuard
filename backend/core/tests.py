@@ -32,6 +32,7 @@ from .scan import (
     get_hostname,
     mark_missing_devices_offline,
     normalize_scan_ports,
+    preferred_vendor,
     sync_discovered_device,
     sync_device_ports,
     validate_ip_range,
@@ -500,12 +501,12 @@ class ScanStabilityTests(TestCase):
 
     def test_guess_device_identity_uses_hostname_before_vendor(self):
         identity = guess_device_identity(
-            hostname="apple-tv-livingroom",
+            hostname="livingroom-streamer",
             vendor="Apple, Inc.",
             mac="aa:bb:cc:dd:ee:ff",
         )
 
-        self.assertEqual(identity["name"], "apple-tv-livingroom")
+        self.assertEqual(identity["name"], "livingroom-streamer")
         self.assertEqual(identity["icon"], "streamer")
 
     def test_guess_device_identity_uses_vendor_fallback_name(self):
@@ -515,8 +516,59 @@ class ScanStabilityTests(TestCase):
             mac="aa:bb:cc:dd:ee:ff",
         )
 
-        self.assertEqual(identity["name"], "TP-Link")
-        self.assertEqual(identity["icon"], "router")
+        self.assertEqual(identity["name"], "TP-Link Technologies Co., Ltd.")
+        self.assertEqual(identity["icon"], "unknown")
+
+    def test_preferred_vendor_preserves_observed_vendor(self):
+        self.assertEqual(
+            preferred_vendor(observed_vendor="TP-Link Technologies Co., Ltd."),
+            "TP-Link Technologies Co., Ltd.",
+        )
+        self.assertEqual(
+            preferred_vendor(observed_vendor="Hon Hai Precision Industry Co.,Ltd."),
+            "Hon Hai Precision Industry Co.,Ltd.",
+        )
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    def test_existing_device_vendor_is_replaced_by_current_scan_vendor(self):
+        device = Device.objects.create(
+            name="Bedroom AC",
+            ip="192.168.1.70",
+            mac="aa:bb:cc:dd:ee:ff",
+            vendor="Apple, Inc.",
+            known=True,
+        )
+
+        with patch("core.scan.ManufDA.lookup", return_value=("aa:bb:cc", "Texas Instruments")):
+            sync_discovered_device(
+                self.scan_element(device.ip, device.mac),
+                oui=object(),
+                scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            )
+
+        device.refresh_from_db()
+        self.assertEqual(device.vendor, "Texas Instruments")
+        self.assertEqual(device.name, "Bedroom AC")
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    def test_existing_device_vendor_is_cleared_when_current_scan_has_no_vendor(self):
+        device = Device.objects.create(
+            name="Bedroom AC",
+            ip="192.168.1.70",
+            mac="aa:bb:cc:dd:ee:ff",
+            vendor="Apple, Inc.",
+            known=True,
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device.refresh_from_db()
+        self.assertEqual(device.vendor, "")
+        self.assertEqual(device.name, "Bedroom AC")
 
     @patch("builtins.open")
     def test_default_gateway_from_proc_route(self, open_mock):
@@ -575,16 +627,16 @@ class ScanStabilityTests(TestCase):
             mac="11:22:33:44:1b:53",
         )
 
-        self.assertEqual(identity["name"], "Foxconn")
+        self.assertEqual(identity["name"], "Hon Hai Precision Industry")
 
-    def test_guess_device_identity_uses_vendor_profile_name(self):
+    def test_guess_device_identity_uses_original_vendor_name(self):
         identity = guess_device_identity(
             hostname="Device",
             vendor="Espressif Inc.",
             mac="aa:bb:cc:dd:ee:ff",
         )
 
-        self.assertEqual(identity["name"], "Espressif IoT device")
+        self.assertEqual(identity["name"], "Espressif Inc.")
 
     @override_settings(PORT_SCAN_ENABLED=False)
     @patch("core.scan.get_hostname")
@@ -604,16 +656,16 @@ class ScanStabilityTests(TestCase):
     def test_guess_device_identity_detects_shutter(self):
         identity = guess_device_identity(
             hostname="bedroom-shutter",
-            vendor="Aqara",
+            vendor="",
             mac="aa:bb:cc:dd:ee:ff",
         )
 
         self.assertEqual(identity["icon"], "shutter")
 
-    def test_guess_device_identity_detects_aqara_hub(self):
+    def test_guess_device_identity_detects_smart_hub(self):
         identity = guess_device_identity(
-            hostname="gateway",
-            vendor="Aqara",
+            hostname="home hub",
+            vendor="",
             mac="aa:bb:cc:dd:ee:ff",
         )
 
@@ -649,7 +701,7 @@ class ScanStabilityTests(TestCase):
     def test_guess_device_identity_detects_air_conditioner(self):
         identity = guess_device_identity(
             hostname="bedroom-air-conditioner",
-            vendor="GD Midea Air-Conditioning Equipment Co.,Ltd.",
+            vendor="",
             mac="aa:bb:cc:dd:ee:ff",
         )
 
@@ -678,7 +730,7 @@ class ScanStabilityTests(TestCase):
     def test_guess_device_identity_detects_tablet_watch_and_fan(self):
         self.assertEqual(
             guess_device_identity(
-                hostname="kids ipad",
+                hostname="kids tablet",
                 vendor="",
                 mac="aa:bb:cc:dd:ee:ff",
             )["icon"],

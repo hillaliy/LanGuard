@@ -17,6 +17,7 @@ struct LanGuardMacApp: App {
                 .environment(appModel)
                 .frame(minWidth: 320, idealWidth: 340, maxWidth: 380,
                        minHeight: 340, idealHeight: 360, maxHeight: 390)
+                .background(AboutWindowChrome())
         }
         .defaultSize(width: 340, height: 360)
         .windowResizability(.contentSize)
@@ -120,5 +121,29 @@ private struct AboutCommands: Commands {
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
+    }
+}
+
+private struct AboutWindowChrome: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            configure(view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            configure(nsView.window)
+        }
+    }
+
+    private func configure(_ window: NSWindow?) {
+        guard let window else { return }
+        window.styleMask.remove([.miniaturizable, .resizable])
+        window.collectionBehavior.remove(.fullScreenPrimary)
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+        window.standardWindowButton(.zoomButton)?.isHidden = true
     }
 }

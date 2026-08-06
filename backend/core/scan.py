@@ -21,14 +21,8 @@ DEVICE_GUESS_RULES = [
         "keywords": (
             "smart hub",
             "home hub",
-            "aqara hub",
-            "hub aqara",
-            "aqara gateway",
-            "gateway aqara",
-            "aqura hub",
-            "hub aqura",
-            "aqura gateway",
-            "gateway aqura",
+            "smart bridge",
+            "home bridge",
         ),
     },
     {
@@ -37,21 +31,18 @@ DEVICE_GUESS_RULES = [
             "router",
             "gateway",
             "access point",
-            "tp link",
-            "tp-link",
-            "tplink",
-            "ubiquiti",
-            "mikrotik",
-            "deco",
+            "wireless ap",
+            "wifi ap",
+            "mesh",
         ),
     },
     {
         "icon": "phone",
-        "keywords": ("iphone", "android", "phone", "mobile", "oneplus", "pixel", "galaxy"),
+        "keywords": ("phone", "mobile"),
     },
     {
         "icon": "tablet",
-        "keywords": ("ipad", "tablet", "tab "),
+        "keywords": ("tablet",),
     },
     {
         "icon": "smart-watch",
@@ -59,11 +50,11 @@ DEVICE_GUESS_RULES = [
     },
     {
         "icon": "laptop",
-        "keywords": ("macbook", "laptop", "notebook"),
+        "keywords": ("laptop", "notebook"),
     },
     {
         "icon": "streamer",
-        "keywords": ("apple tv", "chromecast", "streamer", "streaming", "roku", "fire tv", "google cast"),
+        "keywords": ("streamer", "streaming"),
         "ports": (8008, 8009),
     },
     {
@@ -72,7 +63,7 @@ DEVICE_GUESS_RULES = [
     },
     {
         "icon": "security-camera",
-        "keywords": ("camera", "cam", "cctv", "hikvision", "dahua"),
+        "keywords": ("camera", "cam", "cctv"),
         "ports": (554,),
     },
     {
@@ -117,37 +108,19 @@ DEVICE_GUESS_RULES = [
     },
     {
         "icon": "speaker",
-        "keywords": ("speaker", "sonos", "homepod", "audio"),
+        "keywords": ("speaker", "audio"),
     },
     {
         "icon": "printer",
-        "keywords": ("printer", "canon", "brother", "epson", "hewlett", "hp"),
+        "keywords": ("printer",),
         "ports": (9100,),
     },
     {
         "icon": "server",
-        "keywords": ("server", "nas", "casaos", "raspberry", "linux"),
+        "keywords": ("server", "nas"),
         "ports": (22,),
     },
 ]
-VENDOR_NAME_PROFILES = [
-    {"keywords": ("hon hai", "foxconn"), "name": "Foxconn"},
-    {"keywords": ("espresif", "espressif"), "name": "Espressif IoT device"},
-    {"keywords": ("raspberry",), "name": "Raspberry Pi"},
-    {"keywords": ("tp link", "tp-link", "tplink"), "name": "TP-Link"},
-    {"keywords": ("ubiquiti",), "name": "Ubiquiti"},
-    {"keywords": ("mikrotik",), "name": "MikroTik"},
-    {"keywords": ("aqara", "aqura"), "name": "Aqara"},
-    {"keywords": ("apple",), "name": "Apple"},
-    {"keywords": ("google",), "name": "Google"},
-    {"keywords": ("amazon",), "name": "Amazon"},
-    {"keywords": ("samsung",), "name": "Samsung"},
-    {"keywords": ("sony",), "name": "Sony"},
-    {"keywords": ("lg electronics",), "name": "LG"},
-    {"keywords": ("xiaomi",), "name": "Xiaomi"},
-]
-
-
 def get_hostname(ip):
     try:
         hostname, _, _ = socket.gethostbyaddr(ip)
@@ -164,31 +137,8 @@ def clean_hostname(hostname):
     return hostname.split(".")[0].replace("-", " ").strip()
 
 
-def short_vendor(vendor):
-    vendor = (vendor or "").strip()
-    suffixes = [
-        " incorporated",
-        " corporation",
-        " equipment",
-        " technologies",
-        " technology",
-        " co.,ltd.",
-        " co., ltd.",
-        " co ltd",
-        " ltd.",
-        " inc.",
-        " llc",
-    ]
-    changed = True
-    while changed:
-        changed = False
-        lowered = vendor.lower()
-        for suffix in suffixes:
-            if lowered.endswith(suffix):
-                vendor = vendor[: -len(suffix)].strip(" ,.-") or vendor
-                changed = True
-                break
-    return vendor
+def trim_vendor(vendor):
+    return (vendor or "").strip()
 
 
 def guess_text(*values):
@@ -198,6 +148,14 @@ def guess_text(*values):
         .replace("-", " ")
         .replace("_", " ")
     )
+
+
+def canonical_vendor(vendor=""):
+    return trim_vendor(vendor)
+
+
+def preferred_vendor(observed_vendor=""):
+    return canonical_vendor(observed_vendor) or ""
 
 
 def open_port_numbers(open_ports=None):
@@ -214,13 +172,8 @@ def open_port_numbers(open_ports=None):
     return ports
 
 
-def vendor_profile_name(vendor):
-    cleaned_vendor = short_vendor(vendor)
-    text = guess_text(cleaned_vendor)
-    for profile in VENDOR_NAME_PROFILES:
-        if any(keyword in text for keyword in profile["keywords"]):
-            return profile["name"]
-    return cleaned_vendor
+def vendor_display_name(vendor):
+    return trim_vendor(vendor)
 
 
 def is_default_device_name(name):
@@ -233,7 +186,7 @@ def is_default_device_icon(icon):
 
 
 def guess_device_rule(hostname="", vendor="", open_ports=None):
-    text = guess_text(hostname, vendor_profile_name(vendor), vendor)
+    text = guess_text(hostname, vendor_display_name(vendor), vendor)
     ports = open_port_numbers(open_ports)
     for rule in DEVICE_GUESS_RULES:
         if any(keyword in text for keyword in rule.get("keywords", ())):
@@ -252,7 +205,7 @@ def guess_device_name(hostname, vendor, mac):
     if hostname and not is_default_device_name(hostname):
         return hostname
     if vendor:
-        return vendor_profile_name(vendor)
+        return vendor_display_name(vendor)
     return DEFAULT_DEVICE_NAME
 
 
@@ -736,6 +689,12 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
         if hostname and device.hostname != hostname[:255]:
             device.hostname = hostname[:255]
             update_fields.append("hostname")
+        resolved_vendor = preferred_vendor(
+            observed_vendor=vendor_name,
+        )
+        if resolved_vendor != device.vendor:
+            device.vendor = resolved_vendor
+            update_fields.append("vendor")
         if is_gateway and device.role != "gateway":
             device.role = "gateway"
             update_fields.append("role")
@@ -746,7 +705,7 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
             now=scan_started_at,
         )
         if is_default_device_name(device.name) or is_default_device_icon(device.icon):
-            identity = guess_device_identity(hostname, device.vendor or vendor_name, mac)
+            identity = guess_device_identity(hostname, resolved_vendor, mac)
             if is_default_device_name(device.name):
                 device.name = identity["name"]
                 update_fields.append("name")
@@ -770,7 +729,10 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
                 message=f"{device.name} came online",
             )
     except Device.DoesNotExist:
-        identity = guess_device_identity(hostname, vendor_name, mac)
+        resolved_vendor = preferred_vendor(
+            observed_vendor=vendor_name,
+        )
+        identity = guess_device_identity(hostname, resolved_vendor, mac)
         if is_gateway:
             identity = {
                 "name": "Gateway" if is_default_device_name(identity["name"]) else identity["name"],
@@ -781,7 +743,7 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
             name=identity["name"],
             ip=ip,
             mac=mac,
-            vendor=vendor_name,
+            vendor=resolved_vendor,
             hostname=hostname[:255] if hostname else "",
             role="gateway" if is_gateway else "device",
             known=is_gateway,

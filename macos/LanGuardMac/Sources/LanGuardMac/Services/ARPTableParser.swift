@@ -14,8 +14,8 @@ enum ARPTableParser {
         }
 
         let rawHostname = line[..<openParen].trimmingCharacters(in: .whitespaces)
-        let hostname = rawHostname == "?" ? nil : rawHostname
         let ipAddress = String(line[line.index(after: openParen)..<closeParen])
+        let hostname = HostnameResolver.clean(String(rawHostname), ipAddress: ipAddress)
         let remainder = line[line.index(after: closeParen)...]
         let marker = " at "
 

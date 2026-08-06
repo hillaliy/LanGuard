@@ -37,6 +37,40 @@ private struct StubPortScanner: PortScanning {
     }
 }
 
+private struct StubMetadataProbe: DeviceMetadataProbing {
+    func probe(host: String, openPorts: [Int]) async -> DeviceMetadata {
+        switch host {
+        case "192.168.0.20":
+            DeviceMetadata(vendor: "Reolink")
+        default:
+            DeviceMetadata()
+        }
+    }
+}
+
+private struct StubNetworkMetadataDiscovery: NetworkMetadataDiscovering {
+    func discoverMetadata(for ipAddresses: [String]) async -> [String: DeviceMetadata] {
+        [
+            "192.168.0.20": DeviceMetadata(
+                vendor: "Hangzhou Hikvision Digital Technology Co., Ltd.",
+                hostname: "Front Door Camera"
+            )
+        ]
+    }
+}
+
+private struct EmptyNetworkMetadataDiscovery: NetworkMetadataDiscovering {
+    func discoverMetadata(for ipAddresses: [String]) async -> [String: DeviceMetadata] {
+        [:]
+    }
+}
+
+private struct EmptyMetadataProbe: DeviceMetadataProbing {
+    func probe(host: String, openPorts: [Int]) async -> DeviceMetadata {
+        DeviceMetadata()
+    }
+}
+
 private actor RecordingPortScanner: PortScanning {
     private var scannedHosts: [String] = []
 
@@ -54,7 +88,9 @@ private actor RecordingPortScanner: PortScanning {
 func localScannerAddsOpenPortsGatewayAndRisk() async throws {
     let scanner = LocalNetworkScanner(
         commandRunner: StubCommandRunner(),
-        portScanner: StubPortScanner()
+        portScanner: StubPortScanner(),
+        metadataDiscovery: EmptyNetworkMetadataDiscovery(),
+        metadataProbe: StubMetadataProbe()
     )
 
     let devices = try await scanner.scan(settings: AppSettings(
@@ -70,6 +106,7 @@ func localScannerAddsOpenPortsGatewayAndRisk() async throws {
     #expect(devices.first?.openPorts == [53, 80])
     #expect(devices.first?.risk == .medium)
     #expect(devices.last?.ipAddress == "192.168.0.20")
+    #expect(devices.last?.vendor == "Reolink")
     #expect(devices.last?.openPorts == [80, 554, 8443])
     #expect(devices.last?.risk == .medium)
 }
@@ -78,7 +115,9 @@ func localScannerAddsOpenPortsGatewayAndRisk() async throws {
 func localScannerFiltersDevicesOutsideConfiguredRange() async throws {
     let scanner = LocalNetworkScanner(
         commandRunner: StubCommandRunner(),
-        portScanner: StubPortScanner()
+        portScanner: StubPortScanner(),
+        metadataDiscovery: EmptyNetworkMetadataDiscovery(),
+        metadataProbe: EmptyMetadataProbe()
     )
 
     let devices = try await scanner.scan(settings: AppSettings(
@@ -95,7 +134,9 @@ func localScannerFiltersDevicesOutsideConfiguredRange() async throws {
 func localScannerFiltersNetworkBroadcastARPEntries() async throws {
     let scanner = LocalNetworkScanner(
         commandRunner: StubCommandRunner(),
-        portScanner: StubPortScanner()
+        portScanner: StubPortScanner(),
+        metadataDiscovery: EmptyNetworkMetadataDiscovery(),
+        metadataProbe: EmptyMetadataProbe()
     )
 
     let devices = try await scanner.scan(settings: AppSettings(
@@ -112,7 +153,9 @@ func localScannerFiltersNetworkBroadcastARPEntries() async throws {
 func localScannerRejectsInvalidScanRange() async throws {
     let scanner = LocalNetworkScanner(
         commandRunner: StubCommandRunner(),
-        portScanner: StubPortScanner()
+        portScanner: StubPortScanner(),
+        metadataDiscovery: EmptyNetworkMetadataDiscovery(),
+        metadataProbe: EmptyMetadataProbe()
     )
 
     await #expect(throws: ScannerError.self) {
@@ -131,6 +174,8 @@ func localScannerProbesTCPHostsBeforeReadingFilteredDevices() async throws {
     let scanner = LocalNetworkScanner(
         commandRunner: StubCommandRunner(),
         portScanner: portScanner,
+        metadataDiscovery: EmptyNetworkMetadataDiscovery(),
+        metadataProbe: EmptyMetadataProbe(),
         sweepConcurrency: 2
     )
 
@@ -142,4 +187,25 @@ func localScannerProbesTCPHostsBeforeReadingFilteredDevices() async throws {
     ))
 
     #expect(await portScanner.hosts().contains("192.168.0.2"))
+}
+
+@Test
+func localScannerUsesNetworkMetadataDiscoveryBeforePerDeviceProbe() async throws {
+    let scanner = LocalNetworkScanner(
+        commandRunner: StubCommandRunner(),
+        portScanner: StubPortScanner(),
+        metadataDiscovery: StubNetworkMetadataDiscovery(),
+        metadataProbe: EmptyMetadataProbe()
+    )
+
+    let devices = try await scanner.scan(settings: AppSettings(
+        defaultScanRange: "192.168.0.0/24",
+        scanIntervalMinutes: 5,
+        tcpPorts: [80, 554],
+        scheduledScanningEnabled: false
+    ))
+
+    let camera = try #require(devices.first { $0.ipAddress == "192.168.0.20" })
+    #expect(camera.hostname == "Front Door Camera")
+    #expect(camera.vendor == "Hangzhou Hikvision Digital Technology Co., Ltd.")
 }

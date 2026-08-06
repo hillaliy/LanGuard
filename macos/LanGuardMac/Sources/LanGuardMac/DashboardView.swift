@@ -79,21 +79,33 @@ struct DashboardView: View {
             ) {
                 compactMetricCards
             }
-            
-            NetworkHealthCard(
+
+            compactOverviewRow
+        }
+    }
+
+    private var compactOverviewRow: some View {
+        HStack(alignment: .top, spacing: 14) {
+            CompactNetworkHealthCard(
                 devices: appModel.devices.count,
                 online: appModel.onlineCount,
                 unknown: appModel.unknownCount,
                 openPorts: appModel.openPortCount
             )
+
+            CompactScheduleCard(
+                isEnabled: appModel.settings.scheduledScanningEnabled,
+                intervalMinutes: appModel.settings.scanIntervalMinutes,
+                nextScanAt: appModel.nextScheduledScanAt
+            )
+
+            compactLatestScanCard
         }
     }
 
     private var compactLowerContent: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            latestScanContent
+        HStack(alignment: .top, spacing: 14) {
             RecentlyChangedCard(changes: visibleRecentChanges, maximumItems: 8, fixedHeight: 292)
-            scheduleCard
             WatchListCard(devices: appModel.devices, fixedHeight: 292)
         }
     }
@@ -175,6 +187,15 @@ struct DashboardView: View {
             LatestScanSummaryCard(scan: latestScan)
         } else {
             EmptyScanSummaryCard()
+        }
+    }
+
+    @ViewBuilder
+    private var compactLatestScanCard: some View {
+        if let latestScan = appModel.latestScan {
+            CompactLatestScanCard(scan: latestScan)
+        } else {
+            CompactEmptyScanCard()
         }
     }
 
@@ -387,6 +408,179 @@ private struct HealthRow: View {
                 .monospacedDigit()
         }
         .font(.subheadline)
+    }
+}
+
+private struct CompactNetworkHealthCard: View {
+    let devices: Int
+    let online: Int
+    let unknown: Int
+    let openPorts: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: "waveform.path.ecg.rectangle")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 24)
+
+                Text("Network Health")
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Spacer(minLength: 4)
+
+                Text(healthTitle)
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(healthColor.opacity(0.16), in: Capsule())
+                    .foregroundStyle(healthColor)
+                    .lineLimit(1)
+            }
+
+            ProgressView(value: knownCoverageScore)
+                .tint(healthColor)
+
+            VStack(spacing: 7) {
+                CompactHealthRow(title: "Known", value: "\(knownPercent)%")
+                CompactHealthRow(title: "Online", value: "\(online)")
+                CompactHealthRow(title: "Ports", value: "\(openPorts)")
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(.quaternary)
+        }
+    }
+
+    private var knownPercent: Int {
+        guard devices > 0 else { return 0 }
+        return Int((Double(devices - unknown) / Double(devices) * 100).rounded())
+    }
+
+    private var knownCoverageScore: Double {
+        guard devices > 0 else { return 0 }
+        return max(0.0, min(1.0, Double(devices - unknown) / Double(devices)))
+    }
+
+    private var healthScore: Double {
+        guard devices > 0 else { return 0 }
+        let unknownPenalty = Double(unknown) / Double(devices)
+        let portPenalty = min(Double(openPorts) / 80.0, 1.0) * 0.35
+        return max(0.0, min(1.0, 1.0 - unknownPenalty - portPenalty))
+    }
+
+    private var healthTitle: String {
+        switch healthScore {
+        case 0.75...:
+            "Good"
+        case 0.45..<0.75:
+            "Review"
+        default:
+            "Needs Work"
+        }
+    }
+
+    private var healthColor: Color {
+        switch healthScore {
+        case 0.75...:
+            .green
+        case 0.45..<0.75:
+            .orange
+        default:
+            .red
+        }
+    }
+}
+
+private struct CompactHealthRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(title)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 4)
+            Text(value)
+                .fontWeight(.semibold)
+                .monospacedDigit()
+                .lineLimit(1)
+        }
+        .font(.caption)
+    }
+}
+
+private struct CompactScheduleCard: View {
+    let isEnabled: Bool
+    let intervalMinutes: Int
+    let nextScanAt: Date?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 9) {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isEnabled ? .blue : .secondary)
+                    .frame(width: 34, height: 34)
+                    .background((isEnabled ? Color.blue : Color.secondary).opacity(0.14), in: RoundedRectangle(cornerRadius: 10))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(isEnabled ? "Automatic Scanning" : "Scanning Off")
+                        .font(.headline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.65)
+                    Text(isEnabled ? "Enabled" : "Disabled")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 4)
+
+            HStack(alignment: .bottom, spacing: 10) {
+                CompactScheduleMetric(title: "Interval", value: isEnabled ? "\(intervalMinutes) min" : "-")
+                Spacer(minLength: 4)
+                CompactScheduleMetric(
+                    title: "Next",
+                    value: isEnabled ? nextScanAt?.formatted(date: .omitted, time: .shortened) ?? "-" : "-",
+                    alignment: .trailing
+                )
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(.quaternary)
+        }
+    }
+}
+
+private struct CompactScheduleMetric: View {
+    let title: String
+    let value: String
+    var alignment: HorizontalAlignment = .leading
+
+    var body: some View {
+        VStack(alignment: alignment, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(value)
+                .font(.headline)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
     }
 }
 
@@ -837,6 +1031,149 @@ private struct LatestScanSummaryCard: View {
     private func formattedDuration(_ duration: TimeInterval?) -> String {
         guard let duration else { return "-" }
         return Duration.seconds(duration).formatted(.time(pattern: .minuteSecond))
+    }
+}
+
+private struct CompactLatestScanCard: View {
+    let scan: ScanRecord
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "clock")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 24)
+
+                Text("Latest Scan")
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .layoutPriority(0)
+
+                Spacer(minLength: 4)
+
+                CompactScanStatusBadge(isScanning: scan.status == .running, latestScan: scan)
+                    .layoutPriority(1)
+            }
+
+            Spacer(minLength: 2)
+
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                GridRow {
+                    ScanMetric(title: "Devices", value: "\(scan.discoveredCount)")
+                    ScanMetric(title: "Duration", value: formattedDuration(scan.duration))
+                }
+
+                GridRow {
+                    ScanMetric(title: "Started", value: scan.startedAt.formatted(date: .omitted, time: .shortened))
+                    ScanMetric(title: "Finished", value: scan.finishedAt?.formatted(date: .omitted, time: .shortened) ?? "-")
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(.quaternary)
+        }
+    }
+
+    private func formattedDuration(_ duration: TimeInterval?) -> String {
+        guard let duration else { return "-" }
+        return Duration.seconds(duration).formatted(.time(pattern: .minuteSecond))
+    }
+}
+
+private struct CompactEmptyScanCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "clock")
+                    .font(.system(size: 17, weight: .semibold))
+                    .frame(width: 24)
+
+                Text("Latest Scan")
+                    .font(.headline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
+
+            Spacer(minLength: 4)
+
+            Text("No scans yet")
+                .font(.headline)
+                .lineLimit(1)
+
+            Text("Run a scan to populate devices.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(.quaternary)
+        }
+    }
+}
+
+private struct CompactScanStatusBadge: View {
+    let isScanning: Bool
+    let latestScan: ScanRecord?
+
+    var body: some View {
+        HStack(spacing: 7) {
+            Image(systemName: systemImage)
+                .font(.caption.weight(.bold))
+            Text(title)
+                .font(.caption.weight(.bold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.9)
+        }
+            .font(.caption.weight(.bold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .frame(minWidth: 98)
+            .background(color.opacity(0.16), in: Capsule())
+            .foregroundStyle(color)
+            .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var title: String {
+        if isScanning { return "Scanning" }
+        guard let latestScan else { return "Ready" }
+        return latestScan.status.rawValue.capitalized
+    }
+
+    private var systemImage: String {
+        if isScanning { return "arrow.clockwise" }
+        switch latestScan?.status {
+        case .completed:
+            return "checkmark.circle"
+        case .failed:
+            return "exclamationmark.triangle"
+        case .running:
+            return "arrow.clockwise"
+        case nil:
+            return "circle.dotted"
+        }
+    }
+
+    private var color: Color {
+        if isScanning { return .blue }
+        switch latestScan?.status {
+        case .completed:
+            return .green
+        case .failed:
+            return .red
+        case .running:
+            return .blue
+        case nil:
+            return .secondary
+        }
     }
 }
 

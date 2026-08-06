@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.0.22',
+    date: '2026-08-06',
+    items: [
+      'Replaced bundled vendor lookup data with Wireshark manuf parsing and preserved original vendor names.',
+      'Improved hostname discovery across DNS PTR, mDNS, LLMNR, NetBIOS, SSDP, HTTP metadata, HomeKit/HAA, and SNMP.',
+      'Refreshed read-only vendor and hostname fields on every scan, including known devices.',
+      'Improved compact macOS dashboard cards and simplified the About window chrome.',
+    ],
+  },
+  {
     version: '1.0.20',
     date: '2026-08-05',
     items: [

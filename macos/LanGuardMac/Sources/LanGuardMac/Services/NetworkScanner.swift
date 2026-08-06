@@ -21,15 +21,21 @@ enum ScannerError: LocalizedError, Sendable {
 struct LocalNetworkScanner: NetworkScanning {
     private let commandRunner: CommandRunning
     private let portScanner: PortScanning
+    private let metadataDiscovery: NetworkMetadataDiscovering
+    private let metadataProbe: DeviceMetadataProbing
     private let sweepConcurrency: Int
 
     init(
         commandRunner: CommandRunning = CommandRunner(),
         portScanner: PortScanning = TCPPortScanner(),
+        metadataDiscovery: NetworkMetadataDiscovering = DefaultNetworkMetadataDiscovery(),
+        metadataProbe: DeviceMetadataProbing = HTTPDeviceMetadataProbe(),
         sweepConcurrency: Int = 32
     ) {
         self.commandRunner = commandRunner
         self.portScanner = portScanner
+        self.metadataDiscovery = metadataDiscovery
+        self.metadataProbe = metadataProbe
         self.sweepConcurrency = max(1, sweepConcurrency)
     }
 
@@ -63,6 +69,7 @@ struct LocalNetworkScanner: NetworkScanning {
         }
         let gatewayAddress = RouteParser.defaultGateway(from: (try? await routeOutput) ?? "")
         let seenAt = Date.now
+        let discoveredMetadata = await metadataDiscovery.discoverMetadata(for: entries.map(\.ipAddress))
 
         let devices = entries.map { entry in
             NetworkDevice.discovered(
@@ -78,10 +85,19 @@ struct LocalNetworkScanner: NetworkScanning {
             for device in devices {
                 group.addTask {
                     var scannedDevice = device
+                    let networkMetadata = discoveredMetadata[device.ipAddress]
+                    scannedDevice.vendor = networkMetadata?.vendor ?? scannedDevice.vendor
+                    scannedDevice.hostname = networkMetadata?.hostname ?? scannedDevice.hostname
                     scannedDevice.openPorts = await portScanner.scanOpenPorts(
                         host: device.ipAddress,
                         ports: settings.tcpPorts
                     )
+                    let metadata = await metadataProbe.probe(
+                        host: device.ipAddress,
+                        openPorts: scannedDevice.openPorts
+                    )
+                    scannedDevice.vendor = metadata.vendor ?? scannedDevice.vendor
+                    scannedDevice.hostname = metadata.hostname ?? scannedDevice.hostname
                     scannedDevice.risk = DeviceRiskScorer.risk(
                         for: scannedDevice.openPorts,
                         isKnown: scannedDevice.isKnown
