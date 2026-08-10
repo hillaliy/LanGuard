@@ -4,13 +4,14 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
-    version: '1.0.23',
+    version: '1.1.0',
     date: '2026-08-10',
     items: [
       'Improved Docker dashboard layout with macOS-style status, health, scan, recent-change, and attention cards.',
       'Improved Docker device browsing with card rows, room and role map views, and better macOS import compatibility.',
       'Aligned macOS page headers with their sidebar icons and improved the LanGuard header icon in dark mode.',
       'Improved Docker vendor lookup with bundled Wireshark manuf data and expanded hostname discovery fallbacks.',
+      'Updated backend and frontend dependencies, keeping Django on the latest compatible 6.0.x release and resolving npm audit findings.',
     ],
   },
   {
