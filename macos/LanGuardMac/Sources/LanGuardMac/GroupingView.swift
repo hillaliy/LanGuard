@@ -28,7 +28,8 @@ struct GroupingView: View {
                 HStack(alignment: .top) {
                     HeaderView(
                         title: "Grouping",
-                        subtitle: "Browse devices by room or role."
+                        subtitle: "Browse devices by room or role.",
+                        systemImage: "point.3.connected.trianglepath.dotted"
                     )
                     Spacer()
                     Picker("Group by", selection: $mode) {

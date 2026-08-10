@@ -75,6 +75,23 @@ func deviceNameGuesserFallsBackToMacSuffix() {
 }
 
 @Test
+func deviceInventoryExportUsesEffectiveRole() throws {
+    let device = NetworkDevice(
+        id: "aa:bb:cc:dd:ee:ff",
+        name: "Gateway",
+        ipAddress: "192.168.1.1",
+        macAddress: "aa:bb:cc:dd:ee:ff",
+        isGateway: true
+    )
+    let document = DeviceInventoryDocument(devices: [device])
+    let data = try JSONEncoder().encode(document)
+    let payload = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    let devices = payload?["devices"] as? [[String: Any]]
+
+    #expect(devices?.first?["role"] as? String == "gateway")
+}
+
+@Test
 func vendorResolverFindsKnownOUI() {
     #expect(MACVendorResolver.vendor(for: "90:dd:5d:b7:bd:01") == "Apple, Inc.")
     #expect(MACVendorResolver.vendor(for: "90:ee:c7:f8:d4:e1") == "Samsung Electronics Co., Ltd.")

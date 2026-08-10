@@ -28,7 +28,8 @@ struct DevicesView: View {
         VStack(alignment: .leading, spacing: 20) {
             HeaderView(
                 title: "Devices",
-                subtitle: "Discovered network devices will appear here."
+                subtitle: "Discovered network devices will appear here.",
+                systemImage: "network"
             )
 
             if appModel.devices.isEmpty {
@@ -637,7 +638,8 @@ private struct DeviceDetailView: View {
         VStack(alignment: .leading, spacing: 20) {
             HeaderView(
                 title: originalDevice.name,
-                subtitle: originalDevice.ipAddress
+                subtitle: originalDevice.ipAddress,
+                systemImage: originalDevice.displayIconName
             )
 
             Form {

@@ -192,6 +192,10 @@ textarea {
   flex: 0 0 auto;
 }
 
+.topbar-scan-button {
+  flex: 0 0 auto;
+}
+
 .version-pill {
   align-items: center;
   background: var(--muted-panel-bg);
@@ -247,10 +251,189 @@ textarea {
   flex: 0 0 auto;
 }
 
-.metric-card,
 .content-panel {
   border: 1px solid var(--border-color);
   background: var(--panel-bg);
+}
+
+.dashboard-summary-card,
+.content-panel {
+  border: 1px solid var(--border-color);
+  background: var(--panel-bg);
+}
+
+.dashboard-status-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+}
+
+.dashboard-status-card {
+  align-items: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  display: flex;
+  gap: 18px;
+  min-height: 126px;
+  min-width: 0;
+  padding: 22px;
+}
+
+.dashboard-status-icon {
+  align-items: center;
+  border-radius: 14px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 56px;
+  justify-content: center;
+  width: 56px;
+}
+
+.dashboard-status-icon.blue {
+  background: rgba(34, 139, 230, 0.18);
+  color: #228be6;
+}
+
+.dashboard-status-icon.green {
+  background: rgba(64, 192, 87, 0.18);
+  color: #40c057;
+}
+
+.dashboard-status-icon.orange {
+  background: rgba(253, 126, 20, 0.18);
+  color: #fd7e14;
+}
+
+.dashboard-status-icon.purple {
+  background: rgba(218, 56, 255, 0.18);
+  color: #da38ff;
+}
+
+.dashboard-status-label {
+  color: var(--muted-text);
+  font-size: 1.05rem;
+  line-height: 1.1;
+}
+
+.dashboard-status-value {
+  color: var(--app-text);
+  font-size: clamp(2.25rem, 4vw, 3.25rem);
+  letter-spacing: 0;
+  line-height: 1.02;
+}
+
+.dashboard-summary-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(280px, 1.1fr) minmax(240px, 1fr) minmax(280px, 1fr);
+}
+
+.dashboard-summary-card {
+  min-height: 176px;
+  overflow: hidden;
+  padding: 22px;
+}
+
+.dashboard-status-badge {
+  font-size: 0.95rem;
+  min-height: 32px;
+  padding-inline: 14px;
+}
+
+.network-health-meter {
+  background: var(--muted-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  height: 12px;
+  overflow: hidden;
+}
+
+.network-health-meter-fill {
+  border-radius: inherit;
+  height: 100%;
+}
+
+.network-health-meter-fill.teal {
+  background: var(--mantine-color-teal-6);
+}
+
+.network-health-meter-fill.orange {
+  background: var(--mantine-color-orange-6);
+}
+
+.dashboard-summary-value {
+  overflow-wrap: anywhere;
+}
+
+.dashboard-insight-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-insight-card {
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  min-height: 246px;
+  overflow: hidden;
+  padding: 22px;
+}
+
+.dashboard-insight-count {
+  border-radius: 999px;
+  font-size: 0.95rem;
+  min-height: 34px;
+  min-width: 44px;
+  padding-inline: 14px;
+}
+
+.dashboard-insight-row {
+  align-items: center;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  min-height: 50px;
+  width: 100%;
+}
+
+.dashboard-insight-button {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.dashboard-insight-button:hover .dashboard-insight-row-body {
+  color: var(--mantine-color-blue-6);
+}
+
+.dashboard-insight-row-icon {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.dashboard-insight-row-icon.blue {
+  color: var(--mantine-color-blue-6);
+}
+
+.dashboard-insight-row-icon.orange {
+  color: var(--mantine-color-orange-6);
+}
+
+.dashboard-insight-row-body {
+  min-width: 0;
+}
+
+.dashboard-insight-risk {
+  justify-self: end;
+  min-width: 64px;
 }
 
 .content-panel {
@@ -259,6 +442,73 @@ textarea {
 
 .device-row:hover {
   background: var(--hover-bg);
+}
+
+.device-list-toolbar {
+  background: color-mix(in srgb, var(--muted-panel-bg) 72%, transparent);
+}
+
+.device-list {
+  max-height: min(760px, 72vh);
+  overflow-y: auto;
+}
+
+.device-list-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border-color);
+  color: var(--field-text);
+  cursor: pointer;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(250px, 1.25fr) minmax(520px, 2fr);
+  letter-spacing: 0;
+  min-width: 0;
+  padding: 14px 18px;
+  text-align: left;
+  width: 100%;
+}
+
+.device-list-row:hover {
+  background: var(--hover-bg);
+}
+
+.device-list-primary,
+.device-list-title {
+  min-width: 0;
+}
+
+.device-list-icon {
+  align-items: center;
+  background: var(--brand-soft);
+  border: 1px solid var(--soft-border-color);
+  border-radius: 10px;
+  color: var(--brand-strong);
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.device-list-meta {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns:
+    minmax(96px, 0.85fr)
+    minmax(110px, 0.9fr)
+    minmax(90px, 0.75fr)
+    minmax(100px, 0.85fr)
+    minmax(84px, 0.75fr)
+    minmax(80px, 0.7fr)
+    minmax(150px, 1fr);
+  min-width: 0;
+}
+
+.device-list-meta > * {
+  min-width: 0;
 }
 
 .devices-table {
@@ -414,24 +664,55 @@ textarea {
   overflow: hidden;
 }
 
+.rooms-map-panel {
+  background: var(--panel-strong-bg);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
 .network-map {
   padding: 18px;
 }
 
-.network-map-core {
-  align-items: center;
+.rooms-map {
+  padding: 18px;
+}
+
+.rooms-map-grid {
   display: grid;
-  gap: 14px;
-  grid-template-columns: minmax(150px, 0.8fr) minmax(48px, 0.22fr) minmax(180px, 1fr);
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
-.network-map-router-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+.rooms-map-room {
+  background: var(--muted-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  min-width: 0;
+  padding: 14px;
 }
 
-.network-map-node,
+.rooms-map-title {
+  min-width: 0;
+}
+
+.rooms-map-icon {
+  align-items: center;
+  color: var(--brand-strong);
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.rooms-map-room-name {
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+}
+
+.rooms-map-room .network-device-grid {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
 .network-device-node {
   background: var(--input-panel-bg);
   border: 1px solid var(--border-color);
@@ -441,47 +722,8 @@ textarea {
   text-align: left;
 }
 
-.network-map-node {
-  align-items: center;
-  display: grid;
-  justify-items: center;
-  min-height: 138px;
-  padding: 16px;
-}
-
-.network-map-router {
-  border-color: var(--brand);
-  clip-path: polygon(10% 0, 90% 0, 100% 50%, 90% 100%, 10% 100%, 0 50%);
-  cursor: pointer;
-  flex: 1 1 190px;
-}
-
-.network-map-internet {
-  border-radius: 999px;
-}
-
-.network-map-node-icon,
 .network-device-icon {
   color: var(--brand-strong);
-}
-
-.network-map-link,
-.network-map-branch {
-  background: linear-gradient(90deg, transparent, var(--brand), transparent);
-  min-height: 2px;
-}
-
-.network-map-branch {
-  margin: 18px auto;
-  max-width: 86%;
-}
-
-.network-map-device-section {
-  margin-top: 16px;
-}
-
-.network-map-device-section:first-of-type {
-  margin-top: 0;
 }
 
 .network-device-grid {
@@ -503,8 +745,7 @@ textarea {
   padding: 12px;
 }
 
-.network-device-node:hover,
-.network-map-router:hover {
+.network-device-node:hover {
   background: var(--hover-bg);
 }
 
@@ -720,6 +961,23 @@ textarea {
     max-width: 112px;
   }
 
+  .dashboard-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-status-card {
+    min-height: 112px;
+    padding: 18px;
+  }
+
+  .dashboard-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-insight-grid {
+    grid-template-columns: 1fr;
+  }
+
   .devices-panel-header {
     align-items: stretch;
     gap: 12px;
@@ -745,6 +1003,11 @@ textarea {
     display: none;
   }
 
+  .device-list,
+  .device-list-toolbar {
+    display: none;
+  }
+
   .device-mobile-list {
     display: flex;
   }
@@ -766,41 +1029,17 @@ textarea {
     gap: 12px;
   }
 
-  .devices-pagination .mantine-Pagination-root {
-    max-width: 100%;
-    overflow-x: auto;
-    padding-bottom: 2px;
-  }
-
-  .network-map {
-    padding: 12px;
-  }
-
-  .network-map-core {
-    grid-template-columns: 1fr;
-  }
-
-  .network-map-link {
-    background: linear-gradient(180deg, transparent, var(--brand), transparent);
-    height: 34px;
-    justify-self: center;
-    min-height: 34px;
-    width: 2px;
-  }
-
-  .network-map-router-row {
-    flex-direction: column;
-  }
-
-  .network-map-router {
-    flex-basis: auto;
-  }
-
   .network-device-grid {
     grid-template-columns: 1fr;
   }
 
   .network-device-grid.featured {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboard-status-grid {
     grid-template-columns: 1fr;
   }
 }

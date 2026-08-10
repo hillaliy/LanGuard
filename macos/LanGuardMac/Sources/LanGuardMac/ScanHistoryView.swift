@@ -9,7 +9,8 @@ struct ScanHistoryView: View {
             HStack(alignment: .center, spacing: 16) {
                 HeaderView(
                     title: "Scan History",
-                    subtitle: "Completed scans and changes will be tracked here."
+                    subtitle: "Completed scans and changes will be tracked here.",
+                    systemImage: "clock.arrow.circlepath"
                 )
 
                 if !appModel.scanHistory.isEmpty {

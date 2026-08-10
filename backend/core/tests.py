@@ -22,6 +22,7 @@ from .models import (
     ScanRun,
 )
 from .notifications import notify_event, retry_failed_notifications
+from .views import parse_inventory_datetime
 from .scan import (
     clear_stale_gateways,
     create_event,
@@ -30,7 +31,9 @@ from .scan import (
     discover_devices,
     guess_device_identity,
     get_hostname,
+    ManufVendorDB,
     mark_missing_devices_offline,
+    manuf_vendor,
     normalize_scan_ports,
     preferred_vendor,
     sync_discovered_device,
@@ -78,9 +81,40 @@ class HostnameResolutionTests(SimpleTestCase):
     def test_clean_hostname_returns_blank_when_unavailable(self):
         self.assertEqual(clean_hostname(""), "")
 
+    @patch("core.scan.netbios_hostname", return_value="")
+    @patch("core.scan.mdns_reverse_hostname", return_value="")
     @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
-    def test_get_hostname_returns_blank_when_reverse_dns_is_unavailable(self, _):
+    def test_get_hostname_returns_blank_when_reverse_dns_is_unavailable(self, *_):
         self.assertEqual(get_hostname("192.168.1.10"), "")
+
+    @patch("core.scan.netbios_hostname", return_value="")
+    @patch("core.scan.mdns_reverse_hostname", return_value="haa switch")
+    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    def test_get_hostname_uses_mdns_fallback(self, *_):
+        self.assertEqual(get_hostname("192.168.1.21"), "haa switch")
+
+    def test_manuf_parser_preserves_original_vendor_name(self):
+        entry = ManufVendorDB.parse_line(
+            "70:B3:D5:0D:00:00/36 ProHound ProHound Controles Eirelli"
+        )
+
+        self.assertEqual(entry, (0x70B3D50D0, 36, "ProHound Controles Eirelli"))
+
+    @patch("core.scan.ManufVendorDB.entries", return_value=[
+        (0x70B3D5, 24, "Generic 24-bit Vendor"),
+        (0x70B3D50D0, 36, "Specific 36-bit Vendor"),
+    ])
+    def test_manuf_vendor_prefers_more_specific_prefix(self, _):
+        self.assertEqual(manuf_vendor("70:b3:d5:0d:04:01"), "Specific 36-bit Vendor")
+
+    def test_manuf_vendor_uses_bundled_database(self):
+        self.assertEqual(
+            manuf_vendor("bc:5e:33:b0:02:04"),
+            "Hangzhou Hikvision Digital Technology Co.,Ltd.",
+        )
+
+    def test_manuf_vendor_ignores_locally_administered_mac(self):
+        self.assertEqual(manuf_vendor("f6:34:f0:00:c6:8d"), "")
 
 
 class ApiDocsAccessTests(SimpleTestCase):
@@ -1644,6 +1678,98 @@ class ScanApiTests(TestCase):
             [80, 443],
         )
 
+    def test_device_inventory_import_updates_existing_device_room(self):
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Laptop",
+                        "ip": "192.168.1.10",
+                        "mac": "aa:aa:aa:aa:aa:aa",
+                        "roomName": "Office",
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.room, "Office")
+
+    def test_device_inventory_import_preserves_existing_room_when_missing(self):
+        self.device.room = "Living Room"
+        self.device.save(update_fields=["room"])
+
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Laptop",
+                        "ip": "192.168.1.10",
+                        "mac": "aa:aa:aa:aa:aa:aa",
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.room, "Living Room")
+
+    def test_device_inventory_import_updates_existing_device_role(self):
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Laptop",
+                        "ip": "192.168.1.10",
+                        "mac": "aa:aa:aa:aa:aa:aa",
+                        "deviceRole": "meshRouter",
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.role, "meshRouter")
+
+    def test_device_inventory_import_preserves_existing_role_when_missing(self):
+        self.device.role = "camera"
+        self.device.save(update_fields=["role"])
+
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Laptop",
+                        "ip": "192.168.1.10",
+                        "mac": "aa:aa:aa:aa:aa:aa",
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.role, "camera")
+
     def test_device_inventory_import_creates_new_device(self):
         response = self.client.post(
             "/api/v1/devices/import/",
@@ -1711,6 +1837,107 @@ class ScanApiTests(TestCase):
             list(imported.ports.filter(open=True).values_list("port", flat=True)),
             [80, 443],
         )
+
+    def test_device_inventory_import_preserves_macos_export_fields(self):
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "exported_at": 790000000,
+                "devices": [
+                    {
+                        "name": "Office Router",
+                        "ip": "192.168.1.1",
+                        "mac": "AA-BB-CC-DD-EE-10",
+                        "vendor": "TP-Link Technologies Co., Ltd.",
+                        "hostname": "office-router.local",
+                        "icon": "wifi.router",
+                        "secondary_icon": "server.rack",
+                        "role": "meshRouter",
+                        "room": "Office",
+                        "known": True,
+                        "is_gateway": True,
+                        "status": "online",
+                        "risk": "medium",
+                        "open_ports": [22, 80, "443", 80],
+                        "first_seen": 790000000,
+                        "last_seen": 790000060,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        imported = Device.objects.get(mac="aa:bb:cc:dd:ee:10")
+        self.assertEqual(imported.name, "Office Router")
+        self.assertEqual(imported.ip, "192.168.1.1")
+        self.assertEqual(imported.vendor, "TP-Link Technologies Co., Ltd.")
+        self.assertEqual(imported.hostname, "office-router.local")
+        self.assertEqual(imported.icon, "router")
+        self.assertEqual(imported.secondary_icon, "server")
+        self.assertEqual(imported.role, "meshRouter")
+        self.assertEqual(imported.room, "Office")
+        self.assertTrue(imported.known)
+        self.assertTrue(imported.is_gateway)
+        self.assertTrue(imported.online)
+        self.assertEqual(imported.status, Device.Status.ONLINE)
+        self.assertEqual(imported.firstseen, parse_inventory_datetime(790000000, timezone.now()))
+        self.assertEqual(imported.lastseen, parse_inventory_datetime(790000060, timezone.now()))
+        self.assertEqual(
+            list(imported.ports.filter(open=True).values_list("port", flat=True)),
+            [22, 80, 443],
+        )
+
+    def test_device_inventory_import_maps_macos_icon_catalog(self):
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Speaker",
+                        "ip": "192.168.1.71",
+                        "mac": "aa:bb:cc:dd:ee:01",
+                        "icon": "hifispeaker",
+                        "known": True,
+                    },
+                    {
+                        "name": "Switch",
+                        "ip": "192.168.1.72",
+                        "mac": "aa:bb:cc:dd:ee:02",
+                        "icon": "lightswitch.on",
+                        "secondary_icon": "powerplug",
+                        "known": True,
+                    },
+                    {
+                        "name": "Controller",
+                        "ip": "192.168.1.73",
+                        "mac": "aa:bb:cc:dd:ee:03",
+                        "icon": "switch.2",
+                        "known": True,
+                    },
+                    {
+                        "name": "Unknown Symbol",
+                        "ip": "192.168.1.74",
+                        "mac": "aa:bb:cc:dd:ee:04",
+                        "icon": "not.a.real.symbol",
+                        "known": True,
+                    },
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Device.objects.get(mac="aa:bb:cc:dd:ee:01").icon, "speaker")
+        switch = Device.objects.get(mac="aa:bb:cc:dd:ee:02")
+        self.assertEqual(switch.icon, "light")
+        self.assertEqual(switch.secondary_icon, "power-strip")
+        self.assertEqual(Device.objects.get(mac="aa:bb:cc:dd:ee:03").icon, "smart-hub")
+        self.assertEqual(Device.objects.get(mac="aa:bb:cc:dd:ee:04").icon, "unknown")
 
     def test_scan_runs_endpoint_returns_history(self):
         response = self.client.get("/api/v1/scan/runs/")

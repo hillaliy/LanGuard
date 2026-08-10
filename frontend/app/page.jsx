@@ -7,7 +7,6 @@ import {
   Badge,
   Box,
   Button,
-  Card,
   Container,
   Divider,
   Group,
@@ -15,7 +14,6 @@ import {
   LoadingOverlay,
   Modal,
   NumberInput,
-  Pagination,
   Paper,
   PasswordInput,
   Select,
@@ -43,7 +41,6 @@ import {
   IconBulb,
   IconCast,
   IconClock,
-  IconCloudNetwork,
   IconDeviceCctv,
   IconDeviceDesktop,
   IconDeviceLaptop,
@@ -62,7 +59,6 @@ import {
   IconMoon,
   IconNetwork,
   IconOutlet,
-  IconPlugConnected,
   IconPrinter,
   IconPropeller,
   IconQuestionMark,
@@ -83,7 +79,6 @@ import {
   IconUserEdit,
   IconVacuumCleaner,
   IconWifi,
-  IconWifiOff,
   IconWindmill,
   IconWindow,
   IconX,
@@ -123,6 +118,13 @@ function buildVersionCheckInterval(value, unit) {
   return normalizedValue * (unit === 'hours' ? 3600 : 60);
 }
 
+function formatRoleLabel(value) {
+  return String(value || 'device')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 const eventTypeOptions = [
   { value: 'new_device', label: 'New devices' },
   { value: 'device_online', label: 'Online events' },
@@ -131,17 +133,44 @@ const eventTypeOptions = [
   { value: 'port_closed', label: 'Closed ports' },
 ];
 
-const devicePageSizeOptions = ['10', '25', '50', '100'];
-
 const deviceStatusOptions = [
   { value: 'online', label: 'Online' },
   { value: 'offline', label: 'Offline' },
   { value: 'new', label: 'New devices' },
 ];
 
+const deviceRoleOptions = [
+  'device',
+  'gateway',
+  'router',
+  'meshRouter',
+  'hub',
+  'camera',
+  'computer',
+  'server',
+  'phone',
+  'tablet',
+  'tv',
+  'streamer',
+  'printer',
+  'speaker',
+  'light',
+  'climate',
+  'smartPlug',
+  'controller',
+  'lock',
+  'intercom',
+  'sensor',
+  'robotVacuum',
+  'watch',
+  'unknown',
+  'other',
+];
+
 const inventoryViewOptions = [
-  { value: 'table', label: 'Table' },
-  { value: 'map', label: 'Map' },
+  { value: 'table', label: 'List' },
+  { value: 'rooms', label: 'Rooms' },
+  { value: 'roles', label: 'Roles' },
 ];
 
 const fallbackTimeZoneOptions = [
@@ -253,6 +282,7 @@ function normalizeDeviceIcon(value) {
     plus: 'unknown',
     device: 'desktop',
     computer: 'desktop',
+    desktopcomputer: 'desktop',
     hub: 'smart-hub',
     'smart-hub': 'smart-hub',
     smarthub: 'smart-hub',
@@ -260,25 +290,40 @@ function normalizeDeviceIcon(value) {
     smarthome: 'smart-hub',
     aqara: 'smart-hub',
     aqura: 'smart-hub',
+    cpu: 'smart-hub',
+    'point.3.connected.trianglepath.dotted': 'smart-hub',
+    'sensor.tag.radiowaves.forward': 'smart-hub',
+    'switch.2': 'smart-hub',
     mobile: 'phone',
+    iphone: 'phone',
     ipad: 'tablet',
     pad: 'tablet',
+    applewatch: 'smart-watch',
     watch: 'smart-watch',
     smartwatch: 'smart-watch',
     'smart-watch': 'smart-watch',
     wearable: 'smart-watch',
+    macbook: 'laptop',
     television: 'tv',
+    airplayvideo: 'streamer',
     cast: 'streamer',
     streaming: 'streamer',
     camera: 'security-camera',
     cctv: 'security-camera',
+    'video.doorbell': 'security-camera',
     blind: 'blinds',
+    'blinds.horizontal.closed': 'shutter',
     shade: 'blinds',
     curtain: 'blinds',
     window: 'shutter',
+    'window.shade.closed': 'blinds',
     'roller-shutter': 'shutter',
     rollershutter: 'shutter',
     bulb: 'light',
+    lightbulb: 'light',
+    'lightbulb.max': 'light',
+    'light.panel': 'light',
+    'lightswitch.on': 'light',
     led: 'led-strip',
     'led-strip': 'led-strip',
     ledstrip: 'led-strip',
@@ -286,14 +331,19 @@ function normalizeDeviceIcon(value) {
     lightstrip: 'led-strip',
     'strip-light': 'led-strip',
     striplight: 'led-strip',
+    'light.strip.2': 'led-strip',
     lamp: 'desk-lamp',
+    'lamp.desk': 'desk-lamp',
     'desk-lamp': 'desk-lamp',
     desklamp: 'desk-lamp',
     'table-lamp': 'desk-lamp',
     tablelamp: 'desk-lamp',
+    'lamp.ceiling': 'ceiling-light',
+    'light.recessed': 'ceiling-light',
     'ceiling-light': 'ceiling-light',
     ceilinglight: 'ceiling-light',
     downlight: 'ceiling-light',
+    'air.conditioner.horizontal': 'air-conditioner',
     aircon: 'air-conditioner',
     ac: 'air-conditioner',
     hvac: 'air-conditioner',
@@ -303,23 +353,35 @@ function normalizeDeviceIcon(value) {
     ceilingfan: 'ceiling-fan',
     'cilling-fan': 'ceiling-fan',
     cillingfan: 'ceiling-fan',
+    'fan.ceiling': 'ceiling-fan',
+    'thermometer.medium': 'thermostat',
     'thermometer-snow': 'thermostat',
     temperature: 'thermostat',
     audio: 'speaker',
+    hifispeaker: 'speaker',
+    homepod: 'speaker',
     security: 'lock',
     smartlock: 'lock',
     'smart-lock': 'lock',
+    lock: 'lock',
+    printer: 'printer',
     vacuum: 'robot-vacuum',
     roomba: 'robot-vacuum',
     robot: 'robot-vacuum',
+    'robotic.vacuum': 'robot-vacuum',
     'vacuum-cleaner': 'robot-vacuum',
     outlet: 'power-strip',
     socket: 'power-strip',
     plug: 'power-strip',
+    powerplug: 'power-strip',
+    'poweroutlet.strip': 'power-strip',
+    'poweroutlet.type.h': 'power-strip',
     'smart-plug': 'power-strip',
     'plug-strip': 'power-strip',
     'power-outlet': 'power-strip',
     nas: 'server',
+    'server.rack': 'server',
+    'wifi.router': 'router',
   };
   const normalized = aliases[value] || value || 'unknown';
   return deviceIconOptions.some((option) => option.value === normalized)
@@ -359,31 +421,6 @@ function deviceMapShape(device) {
   return 'device';
 }
 
-function isRouterDevice(device) {
-  if (device.is_gateway) {
-    return true;
-  }
-  const normalizedIcon = normalizeDeviceIcon(device.icon);
-  const text = `${device.name || ''} ${device.hostname || ''} ${device.vendor || ''}`.toLowerCase();
-  if (normalizedIcon === 'smart-hub' || text.includes('aqara') || text.includes('aqura')) {
-    return false;
-  }
-  return (
-    normalizedIcon === 'router' ||
-    text.includes('router') ||
-    text.includes('gateway') ||
-    text.includes('access point')
-  );
-}
-
-function isHubDevice(device) {
-  return normalizeDeviceIcon(device.icon) === 'smart-hub';
-}
-
-function isCameraDevice(device) {
-  return normalizeDeviceIcon(device.icon) === 'security-camera';
-}
-
 function NetworkMapDeviceNode({ device, onSelectDevice }) {
   const status = deviceStatus(device);
 
@@ -414,103 +451,139 @@ function NetworkMapDeviceNode({ device, onSelectDevice }) {
   );
 }
 
-function NetworkMapDeviceSection({ title, devices, onSelectDevice, compact = false }) {
-  if (!devices.length) {
-    return null;
-  }
+function getDeviceRoomLabel(device) {
+  const room = String(device.room || '').trim();
+  return room || 'Unassigned';
+}
+
+function buildRoomSections(devices) {
+  const sectionsByRoom = new Map();
+
+  devices.forEach((device) => {
+    const room = getDeviceRoomLabel(device);
+    if (!sectionsByRoom.has(room)) {
+      sectionsByRoom.set(room, []);
+    }
+    sectionsByRoom.get(room).push(device);
+  });
+
+  return Array.from(sectionsByRoom.entries())
+    .map(([room, roomDevices]) => ({
+      room,
+      devices: roomDevices.sort((left, right) =>
+        String(left.name || left.ip || '').localeCompare(String(right.name || right.ip || ''))
+      ),
+    }))
+    .sort((left, right) => {
+      if (left.room === 'Unassigned') return 1;
+      if (right.room === 'Unassigned') return -1;
+      return left.room.localeCompare(right.room);
+    });
+}
+
+function RoomsMap({ devices = [], onSelectDevice }) {
+  const roomSections = buildRoomSections(devices);
 
   return (
-    <section className="network-map-device-section">
-      <Group justify="space-between" align="center" mb="xs">
-        <Text fw={800}>{title}</Text>
-        <Badge variant="light" color="indigo">{devices.length}</Badge>
-      </Group>
-      <div className={`network-device-grid ${compact ? 'featured' : ''}`}>
-        {devices.map((device) => (
-          <NetworkMapDeviceNode key={device.id} device={device} onSelectDevice={onSelectDevice} />
-        ))}
+    <Paper className="rooms-map-panel" radius="md">
+      <div className="rooms-map">
+        {roomSections.length ? (
+          <div className="rooms-map-grid">
+            {roomSections.map((section) => (
+              <section className="rooms-map-room" key={section.room}>
+                <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
+                  <Group gap="xs" wrap="nowrap" className="rooms-map-title">
+                    <span className="rooms-map-icon">
+                      <IconSmartHome size={22} />
+                    </span>
+                    <Text fw={800} className="rooms-map-room-name">{section.room}</Text>
+                  </Group>
+                  <Badge variant="light" color={section.room === 'Unassigned' ? 'gray' : 'indigo'}>
+                    {section.devices.length}
+                  </Badge>
+                </Group>
+                <div className="network-device-grid">
+                  {section.devices.map((device) => (
+                    <NetworkMapDeviceNode
+                      key={device.id}
+                      device={device}
+                      onSelectDevice={onSelectDevice}
+                    />
+                  ))}
+                </div>
+              </section>
+            ))}
+          </div>
+        ) : (
+          <Text c="dimmed" ta="center" py="xl">
+            No devices to show.
+          </Text>
+        )}
       </div>
-    </section>
+    </Paper>
   );
 }
 
-function NetworkMap({ devices = [], onSelectDevice }) {
-  const routerDevices = devices
-    .filter(isRouterDevice)
-    .sort((left, right) => Number(Boolean(right.is_gateway)) - Number(Boolean(left.is_gateway)));
-  const hubDevices = devices.filter((device) => !isRouterDevice(device) && isHubDevice(device));
-  const cameraDevices = devices.filter((device) => !isRouterDevice(device) && isCameraDevice(device));
-  const networkDevices = devices.filter(
-    (device) => !isRouterDevice(device) && !isHubDevice(device) && !isCameraDevice(device)
-  );
-  const routers = routerDevices.length
-    ? routerDevices
-    : [
-        {
-          id: 'router-placeholder',
-          name: 'Home router',
-          ip: 'Gateway',
-          icon: 'router',
-          known: true,
-          online: true,
-          open_ports: [],
-        },
-      ];
+function buildRoleSections(devices) {
+  const sectionsByRole = new Map();
+
+  devices.forEach((device) => {
+    const role = device.role || 'device';
+    const roleLabel = formatRoleLabel(role);
+    if (!sectionsByRole.has(roleLabel)) {
+      sectionsByRole.set(roleLabel, []);
+    }
+    sectionsByRole.get(roleLabel).push(device);
+  });
+
+  return Array.from(sectionsByRole.entries())
+    .map(([role, roleDevices]) => ({
+      role,
+      devices: roleDevices.sort((left, right) =>
+        String(left.name || left.ip || '').localeCompare(String(right.name || right.ip || ''))
+      ),
+    }))
+    .sort((left, right) => left.role.localeCompare(right.role));
+}
+
+function RolesMap({ devices = [], onSelectDevice }) {
+  const roleSections = buildRoleSections(devices);
 
   return (
-    <Paper className="network-map-panel" radius="md">
-      <div className="network-map">
-        <div className="network-map-core">
-          <div className="network-map-node network-map-internet">
-            <span className="network-map-node-icon">
-              <IconCloudNetwork size={30} />
-            </span>
-            <Text fw={800}>Internet</Text>
-            <Text size="xs" c="dimmed">WAN connection</Text>
-          </div>
-          <div className="network-map-link" aria-hidden="true" />
-          <div className="network-map-router-row">
-            {routers.map((router) => (
-              <button
-                type="button"
-                key={router.id}
-                className="network-map-node network-map-router"
-                onClick={() => {
-                  if (router.id !== 'router-placeholder') {
-                    onSelectDevice(router);
-                  }
-                }}
-              >
-                <span className="network-map-node-icon">
-                  <DeviceIcon value={router.icon} size={28} />
-                </span>
-                <Text fw={800} className="network-node-name">{router.name}</Text>
-                <Text size="xs" className="mobile-mono-value">{router.ip}</Text>
-                <PortSummary ports={router.open_ports || []} />
-              </button>
+    <Paper className="rooms-map-panel" radius="md">
+      <div className="rooms-map">
+        {roleSections.length ? (
+          <div className="rooms-map-grid">
+            {roleSections.map((section) => (
+              <section className="rooms-map-room" key={section.role}>
+                <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
+                  <Group gap="xs" wrap="nowrap" className="rooms-map-title">
+                    <span className="rooms-map-icon">
+                      <IconNetwork size={22} />
+                    </span>
+                    <Text fw={800} className="rooms-map-room-name">{section.role}</Text>
+                  </Group>
+                  <Badge variant="light" color="indigo">
+                    {section.devices.length}
+                  </Badge>
+                </Group>
+                <div className="network-device-grid">
+                  {section.devices.map((device) => (
+                    <NetworkMapDeviceNode
+                      key={device.id}
+                      device={device}
+                      onSelectDevice={onSelectDevice}
+                    />
+                  ))}
+                </div>
+              </section>
             ))}
           </div>
-        </div>
-
-        <div className="network-map-branch" aria-hidden="true" />
-
-        <NetworkMapDeviceSection
-          title="Hubs"
-          devices={hubDevices}
-          onSelectDevice={onSelectDevice}
-          compact
-        />
-        <NetworkMapDeviceSection
-          title="Cameras"
-          devices={cameraDevices}
-          onSelectDevice={onSelectDevice}
-          compact
-        />
-        <NetworkMapDeviceSection
-          title="Devices"
-          devices={networkDevices}
-          onSelectDevice={onSelectDevice}
-        />
+        ) : (
+          <Text c="dimmed" ta="center" py="xl">
+            No devices to show.
+          </Text>
+        )}
       </div>
     </Paper>
   );
@@ -905,22 +978,6 @@ function AuthScreen({ onLogin }) {
   );
 }
 
-function MetricCard({ icon, label, value, color }) {
-  return (
-    <Card className="metric-card" radius="md" padding="lg">
-      <Group justify="space-between" align="flex-start">
-        <Stack gap={4}>
-          <Text size="sm" c="dimmed">
-            {label}
-          </Text>
-          <Title order={2}>{value ?? 0}</Title>
-        </Stack>
-        <ThemeIconLike color={color}>{icon}</ThemeIconLike>
-      </Group>
-    </Card>
-  );
-}
-
 function ThemeIconLike({ children, color }) {
   return (
     <Box
@@ -935,6 +992,277 @@ function ThemeIconLike({ children, color }) {
       }}
     >
       {children}
+    </Box>
+  );
+}
+
+function DashboardStatusCards({ counters = {} }) {
+  return (
+    <div className="dashboard-status-grid">
+      <DashboardStatusCard
+        icon={<IconDeviceDesktop size={30} />}
+        label="Devices"
+        value={counters.all_devices ?? 0}
+        color="blue"
+      />
+      <DashboardStatusCard
+        icon={<IconWifi size={30} />}
+        label="Online"
+        value={counters.online_devices ?? 0}
+        color="green"
+      />
+      <DashboardStatusCard
+        icon={<IconQuestionMark size={30} />}
+        label="Unknown"
+        value={counters.new_devices ?? 0}
+        color="orange"
+      />
+      <DashboardStatusCard
+        icon={<IconNetwork size={30} />}
+        label="Open Ports"
+        value={counters.open_ports ?? 0}
+        color="purple"
+      />
+    </div>
+  );
+}
+
+function DashboardStatusCard({ icon, label, value, color }) {
+  return (
+    <Paper className="dashboard-status-card" radius="md">
+      <span className={`dashboard-status-icon ${color}`}>
+        {icon}
+      </span>
+      <Box>
+        <Text className="dashboard-status-label" fw={800}>{label}</Text>
+        <Text className="dashboard-status-value" fw={900}>{value}</Text>
+      </Box>
+    </Paper>
+  );
+}
+
+function NetworkHealthCard({ counters = {} }) {
+  const totalDevices = Number(counters.all_devices) || 0;
+  const newDevices = Number(counters.new_devices) || 0;
+  const knownCoverage = totalDevices > 0
+    ? Math.round(((totalDevices - newDevices) / totalDevices) * 100)
+    : 100;
+  const healthColor = knownCoverage >= 95 ? 'teal' : 'orange';
+  const healthLabel = knownCoverage >= 95 ? 'Good' : 'Review';
+
+  return (
+    <Paper className="dashboard-summary-card network-health-card" radius="md">
+      <Group justify="space-between" align="center" mb="lg" wrap="nowrap">
+        <Group gap="sm" wrap="nowrap">
+          <IconLine size={28} />
+          <Title order={3}>Network Health</Title>
+        </Group>
+        <Badge className="dashboard-status-badge" color={healthColor} variant="light">
+          {healthLabel}
+        </Badge>
+      </Group>
+      <div className="network-health-meter" aria-hidden="true">
+        <div
+          className={`network-health-meter-fill ${healthColor}`}
+          style={{ width: `${Math.min(100, Math.max(0, knownCoverage))}%` }}
+        />
+      </div>
+      <Stack gap={8} mt="lg">
+        <SummaryRow label="Known coverage" value={`${knownCoverage}%`} />
+        <SummaryRow label="Online devices" value={counters.online_devices ?? 0} />
+        <SummaryRow label="Open ports" value={counters.open_ports ?? 0} />
+      </Stack>
+    </Paper>
+  );
+}
+
+function AutomaticScanningCard({ appSettings, scanVisibility }) {
+  return (
+    <Paper className="dashboard-summary-card automatic-scanning-card" radius="md">
+      <Group align="flex-start" gap="md" wrap="nowrap">
+        <ThemeIconLike color="blue">
+          <IconClock size={24} />
+        </ThemeIconLike>
+        <Box>
+          <Title order={3}>Automatic Scanning</Title>
+          <Text c="dimmed" fw={600}>Enabled</Text>
+        </Box>
+      </Group>
+      <SimpleGrid cols={2} mt="xl">
+        <SummaryMetric label="Interval" value={appSettings?.scan_interval ? `${appSettings.scan_interval} min` : '-'} />
+        <SummaryMetric label="Range" value={scanVisibility?.current_range || appSettings?.ip_range || '-'} align="right" />
+      </SimpleGrid>
+    </Paper>
+  );
+}
+
+function LatestScanCard({ scanStatus, scanVisibility, timeZone }) {
+  const statusColor = scanVisibility?.is_scanning
+    ? 'blue'
+    : scanStatus?.status === 'failed'
+      ? 'red'
+      : 'teal';
+  const statusLabel = scanVisibility?.is_scanning ? 'Scanning' : scanStatus?.status || '-';
+
+  return (
+    <Paper className="dashboard-summary-card latest-scan-card" radius="md">
+      <Group justify="space-between" align="center" mb="lg" wrap="nowrap">
+        <Group gap="sm" wrap="nowrap">
+          <IconClock size={28} />
+          <Title order={3}>Latest Scan</Title>
+        </Group>
+        <Badge className="dashboard-status-badge" color={statusColor} variant="light">
+          {statusLabel}
+        </Badge>
+      </Group>
+      <SimpleGrid cols={2}>
+        <SummaryMetric label="Devices" value={scanStatus?.devices_seen ?? 0} />
+        <SummaryMetric label="Duration" value={formatDuration(scanVisibility?.duration_seconds)} />
+        <SummaryMetric label="Started" value={formatDate(scanVisibility?.started_at, timeZone)} />
+        <SummaryMetric label="Finished" value={formatDate(scanVisibility?.finished_at, timeZone)} />
+      </SimpleGrid>
+      {scanVisibility?.last_error && (
+        <Alert mt="md" color="red" icon={<IconAlertCircle size={18} />}>
+          {scanVisibility.last_error}
+        </Alert>
+      )}
+    </Paper>
+  );
+}
+
+function DashboardInsightCards({ events = [], devices = [], onSelectDevice, timeZone }) {
+  const recentEvents = events.slice(0, 5);
+  const attentionDevices = devices
+    .filter((device) => !device.known || ['high', 'medium'].includes(device.risk_level))
+    .sort((first, second) => {
+      const riskWeight = { high: 0, medium: 1, low: 2 };
+      const firstWeight = first.known ? riskWeight[first.risk_level] ?? 2 : -1;
+      const secondWeight = second.known ? riskWeight[second.risk_level] ?? 2 : -1;
+      return firstWeight - secondWeight || String(first.ip).localeCompare(String(second.ip), undefined, { numeric: true });
+    });
+
+  return (
+    <div className="dashboard-insight-grid">
+      <Paper className="dashboard-insight-card" radius="md">
+        <DashboardInsightHeader
+          icon={<IconHistory size={26} />}
+          title="Recently Changed"
+          count={events.length}
+          color="blue"
+        />
+        <Stack gap="sm">
+          {recentEvents.length ? recentEvents.map((event) => (
+            <DashboardEventRow key={event.id} event={event} timeZone={timeZone} />
+          )) : (
+            <DashboardEmptyState label="No recent changes" />
+          )}
+        </Stack>
+      </Paper>
+
+      <Paper className="dashboard-insight-card" radius="md">
+        <DashboardInsightHeader
+          icon={<IconShieldLock size={26} />}
+          title="Needs Attention"
+          count={attentionDevices.length}
+          color="orange"
+        />
+        <Stack gap="sm">
+          {attentionDevices.slice(0, 5).map((device) => (
+            <DashboardAttentionRow
+              key={device.id}
+              device={device}
+              onSelectDevice={onSelectDevice}
+            />
+          ))}
+          {!attentionDevices.length && <DashboardEmptyState label="No devices need attention" />}
+        </Stack>
+      </Paper>
+    </div>
+  );
+}
+
+function DashboardInsightHeader({ icon, title, count, color }) {
+  return (
+    <Group justify="space-between" align="center" mb="md" wrap="nowrap">
+      <Group gap="sm" wrap="nowrap">
+        {icon}
+        <Title order={3}>{title}</Title>
+      </Group>
+      <Badge className="dashboard-insight-count" color={color} variant="light">
+        {count}
+      </Badge>
+    </Group>
+  );
+}
+
+function DashboardEventRow({ event, timeZone }) {
+  return (
+    <div className="dashboard-insight-row">
+      <span className="dashboard-insight-row-icon blue">
+        <IconHistory size={20} />
+      </span>
+      <Box className="dashboard-insight-row-body">
+        <Text fw={800} className="truncate-cell">
+          {event.message || event.event_type_display || event.event_type}
+        </Text>
+        <Text size="sm" c="dimmed" className="truncate-cell">
+          {[event.event_type_display || event.event_type, formatDate(event.created_at, timeZone)]
+            .filter(Boolean)
+            .join(' - ')}
+        </Text>
+      </Box>
+    </div>
+  );
+}
+
+function DashboardAttentionRow({ device, onSelectDevice }) {
+  const risk = deviceRisk(device);
+  const reason = !device.known ? 'Unknown device' : risk.label;
+
+  return (
+    <button
+      type="button"
+      className="dashboard-insight-row dashboard-insight-button"
+      onClick={() => onSelectDevice(device)}
+    >
+      <span className="dashboard-insight-row-icon orange">
+        <DeviceIcon value={device.icon} size={20} />
+      </span>
+      <Box className="dashboard-insight-row-body">
+        <Text fw={800} className="truncate-cell">{device.name}</Text>
+        <Text size="sm" c="dimmed" className="truncate-cell">
+          {[reason, device.ip].filter(Boolean).join(' - ')}
+        </Text>
+      </Box>
+      <Badge className="dashboard-insight-risk" color={risk.color} variant="light">
+        {risk.label}
+      </Badge>
+    </button>
+  );
+}
+
+function DashboardEmptyState({ label }) {
+  return (
+    <Text c="dimmed" fw={700} py="sm">
+      {label}
+    </Text>
+  );
+}
+
+function SummaryRow({ label, value }) {
+  return (
+    <Group justify="space-between" wrap="nowrap">
+      <Text c="dimmed" fw={600}>{label}</Text>
+      <Text fw={800}>{value}</Text>
+    </Group>
+  );
+}
+
+function SummaryMetric({ label, value, align = 'left' }) {
+  return (
+    <Box ta={align}>
+      <Text size="sm" c="dimmed" fw={600}>{label}</Text>
+      <Text className="dashboard-summary-value" fw={800}>{value}</Text>
     </Box>
   );
 }
@@ -1148,8 +1476,8 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone }) {
           <Box className="device-field">
             <Text size="xs" c="dimmed">Role</Text>
             <select className="device-field-input" value={role} onChange={(event) => setRole(event.currentTarget.value)}>
-              {['device', 'gateway', 'router', 'hub', 'camera', 'server', 'controller', 'other'].map((value) => (
-                <option key={value} value={value}>{value.replace(/-/g, ' ')}</option>
+              {deviceRoleOptions.map((value) => (
+                <option key={value} value={value}>{formatRoleLabel(value)}</option>
               ))}
             </select>
           </Box>
@@ -1944,7 +2272,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [mapDevices, setMapDevices] = useState([]);
   const [devicePagination, setDevicePagination] = useState({
     count: 0,
-    limit: 10,
+    limit: 100,
     offset: 0,
     next_offset: null,
     previous_offset: null,
@@ -1960,12 +2288,9 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [search, setSearch] = useState('');
   const [deviceStatus, setDeviceStatus] = useState('');
   const [inventoryView, setInventoryView] = useState('table');
-  const [devicePage, setDevicePage] = useState(1);
-  const [devicePageSize, setDevicePageSize] = useState('10');
   const [deviceOrdering, setDeviceOrdering] = useState('');
   const [activeTab, setActiveTab] = useState('events');
   const [eventType, setEventType] = useState('');
-  const [scanRange, setScanRange] = useState('');
   const [activeDevice, setActiveDevice] = useState(null);
   const [changelogOpened, setChangelogOpened] = useState(false);
   const [seenChangelogVersion, setSeenChangelogVersion] = useState(APP_VERSION);
@@ -1981,20 +2306,15 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     search: '',
     deviceStatus: '',
     eventType: '',
-    deviceLimit: 10,
+    deviceLimit: 100,
     deviceOffset: 0,
     deviceOrdering: '',
   });
 
   const filteredDevices = useMemo(() => devices, [devices]);
-  const deviceLimit = Number(devicePageSize);
-  const devicePageCount = Math.max(
-    1,
-    Math.ceil((devicePagination.count || 0) / deviceLimit)
-  );
-  const deviceOffset = (devicePage - 1) * deviceLimit;
-  const deviceStart = devicePagination.count === 0 ? 0 : deviceOffset + 1;
-  const deviceEnd = Math.min(deviceOffset + devices.length, devicePagination.count);
+  const deviceLimit = 100;
+  const deviceOffset = 0;
+  const deviceEnd = Math.min(devices.length, devicePagination.count || devices.length);
   const selectedDeviceStatus =
     deviceStatusOptions.find((option) => option.value === deviceStatus) || null;
   const canManageUsers = Boolean(user?.is_staff || user?.is_superuser);
@@ -2015,7 +2335,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
       deviceOffset,
       deviceOrdering,
     };
-  }, [search, deviceStatus, eventType, deviceLimit, deviceOffset, deviceOrdering]);
+  }, [search, deviceStatus, eventType, deviceOrdering]);
 
   async function loadData({ quiet = false, notifyOnError = false, notifyOnSuccess = false } = {}) {
     if (quiet) {
@@ -2174,11 +2494,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   useEffect(() => {
     const timer = window.setTimeout(() => loadData({ quiet: true }), 250);
     return () => window.clearTimeout(timer);
-  }, [search, deviceStatus, eventType, devicePage, devicePageSize, deviceOrdering]);
-
-  useEffect(() => {
-    setDevicePage(1);
-  }, [search, deviceStatus, devicePageSize, deviceOrdering]);
+  }, [search, deviceStatus, eventType, deviceOrdering]);
 
   async function runScan() {
     setRefreshing(true);
@@ -2186,7 +2502,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     try {
       await apiRequest('scan/', {
         method: 'POST',
-        body: scanRange ? { ip_range: scanRange } : {},
+        body: {},
       });
       await loadData({ quiet: true });
       showSuccessNotification('Scan started', 'LanGuard is scanning the selected network range.');
@@ -2273,6 +2589,15 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 </Box>
               </Group>
               <ColorSchemeControl />
+              <Button
+                size="sm"
+                leftSection={<IconRefresh size={17} />}
+                onClick={runScan}
+                loading={refreshing}
+                className="topbar-scan-button"
+              >
+                Run Scan
+              </Button>
               {canManageUsers && (
                 <Button
                   component="a"
@@ -2339,12 +2664,27 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
             </Alert>
           )}
 
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-            <MetricCard icon={<IconDeviceDesktop size={24} />} label="Inventory devices" value={counters.all_devices} color="indigo" />
-            <MetricCard icon={<IconWifi size={24} />} label="Online" value={counters.online_devices} color="teal" />
-            <MetricCard icon={<IconWifiOff size={24} />} label="Offline" value={counters.offline_devices} color="gray" />
-            <MetricCard icon={<IconPlugConnected size={24} />} label="Open ports now" value={counters.open_ports} color="orange" />
-          </SimpleGrid>
+          <DashboardStatusCards counters={counters} />
+
+          <div className="dashboard-summary-grid">
+            <NetworkHealthCard counters={counters} />
+            <AutomaticScanningCard appSettings={appSettings} scanVisibility={scanVisibility} />
+            <LatestScanCard
+              scanStatus={scanStatus}
+              scanVisibility={scanVisibility}
+              timeZone={displayTimeZone}
+            />
+          </div>
+
+          <DashboardInsightCards
+            events={events}
+            devices={mapDevices}
+            onSelectDevice={(device) => {
+              setActiveDevice(device);
+              modal.open();
+            }}
+            timeZone={displayTimeZone}
+          />
 
           <Paper className="content-panel" radius="md">
             <Stack gap={0}>
@@ -2369,13 +2709,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                     aria-label={selectedDeviceStatus?.label || 'Status'}
                     onChange={(value) => setDeviceStatus(value || '')}
                   />
-                  <Select
-                    w={115}
-                    aria-label="Rows per page"
-                    data={devicePageSizeOptions}
-                    value={devicePageSize}
-                    onChange={(value) => setDevicePageSize(value || '10')}
-                  />
                   <TextInput
                     w={{ base: 180, sm: 260 }}
                     placeholder="Search"
@@ -2399,9 +2732,9 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 </Group>
               </Group>
               <Divider />
-              {inventoryView === 'map' ? (
+              {inventoryView === 'rooms' ? (
                 <Box p="md">
-                  <NetworkMap
+                  <RoomsMap
                     devices={mapDevices}
                     onSelectDevice={(device) => {
                       setActiveDevice(device);
@@ -2409,88 +2742,118 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                     }}
                   />
                   <Text size="xs" c="dimmed" mt="sm">
-                    Showing up to 100 devices on the map.
+                    Showing up to 100 devices grouped by room.
+                  </Text>
+                </Box>
+              ) : inventoryView === 'roles' ? (
+                <Box p="md">
+                  <RolesMap
+                    devices={mapDevices}
+                    onSelectDevice={(device) => {
+                      setActiveDevice(device);
+                      modal.open();
+                    }}
+                  />
+                  <Text size="xs" c="dimmed" mt="sm">
+                    Showing up to 100 devices grouped by role.
                   </Text>
                 </Box>
               ) : (
                 <>
-                  <Table className="devices-table" highlightOnHover verticalSpacing="sm">
-                    <Table.Thead>
-                      <Table.Tr>
-                        <Table.Th className="device-status-cell">Status</Table.Th>
-                        <SortableHeader
-                          field="name"
-                          label="Name"
-                          ordering={deviceOrdering}
-                          onChange={setDeviceOrdering}
-                          className="device-name-cell"
-                        />
-                        <Table.Th className="device-room-cell">Room</Table.Th>
-                        <Table.Th className="device-role-cell">Role</Table.Th>
-                        <SortableHeader
-                          field="ip"
-                          label="IP"
-                          ordering={deviceOrdering}
-                          onChange={setDeviceOrdering}
-                          className="device-ip-cell"
-                        />
-                        <Table.Th className="device-mac-cell">MAC</Table.Th>
-                        <Table.Th className="device-ports-cell">Ports</Table.Th>
-                        <Table.Th className="device-risk-cell">Risk</Table.Th>
-                        <Table.Th className="device-lastseen-cell">Last seen</Table.Th>
-                        <Table.Th className="device-known-cell">Known</Table.Th>
-                      </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                      {filteredDevices.map((device) => (
-                        <Table.Tr
-                          className="device-row"
-                          key={device.id}
-                          onClick={() => {
-                            setActiveDevice(device);
-                            modal.open();
-                          }}
-                          style={{ cursor: 'pointer' }}
+                  <Box className="device-list-toolbar" p="md">
+                    <Group justify="space-between" wrap="wrap" gap="sm">
+                      <Group gap="xs">
+                        <Button
+                          size="xs"
+                          variant={deviceOrdering === 'name' ? 'light' : 'subtle'}
+                          onClick={() => setDeviceOrdering(sortableOrdering('name', deviceOrdering))}
                         >
-                          <Table.Td className="device-status-cell">
-                            <DeviceStatusInline device={device} />
-                          </Table.Td>
-                          <Table.Td className="device-name-cell" fw={600}>
+                          Name
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant={deviceOrdering === 'ip' ? 'light' : 'subtle'}
+                          onClick={() => setDeviceOrdering(sortableOrdering('ip', deviceOrdering))}
+                        >
+                          IP
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant={deviceOrdering === '-lastseen' ? 'light' : 'subtle'}
+                          onClick={() => setDeviceOrdering(sortableOrdering('lastseen', deviceOrdering))}
+                        >
+                          Last seen
+                        </Button>
+                      </Group>
+                      <Text size="sm" c="dimmed">
+                        Showing {deviceEnd} of {devicePagination.count || deviceEnd} devices
+                      </Text>
+                    </Group>
+                  </Box>
+                  <Stack className="device-list" gap={0}>
+                    {filteredDevices.map((device) => (
+                      <button
+                        type="button"
+                        className="device-list-row"
+                        key={device.id}
+                        onClick={() => {
+                          setActiveDevice(device);
+                          modal.open();
+                        }}
+                      >
+                        <Group className="device-list-primary" gap="md" align="center" wrap="nowrap">
+                          <span className="device-list-icon">
+                            <DeviceIcon value={device.icon} size={22} />
+                          </span>
+                          <Box className="device-list-title">
                             <Group gap="xs" wrap="nowrap">
-                              <span className="device-table-icon">
-                                <DeviceIcon value={device.icon} size={17} />
-                              </span>
-                              <span className="truncate-cell" title={device.name}>
-                                {device.name}
-                              </span>
+                              <Text fw={800} className="truncate-cell">{device.name}</Text>
+                              <Badge
+                                className="device-known-badge"
+                                color={device.known ? 'teal' : 'yellow'}
+                                variant="light"
+                              >
+                                {device.known ? 'Known' : 'New'}
+                              </Badge>
                             </Group>
-                          </Table.Td>
-                          <Table.Td className="device-room-cell">{device.room || '-'}</Table.Td>
-                          <Table.Td className="device-role-cell">{device.role || 'device'}</Table.Td>
-                          <Table.Td className="device-ip-cell">{device.ip}</Table.Td>
-                          <Table.Td className="device-mac-cell">{device.mac}</Table.Td>
-                          <Table.Td className="device-ports-cell">
+                            <Text size="sm" c="dimmed" className="truncate-cell">
+                              {[device.hostname, device.vendor].filter(Boolean).join(' - ') || device.mac}
+                            </Text>
+                          </Box>
+                        </Group>
+                        <div className="device-list-meta">
+                          <Box>
+                            <Text size="xs" c="dimmed">Status</Text>
+                            <DeviceStatusInline device={device} muted />
+                          </Box>
+                          <Box>
+                            <Text size="xs" c="dimmed">IP</Text>
+                            <Text fw={700} className="mobile-mono-value">{device.ip}</Text>
+                          </Box>
+                          <Box>
+                            <Text size="xs" c="dimmed">Room</Text>
+                            <Text>{device.room || '-'}</Text>
+                          </Box>
+                          <Box>
+                            <Text size="xs" c="dimmed">Role</Text>
+                            <Text>{formatRoleLabel(device.role)}</Text>
+                          </Box>
+                          <Box>
+                            <Text size="xs" c="dimmed">Ports</Text>
                             <PortSummary ports={device.open_ports || []} />
-                          </Table.Td>
-                          <Table.Td className="device-risk-cell">
+                          </Box>
+                          <Box>
+                            <Text size="xs" c="dimmed">Risk</Text>
                             <RiskBadge device={device} compact />
-                          </Table.Td>
-                          <Table.Td className="device-lastseen-cell">
-                            {formatDate(device.lastseen, displayTimeZone)}
-                          </Table.Td>
-                          <Table.Td className="device-known-cell">
-                            <Badge
-                              className="device-known-badge"
-                              color={device.known ? 'teal' : 'yellow'}
-                              variant="light"
-                            >
-                              {device.known ? 'Known' : 'New'}
-                            </Badge>
-                          </Table.Td>
-                        </Table.Tr>
-                      ))}
-                    </Table.Tbody>
-                  </Table>
+                          </Box>
+                          <Box>
+                            <Text size="xs" c="dimmed">Last seen</Text>
+                            <Text>{formatDate(device.lastseen, displayTimeZone)}</Text>
+                          </Box>
+                        </div>
+                      </button>
+                    ))}
+                  </Stack>
                   <Stack className="device-mobile-list" gap={0}>
                     {filteredDevices.map((device) => (
                       <button
@@ -2538,7 +2901,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           </Box>
                           <Box className="device-mobile-wide">
                             <Text size="xs" c="dimmed">Role</Text>
-                            <Text size="sm">{device.role || 'device'}</Text>
+                            <Text size="sm">{formatRoleLabel(device.role)}</Text>
                           </Box>
                           <Box className="device-mobile-wide">
                             <Text size="xs" c="dimmed">MAC</Text>
@@ -2552,97 +2915,10 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                       </button>
                     ))}
                   </Stack>
-                  <Divider />
-                  <Group className="devices-pagination" justify="space-between" p="md">
-                    <Text size="sm" c="dimmed">
-                      Showing {deviceStart}-{deviceEnd} of {devicePagination.count} devices
-                    </Text>
-                    <Pagination
-                      total={devicePageCount}
-                      value={devicePage}
-                      onChange={setDevicePage}
-                      size="sm"
-                      withEdges
-                    />
-                  </Group>
                 </>
               )}
             </Stack>
           </Paper>
-
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
-            <Paper className="content-panel" radius="md" p="md">
-              <Stack>
-                <Group>
-                  <IconShieldCheck size={22} />
-                  <Title order={4}>Scan control</Title>
-                </Group>
-                <Text size="sm" c="dimmed">
-                  Last scan: {scanStatus ? formatDate(scanStatus.finished_at || scanStatus.started_at, displayTimeZone) : '-'}
-                </Text>
-                <Group gap="xs">
-                  <Badge color={scanVisibility?.is_scanning ? 'blue' : 'gray'} variant="light">
-                    {scanVisibility?.is_scanning ? 'Scanning' : 'Idle'}
-                  </Badge>
-                  <Text size="sm" c="dimmed">
-                    Range: {scanVisibility?.current_range || appSettings?.ip_range || '-'}
-                  </Text>
-                </Group>
-                <TextInput
-                  label="CIDR range"
-                  placeholder={
-                    appSettings?.ip_range
-                      ? `Use saved default (${appSettings.ip_range})`
-                      : 'Use saved default'
-                  }
-                  value={scanRange}
-                  onChange={(event) => setScanRange(event.currentTarget.value)}
-                />
-                <Button leftSection={<IconRefresh size={18} />} onClick={runScan} loading={refreshing}>
-                  Run scan
-                </Button>
-              </Stack>
-            </Paper>
-
-            <Paper className="content-panel" radius="md" p="md">
-              <Group mb="sm">
-                <IconClock size={22} />
-                <Title order={4}>Latest scan</Title>
-              </Group>
-              <SimpleGrid cols={2}>
-                <NumberReadout label="Seen" value={scanStatus?.devices_seen} />
-                <NumberReadout label="New" value={scanStatus?.new_devices} />
-                <NumberReadout label="Opened" value={scanStatus?.ports_opened} />
-                <NumberReadout label="Closed" value={scanStatus?.ports_closed} />
-              </SimpleGrid>
-              <Divider my="sm" />
-              <SimpleGrid cols={{ base: 1, sm: 2 }}>
-                <Box>
-                  <Text size="xs" c="dimmed">Started</Text>
-                  <Text fw={600}>{formatDate(scanVisibility?.started_at, displayTimeZone)}</Text>
-                </Box>
-                <Box>
-                  <Text size="xs" c="dimmed">Finished</Text>
-                  <Text fw={600}>{formatDate(scanVisibility?.finished_at, displayTimeZone)}</Text>
-                </Box>
-                <Box>
-                  <Text size="xs" c="dimmed">Duration</Text>
-                  <Text fw={600}>{formatDuration(scanVisibility?.duration_seconds)}</Text>
-                </Box>
-                <Box>
-                  <Text size="xs" c="dimmed">Status</Text>
-                  <Badge color={scanVisibility?.is_scanning ? 'blue' : scanStatus?.status === 'failed' ? 'red' : 'teal'} variant="light">
-                    {scanVisibility?.is_scanning ? 'running' : scanStatus?.status || '-'}
-                  </Badge>
-                </Box>
-              </SimpleGrid>
-              {scanVisibility?.last_error && (
-                <Alert mt="sm" color="red" icon={<IconAlertCircle size={18} />}>
-                  {scanVisibility.last_error}
-                </Alert>
-              )}
-            </Paper>
-          </SimpleGrid>
 
           <Tabs value={activeTab} onChange={(value) => setActiveTab(value || 'events')}>
             <Group justify="space-between" align="flex-end">
@@ -2830,18 +3106,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   );
 }
 
-function NumberReadout({ label, value }) {
-  return (
-    <Box>
-      <Text size="xs" c="dimmed">
-        {label}
-      </Text>
-      <Text fw={700} size="xl">
-        {value ?? 0}
-      </Text>
-    </Box>
-  );
-}
 
 export default function Home() {
   const [user, setUser] = useState(null);
