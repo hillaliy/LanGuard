@@ -60,7 +60,7 @@ struct DeviceInventoryItem: Codable {
         self.hostname = device.hostname
         self.icon = device.iconName
         self.secondaryIcon = device.secondaryIconName
-        self.role = device.role?.rawValue
+        self.role = device.effectiveRole.rawValue
         self.room = device.room
         self.known = device.isKnown
         self.isGateway = device.isGateway

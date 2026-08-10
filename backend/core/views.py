@@ -87,7 +87,26 @@ DOCKER_TO_MAC_ICON_ALIASES = {
     "power-strip": "poweroutlet.strip",
     "server": "server.rack",
 }
-MAC_TO_DOCKER_ICON_ALIASES = {value: key for key, value in DOCKER_TO_MAC_ICON_ALIASES.items()}
+DOCKER_ICON_VALUES = set(DOCKER_TO_MAC_ICON_ALIASES)
+MAC_TO_DOCKER_ICON_ALIASES = {
+    **{value: key for key, value in DOCKER_TO_MAC_ICON_ALIASES.items()},
+    "airplayvideo": "streamer",
+    "blinds.horizontal.closed": "shutter",
+    "cpu": "smart-hub",
+    "hifispeaker": "speaker",
+    "lamp.ceiling": "ceiling-light",
+    "light.panel": "light",
+    "light.recessed": "ceiling-light",
+    "lightbulb.max": "light",
+    "lightswitch.on": "light",
+    "point.3.connected.trianglepath.dotted": "smart-hub",
+    "poweroutlet.type.h": "power-strip",
+    "powerplug": "power-strip",
+    "sensor.tag.radiowaves.forward": "smart-hub",
+    "switch.2": "smart-hub",
+    "video.doorbell": "security-camera",
+    "window.shade.closed": "blinds",
+}
 
 
 def export_inventory_icon(icon):
@@ -97,12 +116,35 @@ def export_inventory_icon(icon):
 
 def import_inventory_icon(icon, fallback="unknown"):
     value = str(icon or "").strip()
-    return (MAC_TO_DOCKER_ICON_ALIASES.get(value, value)[:255] or fallback)
+    normalized = MAC_TO_DOCKER_ICON_ALIASES.get(value, value)
+    if normalized in DOCKER_ICON_VALUES:
+        return normalized
+    return fallback
+
+
+INVENTORY_ROOM_FIELDS = ("room", "roomName", "room_name", "deviceRoom", "device_room")
+INVENTORY_ROLE_FIELDS = ("role", "deviceRole", "device_role", "effectiveRole", "effective_role")
+
+
+def import_inventory_room(item):
+    for field in INVENTORY_ROOM_FIELDS:
+        if field in item:
+            return str(item.get(field) or "").strip()[:100]
+    return None
+
+
+def import_inventory_role(item):
+    for field in INVENTORY_ROLE_FIELDS:
+        if field in item:
+            return str(item.get(field) or "").strip()[:32]
+    return None
 
 
 DEVICE_ORDERING_FIELDS = {
     "name": ("name", "ip", "id"),
     "-name": ("-name", "ip", "id"),
+    "lastseen": ("lastseen", "ip", "id"),
+    "-lastseen": ("-lastseen", "ip", "id"),
 }
 
 
@@ -346,8 +388,8 @@ def import_inventory_devices(payload):
         name = str(item.get("name") or "Device").strip()[:100] or "Device"
         hostname = str(item.get("hostname") or item.get("hostName") or "").strip()[:255]
         is_gateway = parse_inventory_bool(item.get("is_gateway", item.get("isGateway", False)))
-        role = str(item.get("role") or ("gateway" if is_gateway else "device")).strip()[:32] or "device"
-        room = str(item.get("room") or "").strip()[:100]
+        role = import_inventory_role(item)
+        room = import_inventory_room(item)
         first_seen = parse_inventory_datetime(
             item.get("first_seen") or item.get("firstSeen"),
             now,
@@ -371,19 +413,23 @@ def import_inventory_devices(payload):
                 "",
             ),
             "hostname": hostname,
-            "role": role,
-            "room": room,
             "known": parse_inventory_bool(item.get("known", item.get("isKnown", False))),
             "is_gateway": is_gateway,
             "online": device_status != Device.Status.OFFLINE,
             "status": device_status,
             "lastseen": last_seen,
         }
+        if role is not None:
+            defaults["role"] = role or ("gateway" if is_gateway else "device")
+        if room is not None:
+            defaults["room"] = room
 
         device, was_created = Device.objects.get_or_create(
             mac=mac,
             defaults={
                 **defaults,
+                "role": role or ("gateway" if is_gateway else "device"),
+                "room": room or "",
                 "firstseen": first_seen,
             },
         )
@@ -400,8 +446,8 @@ def import_inventory_devices(payload):
                     "icon",
                     "secondary_icon",
                     "hostname",
-                    "role",
-                    "room",
+                    *(['role'] if role is not None else []),
+                    *(['room'] if room is not None else []),
                     "known",
                     "is_gateway",
                     "online",

@@ -1,5 +1,7 @@
 import logging
 import ipaddress
+import os
+import random
 import socket
 import struct
 
@@ -121,12 +123,282 @@ DEVICE_GUESS_RULES = [
         "ports": (22,),
     },
 ]
+
+MANUF_PATHS = (
+    os.path.join(os.path.dirname(__file__), "resources", "manuf"),
+    os.path.abspath(
+        os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "macos",
+            "LanGuardMac",
+            "Resources",
+            "manuf",
+        )
+    ),
+)
+
+
+def mac_bytes(mac):
+    parts = (mac or "").replace("-", ":").split(":")
+    if len(parts) != 6:
+        return None
+    try:
+        return bytes(int(part, 16) for part in parts)
+    except ValueError:
+        return None
+
+
+def is_locally_administered_mac(mac):
+    raw = mac_bytes(mac)
+    return bool(raw and raw[0] & 0x02)
+
+
+class ManufVendorDB:
+    _entries = None
+
+    @classmethod
+    def entries(cls):
+        if cls._entries is None:
+            cls._entries = cls.load_entries()
+        return cls._entries
+
+    @classmethod
+    def load_entries(cls):
+        entries = []
+        for path in MANUF_PATHS:
+            if not os.path.exists(path):
+                continue
+            try:
+                with open(path, encoding="utf-8") as manuf_file:
+                    for line in manuf_file:
+                        entry = cls.parse_line(line)
+                        if entry:
+                            entries.append(entry)
+            except OSError as exc:
+                LOGGER.debug("Failed reading manuf database %s: %s", path, exc)
+            if entries:
+                break
+        return sorted(entries, key=lambda item: item[1], reverse=True)
+
+    @staticmethod
+    def parse_line(line):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            return None
+        parts = line.split(None, 2)
+        if len(parts) < 2:
+            return None
+        prefix_text = parts[0]
+        vendor = parts[2].strip() if len(parts) > 2 else parts[1].strip()
+        if not vendor:
+            return None
+        if "/" in prefix_text:
+            prefix_text, bits_text = prefix_text.split("/", 1)
+            try:
+                prefix_bits = int(bits_text)
+            except ValueError:
+                return None
+        else:
+            prefix_bits = len(prefix_text.replace(":", "").replace("-", "")) * 4
+        try:
+            prefix_value = int(prefix_text.replace(":", "").replace("-", ""), 16)
+        except ValueError:
+            return None
+        prefix_hex_bits = len(prefix_text.replace(":", "").replace("-", "")) * 4
+        if prefix_hex_bits > prefix_bits:
+            prefix_value >>= prefix_hex_bits - prefix_bits
+        return prefix_value, prefix_bits, vendor
+
+    @classmethod
+    def lookup(cls, mac):
+        raw = mac_bytes(mac)
+        if not raw or is_locally_administered_mac(mac):
+            return ""
+        mac_value = int.from_bytes(raw, "big")
+        for prefix_value, prefix_bits, vendor in sorted(
+            cls.entries(),
+            key=lambda item: item[1],
+            reverse=True,
+        ):
+            shift = 48 - prefix_bits
+            if shift < 0:
+                continue
+            if (mac_value >> shift) == prefix_value:
+                return vendor
+        return ""
+
+
+def manuf_vendor(mac):
+    return ManufVendorDB.lookup(mac)
+
+
+def dns_encode_name(name):
+    encoded = bytearray()
+    for label in name.strip(".").split("."):
+        label_bytes = label.encode("ascii", "ignore")[:63]
+        encoded.append(len(label_bytes))
+        encoded.extend(label_bytes)
+    encoded.append(0)
+    return bytes(encoded)
+
+
+def dns_query_packet(name, query_type=12, query_id=None):
+    query_id = random.randint(1, 65535) if query_id is None else query_id
+    header = struct.pack("!HHHHHH", query_id, 0, 1, 0, 0, 0)
+    question = dns_encode_name(name) + struct.pack("!HH", query_type, 1)
+    return header + question
+
+
+def dns_read_name(packet, offset):
+    labels = []
+    jumped = False
+    end_offset = offset
+    seen_offsets = set()
+
+    while offset < len(packet):
+        length = packet[offset]
+        if length == 0:
+            offset += 1
+            if not jumped:
+                end_offset = offset
+            break
+        if length & 0xC0 == 0xC0:
+            if offset + 1 >= len(packet):
+                break
+            pointer = ((length & 0x3F) << 8) | packet[offset + 1]
+            if pointer in seen_offsets:
+                break
+            seen_offsets.add(pointer)
+            if not jumped:
+                end_offset = offset + 2
+            offset = pointer
+            jumped = True
+            continue
+        offset += 1
+        label = packet[offset : offset + length].decode("utf-8", "ignore")
+        labels.append(label)
+        offset += length
+        if not jumped:
+            end_offset = offset
+
+    return ".".join(label for label in labels if label), end_offset
+
+
+def dns_ptr_names(packet):
+    if len(packet) < 12:
+        return []
+    try:
+        qdcount, ancount, nscount, arcount = struct.unpack("!HHHH", packet[4:12])
+    except struct.error:
+        return []
+    offset = 12
+    for _ in range(qdcount):
+        _, offset = dns_read_name(packet, offset)
+        offset += 4
+    names = []
+    for _ in range(ancount + nscount + arcount):
+        _, offset = dns_read_name(packet, offset)
+        if offset + 10 > len(packet):
+            break
+        record_type, _, _, rdlength = struct.unpack("!HHIH", packet[offset : offset + 10])
+        offset += 10
+        rdata_offset = offset
+        offset += rdlength
+        if record_type == 12:
+            name, _ = dns_read_name(packet, rdata_offset)
+            if name:
+                names.append(name)
+    return names
+
+
+def reverse_dns_name(ip):
+    try:
+        address = ipaddress.ip_address(ip)
+    except ValueError:
+        return ""
+    if address.version != 4:
+        return ""
+    return ".".join(reversed(ip.split("."))) + ".in-addr.arpa"
+
+
+def udp_exchange(packet, address, port, timeout):
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(timeout)
+        sock.sendto(packet, (address, port))
+        response, _ = sock.recvfrom(2048)
+        return response
+
+
+def mdns_reverse_hostname(ip):
+    name = reverse_dns_name(ip)
+    if not name:
+        return ""
+    packet = dns_query_packet(name, query_type=12, query_id=0)
+    responses = []
+    for address in ("224.0.0.251", ip):
+        try:
+            responses.append(udp_exchange(packet, address, 5353, 0.7))
+        except OSError as exc:
+            LOGGER.debug("mDNS reverse lookup failed for %s via %s: %s", ip, address, exc)
+    for response in responses:
+        for ptr_name in dns_ptr_names(response):
+            cleaned = clean_hostname(ptr_name)
+            if cleaned:
+                return cleaned
+    return ""
+
+
+def netbios_hostname(ip):
+    transaction_id = random.randint(1, 65535)
+    encoded_star = b" CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\x00"
+    packet = (
+        struct.pack("!HHHHHH", transaction_id, 0, 1, 0, 0, 0)
+        + encoded_star
+        + struct.pack("!HH", 0x0021, 0x0001)
+    )
+    try:
+        response = udp_exchange(packet, ip, 137, 0.7)
+    except OSError as exc:
+        LOGGER.debug("NetBIOS hostname lookup failed for %s: %s", ip, exc)
+        return ""
+    if len(response) < 57:
+        return ""
+    name_count = response[56]
+    offset = 57
+    for _ in range(name_count):
+        if offset + 18 > len(response):
+            break
+        raw_name = response[offset : offset + 15].decode("ascii", "ignore").strip()
+        suffix = response[offset + 15]
+        flags = struct.unpack("!H", response[offset + 16 : offset + 18])[0]
+        offset += 18
+        is_group = bool(flags & 0x8000)
+        if raw_name and raw_name != "*" and suffix in (0x00, 0x20) and not is_group:
+            return clean_hostname(raw_name)
+    return ""
+
+
 def get_hostname(ip):
+    lookup_steps = (
+        reverse_dns_hostname,
+        mdns_reverse_hostname,
+        netbios_hostname,
+    )
+    for lookup in lookup_steps:
+        hostname = lookup(ip)
+        if hostname:
+            return hostname
+    return ""
+
+
+def reverse_dns_hostname(ip):
     try:
         hostname, _, _ = socket.gethostbyaddr(ip)
         return clean_hostname(hostname)
     except (socket.herror, socket.gaierror, TimeoutError, OSError) as e:
-        LOGGER.debug("Hostname lookup failed for %s: %s", ip, e)
+        LOGGER.debug("Reverse DNS hostname lookup failed for %s: %s", ip, e)
         return ""
 
 
@@ -662,7 +934,7 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
     ip = element[1].psrc
     mac = element[1].hwsrc.lower()
     vendor = ManufDA.lookup(oui, mac) if oui else None
-    vendor_name = vendor[1] if vendor else ""
+    vendor_name = manuf_vendor(mac) or (vendor[1] if vendor else "")
     hostname = get_hostname(ip=ip)
     ports_opened = 0
     ports_closed = 0

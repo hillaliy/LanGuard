@@ -242,6 +242,7 @@ private struct HeroPanel: View {
         HeaderView(
             title: "LanGuard",
             subtitle: "Local network watch for macOS",
+            assetImage: "LanGuardIcon",
             version: AppVersion.current
         )
     }

@@ -13,7 +13,8 @@ struct GuestScanView: View {
             VStack(alignment: .leading, spacing: 24) {
                 HeaderView(
                     title: "Guest Scan",
-                    subtitle: "Scan a temporary network without saving devices."
+                    subtitle: "Scan a temporary network without saving devices.",
+                    systemImage: "person.crop.circle"
                 )
 
                 guestNotice

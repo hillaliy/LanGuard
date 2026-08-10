@@ -23,7 +23,8 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 20) {
             HeaderView(
                 title: "Settings",
-                subtitle: "Control how LanGuard scans this Mac's local network."
+                subtitle: "Control how LanGuard scans this Mac's local network.",
+                systemImage: "gearshape"
             )
 
             Form {

@@ -1,6 +1,6 @@
 FROM python:3.14-slim
 
-ARG APP_VERSION=1.0.20
+ARG APP_VERSION=1.0.23
 
 ENV ENVIRONMENT=production \
     APP_VERSION=${APP_VERSION} \
@@ -17,6 +17,7 @@ COPY ./requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY ./backend /app
+COPY ./macos/LanGuardMac/Resources/manuf /app/core/resources/manuf
 
 WORKDIR /app
 
