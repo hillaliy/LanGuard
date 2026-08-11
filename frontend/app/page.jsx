@@ -488,7 +488,7 @@ function RoomsMap({ devices = [], onSelectDevice }) {
     <Paper className="rooms-map-panel" radius="md">
       <div className="rooms-map">
         {roomSections.length ? (
-          <div className="rooms-map-grid">
+          <div className="rooms-map-list">
             {roomSections.map((section) => (
               <section className="rooms-map-room" key={section.room}>
                 <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
@@ -553,7 +553,7 @@ function RolesMap({ devices = [], onSelectDevice }) {
     <Paper className="rooms-map-panel" radius="md">
       <div className="rooms-map">
         {roleSections.length ? (
-          <div className="rooms-map-grid">
+          <div className="rooms-map-list">
             {roleSections.map((section) => (
               <section className="rooms-map-room" key={section.role}>
                 <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
@@ -1131,7 +1131,7 @@ function LatestScanCard({ scanStatus, scanVisibility, timeZone }) {
 }
 
 function DashboardInsightCards({ events = [], devices = [], onSelectDevice, timeZone }) {
-  const recentEvents = events.slice(0, 5);
+  const recentEvents = events;
   const attentionDevices = devices
     .filter((device) => !device.known || ['high', 'medium'].includes(device.risk_level))
     .sort((first, second) => {
@@ -1150,7 +1150,7 @@ function DashboardInsightCards({ events = [], devices = [], onSelectDevice, time
           count={events.length}
           color="blue"
         />
-        <Stack gap="sm">
+        <Stack className="dashboard-insight-list" gap="sm">
           {recentEvents.length ? recentEvents.map((event) => (
             <DashboardEventRow key={event.id} event={event} timeZone={timeZone} />
           )) : (
@@ -1166,8 +1166,8 @@ function DashboardInsightCards({ events = [], devices = [], onSelectDevice, time
           count={attentionDevices.length}
           color="orange"
         />
-        <Stack gap="sm">
-          {attentionDevices.slice(0, 5).map((device) => (
+        <Stack className="dashboard-insight-list" gap="sm">
+          {attentionDevices.map((device) => (
             <DashboardAttentionRow
               key={device.id}
               device={device}
@@ -2832,11 +2832,11 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           </Box>
                           <Box>
                             <Text size="xs" c="dimmed">Room</Text>
-                            <Text>{device.room || '-'}</Text>
+                            <Text className="device-list-meta-value">{device.room || '-'}</Text>
                           </Box>
                           <Box>
                             <Text size="xs" c="dimmed">Role</Text>
-                            <Text>{formatRoleLabel(device.role)}</Text>
+                            <Text className="device-list-meta-value">{formatRoleLabel(device.role)}</Text>
                           </Box>
                           <Box>
                             <Text size="xs" c="dimmed">Ports</Text>
@@ -2846,9 +2846,11 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                             <Text size="xs" c="dimmed">Risk</Text>
                             <RiskBadge device={device} compact />
                           </Box>
-                          <Box>
+                          <Box className="device-list-last-seen">
                             <Text size="xs" c="dimmed">Last seen</Text>
-                            <Text>{formatDate(device.lastseen, displayTimeZone)}</Text>
+                            <Text className="device-list-last-seen-value">
+                              {formatDate(device.lastseen, displayTimeZone)}
+                            </Text>
                           </Box>
                         </div>
                       </button>

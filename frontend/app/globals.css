@@ -374,9 +374,17 @@ textarea {
 .dashboard-insight-card {
   background: var(--panel-bg);
   border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
   min-height: 246px;
   overflow: hidden;
   padding: 22px;
+}
+
+.dashboard-insight-list {
+  max-height: 270px;
+  overflow-y: auto;
+  padding-inline-end: 6px;
 }
 
 .dashboard-insight-count {
@@ -462,7 +470,7 @@ textarea {
   cursor: pointer;
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(250px, 1.25fr) minmax(520px, 2fr);
+  grid-template-columns: minmax(250px, 1.1fr) minmax(760px, 2.4fr);
   letter-spacing: 0;
   min-width: 0;
   padding: 14px 18px;
@@ -497,18 +505,34 @@ textarea {
   display: grid;
   gap: 12px;
   grid-template-columns:
-    minmax(96px, 0.85fr)
-    minmax(110px, 0.9fr)
-    minmax(90px, 0.75fr)
-    minmax(100px, 0.85fr)
-    minmax(84px, 0.75fr)
-    minmax(80px, 0.7fr)
-    minmax(150px, 1fr);
+    minmax(96px, 0.75fr)
+    minmax(120px, 0.8fr)
+    minmax(90px, 0.7fr)
+    minmax(100px, 0.75fr)
+    minmax(78px, 0.55fr)
+    minmax(82px, 0.6fr)
+    minmax(190px, 1.25fr);
   min-width: 0;
 }
 
 .device-list-meta > * {
   min-width: 0;
+  overflow: hidden;
+}
+
+.device-list-meta-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-list-last-seen {
+  min-width: 190px;
+}
+
+.device-list-last-seen-value {
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .devices-table {
@@ -678,10 +702,10 @@ textarea {
   padding: 18px;
 }
 
-.rooms-map-grid {
-  display: grid;
+.rooms-map-list {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
 
 .rooms-map-room {
@@ -710,7 +734,7 @@ textarea {
 }
 
 .rooms-map-room .network-device-grid {
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
 }
 
 .network-device-node {

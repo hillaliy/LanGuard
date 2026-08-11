@@ -299,6 +299,24 @@ def normalize_inventory_mac(value):
     return ":".join(parts)
 
 
+def inventory_mac_is_locally_administered(mac):
+    try:
+        first_octet = int(str(mac).split(":")[0], 16)
+    except (IndexError, TypeError, ValueError):
+        return False
+    return bool(first_octet & 0x02)
+
+
+def should_remove_import_ip_duplicate(device):
+    if device.is_gateway:
+        return False
+    if not device.known:
+        return True
+    if inventory_mac_is_locally_administered(device.mac):
+        return True
+    return device.status != Device.Status.ONLINE or not device.online
+
+
 def parse_inventory_bool(value, default=False):
     if isinstance(value, bool):
         return value
@@ -366,6 +384,7 @@ def import_inventory_devices(payload):
     created = 0
     updated = 0
     skipped = 0
+    removed_duplicates = 0
     now = timezone.now()
 
     for item in imported_devices:
@@ -402,6 +421,12 @@ def import_inventory_devices(payload):
         device_status = (
             raw_status if raw_status in Device.Status.values else Device.Status.OFFLINE
         )
+
+        duplicate_devices = Device.objects.filter(ip=ip).exclude(mac=mac)
+        for duplicate in duplicate_devices:
+            if should_remove_import_ip_duplicate(duplicate):
+                duplicate.delete()
+                removed_duplicates += 1
 
         defaults = {
             "name": name,
@@ -474,6 +499,7 @@ def import_inventory_devices(payload):
         "created": created,
         "updated": updated,
         "skipped": skipped,
+        "removed_duplicates": removed_duplicates,
         "total": len(imported_devices),
     }
 

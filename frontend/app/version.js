@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.1.1',
+    date: '2026-08-11',
+    items: [
+      'Cleaned stale duplicate Docker inventory records during imports when an old MAC remains on the same IP.',
+      'Improved Docker room and role views with vertical sections and scrollable dashboard insight cards.',
+      'Fixed Docker device-list date layout so Last seen values no longer clip or push neighboring columns.',
+      'Opened the macOS device detail sheet directly from Dashboard Needs Attention items.',
+    ],
+  },
+  {
     version: '1.1.0',
     date: '2026-08-10',
     items: [
