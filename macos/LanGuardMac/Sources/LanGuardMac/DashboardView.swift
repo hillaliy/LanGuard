@@ -2,6 +2,7 @@ import SwiftUI
 
 struct DashboardView: View {
     @Environment(AppModel.self) private var appModel
+    @State private var editingDevice: NetworkDevice?
 
     var body: some View {
         ScrollView {
@@ -11,6 +12,15 @@ struct DashboardView: View {
             }
             .padding(32)
             .frame(maxWidth: 1540, alignment: .leading)
+        }
+        .sheet(item: $editingDevice) { device in
+            DeviceDetailView(device: device, rooms: appModel.settings.rooms) { updatedDevice in
+                appModel.updateDevice(updatedDevice)
+                editingDevice = nil
+            } onDelete: { device in
+                appModel.deleteDevice(device)
+                editingDevice = nil
+            }
         }
     }
 
@@ -55,7 +65,9 @@ struct DashboardView: View {
                     .padding(.top, 12)
                     .gridCellColumns(2)
 
-                WatchListCard(devices: appModel.devices, fixedHeight: 328)
+                WatchListCard(devices: appModel.devices, fixedHeight: 328) { device in
+                    editingDevice = device
+                }
                     .padding(.top, 12)
                     .gridCellAnchor(.topLeading)
                     .gridCellColumns(2)
@@ -106,7 +118,9 @@ struct DashboardView: View {
     private var compactLowerContent: some View {
         HStack(alignment: .top, spacing: 14) {
             RecentlyChangedCard(changes: visibleRecentChanges, maximumItems: 8, fixedHeight: 292)
-            WatchListCard(devices: appModel.devices, fixedHeight: 292)
+            WatchListCard(devices: appModel.devices, fixedHeight: 292) { device in
+                editingDevice = device
+            }
         }
     }
 
@@ -589,6 +603,7 @@ private struct WatchListCard: View {
     let devices: [NetworkDevice]
     private let maximumItems = 8
     var fixedHeight: CGFloat?
+    var onSelectDevice: (NetworkDevice) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -620,30 +635,36 @@ private struct WatchListCard: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(attentionDevices) { device in
-                            HStack(spacing: 12) {
-                                Image(systemName: device.risk == .high ? "exclamationmark.triangle" : "questionmark.circle")
-                                    .foregroundStyle(device.risk == .high ? .red : .orange)
-                                    .frame(width: 24)
+                            Button {
+                                onSelectDevice(device)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: device.risk == .high ? "exclamationmark.triangle" : "questionmark.circle")
+                                        .foregroundStyle(device.risk == .high ? .red : .orange)
+                                        .frame(width: 24)
 
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(device.name)
-                                        .font(.headline)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                    Text(device.ipAddress)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(device.name)
+                                            .font(.headline)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                        Text(device.ipAddress)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
+
+                                    Text(device.risk.title)
+                                        .font(.caption.weight(.bold))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background((device.risk == .high ? Color.red : Color.orange).opacity(0.16), in: Capsule())
+                                        .foregroundStyle(device.risk == .high ? .red : .orange)
                                 }
-
-                                Spacer()
-
-                                Text(device.risk.title)
-                                    .font(.caption.weight(.bold))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background((device.risk == .high ? Color.red : Color.orange).opacity(0.16), in: Capsule())
-                                    .foregroundStyle(device.risk == .high ? .red : .orange)
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
                             .padding(.vertical, 1)
                         }
                     }

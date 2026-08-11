@@ -601,7 +601,7 @@ private extension DeviceRisk {
     }
 }
 
-private struct DeviceDetailView: View {
+struct DeviceDetailView: View {
     let originalDevice: NetworkDevice
     let rooms: [String]
     let onSave: (NetworkDevice) -> Void

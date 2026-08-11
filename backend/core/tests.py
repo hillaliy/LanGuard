@@ -1797,6 +1797,74 @@ class ScanApiTests(TestCase):
         self.assertEqual(imported.name, "Camera")
         self.assertEqual(imported.ports.get().port, 554)
 
+    def test_device_inventory_import_removes_stale_ip_duplicate(self):
+        stale = Device.objects.create(
+            name="Old randomized device",
+            ip="192.168.1.60",
+            mac="b2:e9:86:9f:ef:ed",
+            known=True,
+            status=Device.Status.OFFLINE,
+            online=False,
+        )
+        DevicePort.objects.create(device=stale, port=445, protocol="tcp", open=True)
+
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Camera",
+                        "ip": "192.168.1.60",
+                        "mac": "bb:bb:bb:bb:bb:bb",
+                        "vendor": "Reolink",
+                        "icon": "security-camera",
+                        "known": True,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["removed_duplicates"], 1)
+        self.assertFalse(Device.objects.filter(mac="b2:e9:86:9f:ef:ed").exists())
+        self.assertFalse(DevicePort.objects.filter(device=stale).exists())
+        self.assertTrue(Device.objects.filter(mac="bb:bb:bb:bb:bb:bb").exists())
+
+    def test_device_inventory_import_keeps_active_known_ip_duplicate(self):
+        active = Device.objects.create(
+            name="Active server",
+            ip="192.168.1.60",
+            mac="48:0f:cf:5c:f5:2e",
+            known=True,
+            status=Device.Status.ONLINE,
+            online=True,
+        )
+
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Camera",
+                        "ip": "192.168.1.60",
+                        "mac": "bb:bb:bb:bb:bb:bb",
+                        "known": True,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["removed_duplicates"], 0)
+        self.assertTrue(Device.objects.filter(pk=active.pk).exists())
+        self.assertTrue(Device.objects.filter(mac="bb:bb:bb:bb:bb:bb").exists())
+
     def test_device_inventory_import_accepts_macos_export_shape(self):
         response = self.client.post(
             "/api/v1/devices/import/",
