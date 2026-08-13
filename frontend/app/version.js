@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.1.2',
+    date: '2026-08-13',
+    items: [
+      'Improved Docker hostname discovery with LLMNR and cached SSDP/UPnP metadata lookup.',
+      'Prevented unrelated multicast PTR answers from assigning the wrong hostname to other devices.',
+      'Cleared stale read-only hostnames when the latest scan no longer resolves a valid hostname.',
+      'Aligned macOS hostname safety checks with Docker for mDNS and reverse PTR responses.',
+    ],
+  },
+  {
     version: '1.1.1',
     date: '2026-08-11',
     items: [

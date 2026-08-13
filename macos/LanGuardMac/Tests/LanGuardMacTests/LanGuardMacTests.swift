@@ -219,6 +219,16 @@ func mdnsReverseMetadataParsesDNSServiceOutput() {
 }
 
 @Test
+func mdnsReverseMetadataIgnoresUnrelatedDNSServiceOutput() {
+    let output = """
+    DATE: ---Wed 05 Aug 2026---
+    22:15:01.000  Add     2   4 21.0.168.192.in-addr.arpa. PTR IN 0 Aqara-Hub.local.
+    """
+
+    #expect(MDNSReverseMetadataDiscovery.hostname(from: output, ipAddress: "192.168.0.79") == nil)
+}
+
+@Test
 func multicastPTRMetadataParsesCompressedDNSResponse() {
     var response = Data()
 
@@ -266,6 +276,56 @@ func multicastPTRMetadataParsesCompressedDNSResponse() {
 
     #expect(LLMNRReverseMetadataDiscovery.hostname(from: response, ipAddress: "192.168.0.79") == "Apple Watch")
     #expect(MDNSPTRSocketDiscovery.hostname(from: response, ipAddress: "192.168.0.79") == "Apple Watch")
+}
+
+@Test
+func multicastPTRMetadataIgnoresUnrelatedCompressedDNSResponse() {
+    var response = Data()
+
+    func appendUInt16(_ value: UInt16) {
+        response.append(UInt8((value >> 8) & 0xff))
+        response.append(UInt8(value & 0xff))
+    }
+
+    func appendUInt32(_ value: UInt32) {
+        response.append(UInt8((value >> 24) & 0xff))
+        response.append(UInt8((value >> 16) & 0xff))
+        response.append(UInt8((value >> 8) & 0xff))
+        response.append(UInt8(value & 0xff))
+    }
+
+    func appendName(_ name: String) {
+        for label in name.split(separator: ".") {
+            let bytes = Array(label.utf8)
+            response.append(UInt8(bytes.count))
+            response.append(contentsOf: bytes)
+        }
+        response.append(0x00)
+    }
+
+    appendUInt16(0x4c47)
+    appendUInt16(0x8000)
+    appendUInt16(0x0001)
+    appendUInt16(0x0001)
+    appendUInt16(0x0000)
+    appendUInt16(0x0000)
+    appendName("79.0.168.192.in-addr.arpa")
+    appendUInt16(0x000c)
+    appendUInt16(0x0001)
+    appendName("21.0.168.192.in-addr.arpa")
+    appendUInt16(0x000c)
+    appendUInt16(0x0001)
+    appendUInt32(120)
+
+    let hostnameStart = response.count
+    appendUInt16(0)
+    appendName("Aqara-Hub.local")
+    let hostnameLength = response.count - hostnameStart - 2
+    response[hostnameStart] = UInt8((hostnameLength >> 8) & 0xff)
+    response[hostnameStart + 1] = UInt8(hostnameLength & 0xff)
+
+    #expect(LLMNRReverseMetadataDiscovery.hostname(from: response, ipAddress: "192.168.0.79") == nil)
+    #expect(MDNSPTRSocketDiscovery.hostname(from: response, ipAddress: "192.168.0.79") == nil)
 }
 
 @Test
