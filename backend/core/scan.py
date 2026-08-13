@@ -23,6 +23,15 @@ DEFAULT_DEVICE_NAME = "Device"
 DEFAULT_DEVICE_ICONS = {"", "plus", "unknown", "device", "desktop"}
 SSDP_CACHE_TTL_SECONDS = 10
 SSDP_HOSTNAME_CACHE = {"expires_at": 0.0, "hostnames": {}}
+MDNS_SERVICE_TYPES = (
+    "_hap._tcp.local",
+    "_services._dns-sd._udp.local",
+    "_http._tcp.local",
+    "_arduino._tcp.local",
+    "_esphomelib._tcp.local",
+    "_workstation._tcp.local",
+    "_ssh._tcp.local",
+)
 DEVICE_GUESS_RULES = [
     {
         "icon": "smart-hub",
@@ -323,6 +332,41 @@ def dns_ptr_names(packet, expected_owner=""):
     return names
 
 
+def dns_records(packet):
+    if len(packet) < 12:
+        return []
+    try:
+        qdcount, ancount, nscount, arcount = struct.unpack("!HHHH", packet[4:12])
+    except struct.error:
+        return []
+    offset = 12
+    for _ in range(qdcount):
+        _, offset = dns_read_name(packet, offset)
+        offset += 4
+    records = []
+    for _ in range(ancount + nscount + arcount):
+        name, offset = dns_read_name(packet, offset)
+        if offset + 10 > len(packet):
+            break
+        record_type, record_class, ttl, rdlength = struct.unpack("!HHIH", packet[offset : offset + 10])
+        offset += 10
+        rdata_offset = offset
+        offset += rdlength
+        if offset > len(packet):
+            break
+        records.append(
+            {
+                "name": name,
+                "type": record_type,
+                "class": record_class,
+                "ttl": ttl,
+                "rdata_offset": rdata_offset,
+                "rdlength": rdlength,
+            }
+        )
+    return records
+
+
 def reverse_dns_name(ip):
     try:
         address = ipaddress.ip_address(ip)
@@ -371,6 +415,91 @@ def mdns_reverse_hostname(ip):
             cleaned = clean_hostname(ptr_name)
             if cleaned:
                 return cleaned
+    return ""
+
+
+def mdns_service_hostname(ip):
+    return mdns_service_hostname_map().get(ip, "")
+
+
+def mdns_service_hostname_map():
+    hostnames_by_ip = {}
+    responses = []
+    for service_type in MDNS_SERVICE_TYPES:
+        packet = dns_query_packet(service_type, query_type=12, query_id=0)
+        try:
+            responses.extend(udp_responses(packet, "224.0.0.251", 5353, 0.7, max_responses=24))
+        except OSError as exc:
+            LOGGER.debug("mDNS service lookup failed for %s: %s", service_type, exc)
+
+    for response, source_ip in responses:
+        for ip_address, hostname in mdns_service_hostnames_from_response(response).items():
+            hostnames_by_ip[ip_address] = hostname
+        if source_ip not in hostnames_by_ip:
+            hostname = mdns_service_hostname_from_response(response)
+            if hostname:
+                hostnames_by_ip[source_ip] = hostname
+    return hostnames_by_ip
+
+
+def mdns_service_hostnames_from_response(response):
+    address_records = []
+    service_names_by_target = {}
+    packet_records = dns_records(response)
+    for record in packet_records:
+        if record["type"] == 1 and record["rdlength"] == 4:
+            rdata = response[record["rdata_offset"] : record["rdata_offset"] + 4]
+            ip_address = ".".join(str(part) for part in rdata)
+            address_records.append((record["name"], ip_address))
+        elif record["type"] == 33:
+            target = dns_srv_target_name(response, record["rdata_offset"], record["rdlength"])
+            service_hostname = service_instance_hostname(record["name"])
+            if target and service_hostname:
+                service_names_by_target[target.strip().lower().rstrip(".")] = service_hostname
+
+    hostnames_by_ip = {}
+    for host, ip_address in address_records:
+        hostname = service_names_by_target.get(host.strip().lower().rstrip(".")) or clean_hostname(host)
+        if hostname and hostname != ip_address:
+            hostnames_by_ip[ip_address] = hostname
+    return hostnames_by_ip
+
+
+def mdns_service_hostname_from_response(response):
+    for record in dns_records(response):
+        if record["type"] == 33:
+            hostname = service_instance_hostname(record["name"])
+            if hostname:
+                return hostname
+        if record["type"] == 12:
+            service_name, _ = dns_read_name(response, record["rdata_offset"])
+            hostname = service_instance_hostname(service_name)
+            if hostname:
+                return hostname
+    return ""
+
+
+def dns_srv_target_name(packet, offset, length):
+    if length < 7:
+        return ""
+    name, _ = dns_read_name(packet, offset + 6)
+    return name
+
+
+def service_instance_hostname(name):
+    cleaned_name = (name or "").strip().rstrip(".")
+    lowered = cleaned_name.lower()
+    service_suffixes = (
+        "._hap._tcp.local",
+        "._http._tcp.local",
+        "._arduino._tcp.local",
+        "._esphomelib._tcp.local",
+        "._workstation._tcp.local",
+        "._ssh._tcp.local",
+    )
+    for suffix in service_suffixes:
+        if lowered.endswith(suffix):
+            return clean_hostname(cleaned_name[: -len(suffix)])
     return ""
 
 
@@ -501,6 +630,7 @@ def get_hostname(ip):
     lookup_steps = (
         reverse_dns_hostname,
         mdns_reverse_hostname,
+        mdns_service_hostname,
         llmnr_reverse_hostname,
         ssdp_hostname,
         netbios_hostname,

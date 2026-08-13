@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.1.3',
+    date: '2026-08-13',
+    items: [
+      'Improved Docker hostname discovery for HomeKit/HAA devices through mDNS service answers.',
+      'Added Docker device editing support for creating room names directly from the room field.',
+      'Improved Apple private-MAC device recognition in the native macOS app.',
+      'Reworked the native macOS Devices page to use clearer Docker-style device rows across full and narrow windows.',
+    ],
+  },
+  {
     version: '1.1.2',
     date: '2026-08-13',
     items: [

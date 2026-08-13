@@ -38,8 +38,8 @@ struct DevicesView: View {
                 filterToolbar
 
                 ViewThatFits(in: .horizontal) {
-                    devicesTable
-                        .frame(minWidth: 1360, maxWidth: .infinity)
+                    deviceCardList
+                        .frame(minWidth: 1120, maxWidth: .infinity)
                     compactDeviceList
                 }
             }
@@ -56,82 +56,28 @@ struct DevicesView: View {
         }
     }
 
-    private var devicesTable: some View {
-        Table(filteredAndSortedDevices) {
-            TableColumn("Status") { device in
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(device.status == .online ? .green : .gray)
-                        .frame(width: 8, height: 8)
-                    Text(device.status.title)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
+    private var deviceCardList: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(filteredAndSortedDevices) { device in
+                    Button {
+                        editingDevice = device
+                    } label: {
+                        DeviceCardRow(
+                            device: device,
+                            portSummary: portSummary(for: device.openPorts),
+                            roomTitle: roomTitle(for: device),
+                            riskColor: riskColor(for: device.risk)
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .width(min: 108, ideal: 118, max: 132)
-
-            TableColumn("Name") { device in
-                HStack(spacing: 8) {
-                    DeviceIconStack(device: device, size: 17)
-                    Text(device.name)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .width(min: 240, ideal: 320, max: 480)
-
-            TableColumn("Room") { device in
-                let title = roomTitle(for: device)
-                Text(title)
-                    .foregroundStyle(title == "Unassigned" ? .secondary : .primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .width(min: 110, ideal: 140, max: 190)
-
-            TableColumn("IP") { device in
-                Text(device.ipAddress)
-            }
-            .width(min: 110, ideal: 130, max: 150)
-
-            TableColumn("MAC", value: \.macAddress)
-                .width(min: 150, ideal: 170, max: 190)
-
-            TableColumn("Ports") { device in
-                Text(portSummary(for: device.openPorts))
-                    .foregroundStyle(device.openPorts.isEmpty ? .secondary : .primary)
-            }
-            .width(min: 80, ideal: 110, max: 160)
-
-            TableColumn("Risk") { device in
-                Text(device.risk.title)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(riskColor(for: device.risk).opacity(0.18), in: Capsule())
-                    .foregroundStyle(riskColor(for: device.risk))
-            }
-            .width(min: 70, ideal: 82, max: 96)
-
-            TableColumn("Role") { device in
-                Text(device.effectiveRole.title)
-            }
-            .width(min: 72, ideal: 86, max: 105)
-
-            TableColumn("Known") { device in
-                Text(device.isKnown ? "Known" : "New")
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-            .width(min: 88, ideal: 98, max: 112)
-
-            TableColumn("") { device in
-                Button("Edit") {
-                    editingDevice = device
-                }
-            }
-            .width(min: 56, ideal: 66, max: 76)
+            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(.separator.opacity(0.55), lineWidth: 1)
+            )
         }
     }
 
@@ -357,9 +303,11 @@ struct DevicesView: View {
                 CompactDeviceRow(device: device, portSummary: portSummary(for: device.openPorts), riskColor: riskColor(for: device.risk))
             }
             .buttonStyle(.plain)
-            .listRowInsets(EdgeInsets(top: 8, leading: 10, bottom: 8, trailing: 10))
+            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+            .listRowSeparator(.hidden)
         }
         .listStyle(.plain)
+        .scrollContentBackground(.hidden)
     }
 
     private var filteredAndSortedDevices: [NetworkDevice] {
@@ -524,6 +472,136 @@ private enum DeviceSortField: String, CaseIterable, Identifiable {
     }
 }
 
+private struct DeviceCardRow: View {
+    let device: NetworkDevice
+    let portSummary: String
+    let roomTitle: String
+    let riskColor: Color
+
+    var body: some View {
+        HStack(spacing: 18) {
+            HStack(spacing: 14) {
+                DeviceIconStack(device: device, size: 22)
+
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 8) {
+                        Text(device.name)
+                            .font(.headline.weight(.semibold))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+
+                        Text(device.isKnown ? "Known" : "New")
+                            .font(.caption.weight(.bold))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 3)
+                            .background((device.isKnown ? Color.teal : Color.orange).opacity(0.18), in: Capsule())
+                            .foregroundStyle(device.isKnown ? .teal : .orange)
+                    }
+
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(minWidth: 300, maxWidth: .infinity, alignment: .leading)
+
+            DeviceMetaColumn(title: "Status") {
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(device.status == .online ? .green : .gray)
+                        .frame(width: 8, height: 8)
+                    Text(device.status.title)
+                        .lineLimit(1)
+                }
+            }
+            .frame(width: 94, alignment: .leading)
+
+            DeviceMetaColumn(title: "IP") {
+                Text(device.ipAddress)
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+                    .lineLimit(1)
+            }
+            .frame(width: 116, alignment: .leading)
+
+            DeviceMetaColumn(title: "Room") {
+                Text(roomTitle)
+                    .foregroundStyle(roomTitle == "Unassigned" ? .secondary : .primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(width: 116, alignment: .leading)
+
+            DeviceMetaColumn(title: "Role") {
+                Text(device.effectiveRole.title)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(width: 96, alignment: .leading)
+
+            DeviceMetaColumn(title: "Ports") {
+                Text(portSummary)
+                    .foregroundStyle(device.openPorts.isEmpty ? .secondary : .primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .frame(width: 92, alignment: .leading)
+
+            DeviceMetaColumn(title: "Risk") {
+                Text(device.risk.title)
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(riskColor.opacity(0.18), in: Capsule())
+                    .foregroundStyle(riskColor)
+                    .lineLimit(1)
+            }
+            .frame(width: 78, alignment: .leading)
+
+            DeviceMetaColumn(title: "Last seen") {
+                Text(device.lastSeen.formatted(date: .abbreviated, time: .shortened))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(width: 134, alignment: .leading)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
+        .background(Color(nsColor: .controlBackgroundColor))
+    }
+
+    private var subtitle: String {
+        let details = [device.hostname, device.vendor]
+            .compactMap { value in
+                let cleaned = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return cleaned.isEmpty ? nil : cleaned
+            }
+        return details.isEmpty ? device.macAddress : details.joined(separator: " - ")
+    }
+}
+
+private struct DeviceMetaColumn<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            content
+                .font(.body)
+                .foregroundStyle(.primary)
+        }
+    }
+}
+
 private struct CompactDeviceRow: View {
     let device: NetworkDevice
     let portSummary: String
@@ -535,56 +613,208 @@ private struct CompactDeviceRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Circle()
-                    .fill(device.status == .online ? .green : .gray)
-                    .frame(width: 8, height: 8)
+        ViewThatFits(in: .horizontal) {
+            compactHorizontalRow
+            compactBalancedRow
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.separator.opacity(0.42), lineWidth: 1)
+        )
+    }
 
-                DeviceIconStack(device: device, size: 17)
+    private var compactHorizontalRow: some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 10) {
+                DeviceIconStack(device: device, size: 18)
+                    .frame(width: 24)
 
-                Text(device.name)
-                    .font(.headline)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 7) {
+                        Text(device.name)
+                            .font(.headline.weight(.semibold))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
 
-                Text(device.risk.title)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(riskColor.opacity(0.18), in: Capsule())
-                    .foregroundStyle(riskColor)
-            }
+                        knownBadge
+                    }
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 12) {
-                    Text(device.status.title)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                    Text("Room: \(roomTitle)")
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Text(device.ipAddress)
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                }
-
-                HStack(spacing: 12) {
-                    Text(device.macAddress)
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Text(portSummary)
-                        .lineLimit(1)
-                    Text(device.isKnown ? "Known" : "New")
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
+
+            DeviceCompactMeta(title: "Status") {
+                HStack(spacing: 7) {
+                    Circle()
+                        .fill(device.status == .online ? .green : .gray)
+                        .frame(width: 8, height: 8)
+                    Text(device.status.title)
                 }
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .frame(width: 72, alignment: .leading)
+
+            DeviceCompactMeta(title: "IP") {
+                Text(device.ipAddress)
+                    .fontWeight(.semibold)
+                    .monospacedDigit()
+            }
+            .frame(width: 106, alignment: .leading)
+
+            DeviceCompactMeta(title: "Room") {
+                Text(roomTitle)
+                    .foregroundStyle(roomTitle == "Unassigned" ? .secondary : .primary)
+            }
+            .frame(width: 88, alignment: .leading)
+
+            DeviceCompactMeta(title: "Role") {
+                Text(device.effectiveRole.title)
+            }
+            .frame(width: 78, alignment: .leading)
+
+            DeviceCompactMeta(title: "Ports") {
+                Text(portSummary)
+                    .foregroundStyle(device.openPorts.isEmpty ? .secondary : .primary)
+            }
+            .frame(width: 64, alignment: .leading)
+
+            DeviceCompactMeta(title: "Last seen") {
+                Text(device.lastSeen.formatted(date: .abbreviated, time: .shortened))
+            }
+            .frame(width: 112, alignment: .leading)
+
+            riskBadge
         }
-        .padding(.vertical, 4)
+        .contentShape(Rectangle())
+        .frame(minHeight: 54)
+    }
+
+    private var compactBalancedRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                DeviceIconStack(device: device, size: 18)
+                    .frame(width: 24)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 7) {
+                        Text(device.name)
+                            .font(.headline.weight(.semibold))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+
+                        knownBadge
+                    }
+
+                    Text(subtitle)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                riskBadge
+            }
+
+            HStack(spacing: 12) {
+                DeviceCompactMeta(title: "Status") {
+                    HStack(spacing: 7) {
+                        Circle()
+                            .fill(device.status == .online ? .green : .gray)
+                            .frame(width: 8, height: 8)
+                        Text(device.status.title)
+                    }
+                }
+                .frame(width: 72, alignment: .leading)
+
+                DeviceCompactMeta(title: "IP") {
+                    Text(device.ipAddress)
+                        .fontWeight(.semibold)
+                        .monospacedDigit()
+                }
+                .frame(width: 106, alignment: .leading)
+
+                DeviceCompactMeta(title: "Room") {
+                    Text(roomTitle)
+                        .foregroundStyle(roomTitle == "Unassigned" ? .secondary : .primary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                DeviceCompactMeta(title: "Role") {
+                    Text(device.effectiveRole.title)
+                }
+                .frame(width: 78, alignment: .leading)
+
+                DeviceCompactMeta(title: "Ports") {
+                    Text(portSummary)
+                        .foregroundStyle(device.openPorts.isEmpty ? .secondary : .primary)
+                }
+                .frame(width: 64, alignment: .leading)
+
+                DeviceCompactMeta(title: "Last seen") {
+                    Text(device.lastSeen.formatted(date: .abbreviated, time: .shortened))
+                }
+                .frame(width: 112, alignment: .leading)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var knownBadge: some View {
+        Text(device.isKnown ? "Known" : "New")
+            .font(.caption.weight(.bold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background((device.isKnown ? Color.teal : Color.orange).opacity(0.18), in: Capsule())
+            .foregroundStyle(device.isKnown ? .teal : .orange)
+            .lineLimit(1)
+    }
+
+    private var riskBadge: some View {
+        Text(device.risk.title)
+            .font(.caption.weight(.bold))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(riskColor.opacity(0.18), in: Capsule())
+            .foregroundStyle(riskColor)
+            .lineLimit(1)
+    }
+
+    private var subtitle: String {
+        let details = [device.hostname, device.vendor]
+            .compactMap { value in
+                let cleaned = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return cleaned.isEmpty ? nil : cleaned
+            }
+        return details.isEmpty ? device.macAddress : details.joined(separator: " - ")
+    }
+}
+
+private struct DeviceCompactMeta<Content: View>: View {
+    let title: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            content
+                .font(.callout)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+        }
     }
 }
 

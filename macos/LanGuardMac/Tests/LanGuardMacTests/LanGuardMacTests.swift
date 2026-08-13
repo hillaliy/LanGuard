@@ -543,6 +543,23 @@ func deviceProfilerClearsStaleVendorForRandomizedMacAddress() {
 }
 
 @Test
+func deviceProfilerInfersAppleVendorFromHostnameForPrivateMacAddress() {
+    let device = NetworkDevice(
+        id: "f6:34:f0:00:c6:8d",
+        name: "Unknown Device C68D",
+        ipAddress: "192.168.0.79",
+        macAddress: "f6:34:f0:00:c6:8d",
+        hostname: "HomePod Mini"
+    )
+
+    let enriched = DeviceProfiler.enrich(device)
+
+    #expect(enriched.vendor == "Apple, Inc.")
+    #expect(enriched.iconName == "homepod")
+    #expect(enriched.detectedRole == .speaker)
+}
+
+@Test
 func deviceProfilerDetectsSmartHomeDeviceIcons() {
     #expect(DeviceProfiler.iconName(
         name: "Kitchen Smart Speaker",

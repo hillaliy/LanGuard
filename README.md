@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-1.1.2-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.1.3-blue">
   <a href="https://github.com/users/hillaliy/packages/container/package/languard-backend">
     <img alt="Backend image" src="https://img.shields.io/badge/backend-GHCR-2ea44f">
   </a>

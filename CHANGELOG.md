@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.3 - 2026-08-13
+
+- Improved Docker hostname discovery for HomeKit/HAA devices through mDNS service answers.
+- Added Docker device editing support for creating room names directly from the room field.
+- Improved Apple private-MAC device recognition in the native macOS app.
+- Reworked the native macOS Devices page to use clearer Docker-style device rows across full and narrow windows.
+
 ## 1.1.2 - 2026-08-13
 
 - Improved Docker hostname discovery with LLMNR and cached SSDP/UPnP metadata lookup.
