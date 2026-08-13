@@ -37,6 +37,9 @@ from .scan import (
     llmnr_reverse_hostname,
     ManufVendorDB,
     mark_missing_devices_offline,
+    mdns_service_hostname,
+    mdns_service_hostname_from_response,
+    mdns_service_hostnames_from_response,
     manuf_vendor,
     normalize_scan_ports,
     preferred_vendor,
@@ -89,6 +92,7 @@ class HostnameResolutionTests(SimpleTestCase):
     @patch("core.scan.netbios_hostname", return_value="")
     @patch("core.scan.ssdp_hostname", return_value="")
     @patch("core.scan.llmnr_reverse_hostname", return_value="")
+    @patch("core.scan.mdns_service_hostname", return_value="")
     @patch("core.scan.mdns_reverse_hostname", return_value="")
     @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_returns_blank_when_reverse_dns_is_unavailable(self, *_):
@@ -97,6 +101,7 @@ class HostnameResolutionTests(SimpleTestCase):
     @patch("core.scan.netbios_hostname", return_value="")
     @patch("core.scan.ssdp_hostname", return_value="")
     @patch("core.scan.llmnr_reverse_hostname", return_value="")
+    @patch("core.scan.mdns_service_hostname", return_value="")
     @patch("core.scan.mdns_reverse_hostname", return_value="haa switch")
     @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_mdns_fallback(self, *_):
@@ -104,7 +109,17 @@ class HostnameResolutionTests(SimpleTestCase):
 
     @patch("core.scan.netbios_hostname", return_value="")
     @patch("core.scan.ssdp_hostname", return_value="")
+    @patch("core.scan.llmnr_reverse_hostname", return_value="")
+    @patch("core.scan.mdns_service_hostname", return_value="HAA 123456")
+    @patch("core.scan.mdns_reverse_hostname", return_value="")
+    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    def test_get_hostname_uses_mdns_service_fallback(self, *_):
+        self.assertEqual(get_hostname("192.168.1.42"), "HAA 123456")
+
+    @patch("core.scan.netbios_hostname", return_value="")
+    @patch("core.scan.ssdp_hostname", return_value="")
     @patch("core.scan.llmnr_reverse_hostname", return_value="office pc")
+    @patch("core.scan.mdns_service_hostname", return_value="")
     @patch("core.scan.mdns_reverse_hostname", return_value="")
     @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_llmnr_fallback(self, *_):
@@ -113,6 +128,7 @@ class HostnameResolutionTests(SimpleTestCase):
     @patch("core.scan.netbios_hostname", return_value="")
     @patch("core.scan.ssdp_hostname", return_value="Archer BE550")
     @patch("core.scan.llmnr_reverse_hostname", return_value="")
+    @patch("core.scan.mdns_service_hostname", return_value="")
     @patch("core.scan.mdns_reverse_hostname", return_value="")
     @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_ssdp_fallback(self, *_):
@@ -163,6 +179,52 @@ class HostnameResolutionTests(SimpleTestCase):
         body = "<root><friendlyName>Archer BE550</friendlyName><modelName>Router</modelName></root>"
 
         self.assertEqual(hostname_from_device_description(body, "192.168.1.1"), "Archer BE550")
+
+    def test_mdns_service_hostnames_maps_hap_service_to_ip(self):
+        packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x02\x00\x00\x00\x00"
+            + dns_encode_name("HAA-123456._hap._tcp.local")
+            + b"\x00\x21\x00\x01\x00\x00\x00\x78"
+            + (6 + len(dns_encode_name("HAA-123456.local"))).to_bytes(2, "big")
+            + (
+                b"\x00\x00"
+                + b"\x00\x00"
+                + b"\x00\x50"
+                + dns_encode_name("HAA-123456.local")
+            )
+            + dns_encode_name("HAA-123456.local")
+            + b"\x00\x01\x00\x01\x00\x00\x00\x78\x00\x04"
+            + bytes([192, 168, 1, 42])
+        )
+
+        self.assertEqual(
+            mdns_service_hostnames_from_response(packet),
+            {"192.168.1.42": "HAA 123456"},
+        )
+
+    def test_mdns_service_hostname_extracts_hap_ptr_instance(self):
+        packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("_hap._tcp.local")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("HAA-123456._hap._tcp.local")).to_bytes(2, "big")
+            + dns_encode_name("HAA-123456._hap._tcp.local")
+        )
+
+        self.assertEqual(mdns_service_hostname_from_response(packet), "HAA 123456")
+
+    @patch("core.scan.udp_responses")
+    def test_mdns_service_hostname_uses_source_ip_for_ptr_only_response(self, udp_responses):
+        packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("_hap._tcp.local")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("HAA-123456._hap._tcp.local")).to_bytes(2, "big")
+            + dns_encode_name("HAA-123456._hap._tcp.local")
+        )
+        udp_responses.side_effect = [[(packet, "192.168.1.42")]] + [[]] * 6
+
+        self.assertEqual(mdns_service_hostname("192.168.1.42"), "HAA 123456")
 
     @patch("core.scan.requests.get")
     def test_ssdp_hostname_from_response_fetches_device_description(self, get):

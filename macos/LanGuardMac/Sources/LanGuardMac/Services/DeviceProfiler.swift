@@ -2,10 +2,11 @@ import Foundation
 
 enum DeviceProfiler {
     static func enrich(_ device: NetworkDevice) -> NetworkDevice {
-        let vendor = MACVendorResolver.preferredVendor(
+        let resolvedVendor = MACVendorResolver.preferredVendor(
             macAddress: device.macAddress,
             observedVendor: device.vendor
         )
+        let vendor = resolvedVendor ?? inferredVendor(name: device.name, hostname: device.hostname)
         let iconName = device.iconName ?? iconName(
             name: device.name,
             hostname: device.hostname,
@@ -26,6 +27,29 @@ enum DeviceProfiler {
         enriched.iconName = iconName
         enriched.name = name
         return enriched
+    }
+
+    private static func inferredVendor(name: String?, hostname: String?) -> String? {
+        let profileText = [name, hostname]
+            .compactMap { $0?.lowercased() }
+            .joined(separator: " ")
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+
+        let appleSignals = [
+            "homepod",
+            "apple watch",
+            "apple tv",
+            "iphone",
+            "ipad",
+            "imac",
+            "macbook",
+            "mac mini",
+            "mac studio",
+            "airpods",
+        ]
+
+        return appleSignals.contains(where: { profileText.contains($0) }) ? "Apple, Inc." : nil
     }
 
     static func iconName(vendor: String?, openPorts: [Int], isGateway: Bool) -> String {
@@ -105,6 +129,7 @@ enum DeviceProfiler {
         }
 
         if profileText.contains("speaker")
+            || profileText.contains("homepod")
             || profileText.contains("audio") {
             return .speaker
         }
@@ -180,6 +205,7 @@ enum DeviceProfiler {
             .joined(separator: " ")
 
         if profileText.contains("smart speaker")
+            || profileText.contains("homepod")
             || profileText.contains("speaker")
             || profileText.contains("audio") {
             return "homepod"

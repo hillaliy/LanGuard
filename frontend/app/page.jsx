@@ -1324,6 +1324,52 @@ function DeviceField({ label, value, editable = false, required = false, onChang
   );
 }
 
+function buildRoomOptions(devices = [], currentRoom = '') {
+  return Array.from(
+    new Set(
+      [...devices.map((device) => device.room), currentRoom]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean)
+    )
+  )
+    .sort((left, right) => left.localeCompare(right))
+    .map((value) => ({ value, label: value }));
+}
+
+function RoomField({ value, onChange, roomOptions = [] }) {
+  return (
+    <Box className="device-field editable">
+      <Text size="xs" c="dimmed">Room</Text>
+      <Group gap="xs" wrap="nowrap">
+        <input
+          className="device-field-input"
+          list="device-room-options"
+          value={value || ''}
+          onChange={(event) => onChange(event.currentTarget.value)}
+          placeholder="Unassigned"
+        />
+        <datalist id="device-room-options">
+          {roomOptions.map((option) => (
+            <option key={option.value} value={option.value} />
+          ))}
+        </datalist>
+        {value ? (
+          <Tooltip label="Clear room">
+            <ActionIcon
+              aria-label="Clear room"
+              variant="subtle"
+              color="gray"
+              onClick={() => onChange('')}
+            >
+              <IconX size={16} />
+            </ActionIcon>
+          </Tooltip>
+        ) : null}
+      </Group>
+    </Box>
+  );
+}
+
 function DeviceIconPicker({ value, onChange, label = 'Icon' }) {
   const selectedIcon = normalizeDeviceIcon(value);
 
@@ -1353,7 +1399,7 @@ function DeviceIconPicker({ value, onChange, label = 'Icon' }) {
   );
 }
 
-function DeviceModal({ device, opened, onClose, onSaved, timeZone }) {
+function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }) {
   const [icon, setIcon] = useState('');
   const [secondaryIcon, setSecondaryIcon] = useState('');
   const [name, setName] = useState('');
@@ -1472,7 +1518,13 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone }) {
             value={device?.mac || '-'}
           />
           <DeviceField label="Hostname" value={hostname || '-'} />
-          <DeviceField label="Room" value={room} editable onChange={setRoom} />
+          <RoomField
+            value={room}
+            onChange={setRoom}
+            roomOptions={buildRoomOptions([], room).concat(
+              roomOptions.filter((option) => option.value !== room)
+            )}
+          />
           <Box className="device-field">
             <Text size="xs" c="dimmed">Role</Text>
             <select className="device-field-input" value={role} onChange={(event) => setRole(event.currentTarget.value)}>
@@ -2312,6 +2364,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   });
 
   const filteredDevices = useMemo(() => devices, [devices]);
+  const roomOptions = useMemo(() => buildRoomOptions(mapDevices), [mapDevices]);
   const deviceLimit = 100;
   const deviceOffset = 0;
   const deviceEnd = Math.min(devices.length, devicePagination.count || devices.length);
@@ -3043,6 +3096,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         onClose={modal.close}
         onSaved={() => loadData({ quiet: true })}
         timeZone={displayTimeZone}
+        roomOptions={roomOptions}
       />
       <UserManagementModal
         opened={usersModalOpened}
