@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.2 - 2026-08-13
+
+- Improved Docker hostname discovery with LLMNR and cached SSDP/UPnP metadata lookup.
+- Prevented unrelated multicast PTR answers from assigning the wrong hostname to other devices.
+- Cleared stale read-only hostnames when the latest scan no longer resolves a valid hostname.
+- Aligned macOS hostname safety checks with Docker for mDNS and reverse PTR responses.
+
 ## 1.0.22 - 2026-08-06
 
 - Replaced bundled vendor lookup data with Wireshark manuf parsing and preserved original vendor names.

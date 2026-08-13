@@ -334,6 +334,29 @@ func deviceMergerClearsInvalidStoredHostname() {
 }
 
 @Test
+func deviceMergerClearsStaleHostnameWhenLatestScanHasNoHostname() {
+    let existing = NetworkDevice(
+        id: "00:11:22:33:44:55",
+        name: "Bedroom AC",
+        ipAddress: "192.168.0.70",
+        macAddress: "00:11:22:33:44:55",
+        hostname: "Aqara Hub",
+        isKnown: true
+    )
+    let discovered = NetworkDevice(
+        id: "00:11:22:33:44:55",
+        name: "Unknown Device 4455",
+        ipAddress: "192.168.0.70",
+        macAddress: "00:11:22:33:44:55"
+    )
+
+    let result = DeviceMerger.merge(existing: [existing], discovered: [discovered])
+
+    #expect(result.devices.first?.name == "Bedroom AC")
+    #expect(result.devices.first?.hostname == nil)
+}
+
+@Test
 func deviceMergerClearsStaleVendorForLocallyAdministeredMacAddress() {
     let existing = NetworkDevice(
         id: "ba:e6:e0:17:66:94",

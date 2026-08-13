@@ -42,7 +42,7 @@ enum DeviceMerger {
                 merged.iconName = device.iconName
                 merged.secondaryIconName = device.secondaryIconName
             }
-            merged.hostname = preferredHostname(device.hostname, fallback: previous.hostname)
+            merged.hostname = HostnameResolver.clean(device.hostname)
             merged.vendor = MACVendorResolver.displayVendor(device.vendor)
             merged.role = previous.role
             merged.room = previous.room

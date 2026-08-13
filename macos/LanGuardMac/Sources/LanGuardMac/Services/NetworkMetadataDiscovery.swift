@@ -415,12 +415,19 @@ struct MDNSReverseMetadataDiscovery: NetworkMetadataDiscovering {
     }
 
     static func hostname(from output: String, ipAddress: String) -> String? {
+        let expectedOwner = reversePTRQuery(for: ipAddress)
         for line in output.components(separatedBy: .newlines) {
             let fields = line.split(whereSeparator: \.isWhitespace).map(String.init)
             guard
                 let ptrIndex = fields.firstIndex(where: { $0.caseInsensitiveCompare("PTR") == .orderedSame }),
                 fields.indices.contains(ptrIndex + 1)
             else {
+                continue
+            }
+
+            if let expectedOwner,
+               let owner = fields.prefix(ptrIndex).last,
+               normalizedDNSName(owner) != normalizedDNSName(expectedOwner) {
                 continue
             }
 
@@ -441,6 +448,18 @@ struct MDNSReverseMetadataDiscovery: NetworkMetadataDiscovering {
             }
         }
         return nil
+    }
+
+    private static func reversePTRQuery(for ipAddress: String) -> String? {
+        let parts = ipAddress.split(separator: ".")
+        guard parts.count == 4, parts.allSatisfy({ UInt8($0) != nil }) else {
+            return nil
+        }
+        return parts.reversed().joined(separator: ".") + ".in-addr.arpa"
+    }
+
+    private static func normalizedDNSName(_ value: String) -> String {
+        value.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
     }
 
     private func resolveHostname(ipAddress: String, timeout: TimeInterval) async -> String? {
@@ -1084,9 +1103,13 @@ enum DNSPTRPacketParser {
             offset += 4
         }
 
+        let expectedOwner = reversePTRName(for: ipAddress)
         for _ in 0..<answerCount {
-            guard skipName(bytes, offset: &offset),
-                  let recordType = readUInt16(bytes, at: offset),
+            guard let recordName = readName(bytes, offset: offset) else {
+                return nil
+            }
+            offset = recordName.nextOffset
+            guard let recordType = readUInt16(bytes, at: offset),
                   offset + 10 <= bytes.count else {
                 return nil
             }
@@ -1103,6 +1126,7 @@ enum DNSPTRPacketParser {
             guard dataEnd <= bytes.count else { return nil }
 
             if recordType == 0x000c,
+               normalizedDNSName(recordName.name) == expectedOwner,
                let candidate = readName(bytes, offset: dataOffset)?.name,
                let hostname = HostnameResolver.clean(candidate, ipAddress: ipAddress) {
                 return hostname
@@ -1112,6 +1136,18 @@ enum DNSPTRPacketParser {
         }
 
         return nil
+    }
+
+    private static func reversePTRName(for ipAddress: String) -> String? {
+        let parts = ipAddress.split(separator: ".")
+        guard parts.count == 4, parts.allSatisfy({ UInt8($0) != nil }) else {
+            return nil
+        }
+        return parts.reversed().joined(separator: ".") + ".in-addr.arpa"
+    }
+
+    private static func normalizedDNSName(_ value: String) -> String {
+        value.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
     }
 
     static func hostnamesByIPv4Address(from response: Data) -> [String: String] {

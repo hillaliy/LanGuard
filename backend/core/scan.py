@@ -2,11 +2,15 @@ import logging
 import ipaddress
 import os
 import random
+import re
 import socket
 import struct
+import time
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.utils import timezone
+import requests
 import scapy.all as scapy
 from scapy.data import ManufDA
 
@@ -17,6 +21,8 @@ from .notifications import notify_event
 LOGGER = logging.getLogger(__name__)
 DEFAULT_DEVICE_NAME = "Device"
 DEFAULT_DEVICE_ICONS = {"", "plus", "unknown", "device", "desktop"}
+SSDP_CACHE_TTL_SECONDS = 10
+SSDP_HOSTNAME_CACHE = {"expires_at": 0.0, "hostnames": {}}
 DEVICE_GUESS_RULES = [
     {
         "icon": "smart-hub",
@@ -286,9 +292,10 @@ def dns_read_name(packet, offset):
     return ".".join(label for label in labels if label), end_offset
 
 
-def dns_ptr_names(packet):
+def dns_ptr_names(packet, expected_owner=""):
     if len(packet) < 12:
         return []
+    normalized_expected_owner = (expected_owner or "").strip().lower().rstrip(".")
     try:
         qdcount, ancount, nscount, arcount = struct.unpack("!HHHH", packet[4:12])
     except struct.error:
@@ -299,7 +306,7 @@ def dns_ptr_names(packet):
         offset += 4
     names = []
     for _ in range(ancount + nscount + arcount):
-        _, offset = dns_read_name(packet, offset)
+        owner, offset = dns_read_name(packet, offset)
         if offset + 10 > len(packet):
             break
         record_type, _, _, rdlength = struct.unpack("!HHIH", packet[offset : offset + 10])
@@ -307,6 +314,9 @@ def dns_ptr_names(packet):
         rdata_offset = offset
         offset += rdlength
         if record_type == 12:
+            normalized_owner = owner.strip().lower().rstrip(".")
+            if normalized_expected_owner and normalized_owner != normalized_expected_owner:
+                continue
             name, _ = dns_read_name(packet, rdata_offset)
             if name:
                 names.append(name)
@@ -331,6 +341,20 @@ def udp_exchange(packet, address, port, timeout):
         return response
 
 
+def udp_responses(packet, address, port, timeout, max_responses=12):
+    responses = []
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.settimeout(timeout)
+        sock.sendto(packet, (address, port))
+        while len(responses) < max_responses:
+            try:
+                response, source = sock.recvfrom(4096)
+            except socket.timeout:
+                break
+            responses.append((response, source[0]))
+    return responses
+
+
 def mdns_reverse_hostname(ip):
     name = reverse_dns_name(ip)
     if not name:
@@ -343,7 +367,26 @@ def mdns_reverse_hostname(ip):
         except OSError as exc:
             LOGGER.debug("mDNS reverse lookup failed for %s via %s: %s", ip, address, exc)
     for response in responses:
-        for ptr_name in dns_ptr_names(response):
+        for ptr_name in dns_ptr_names(response, expected_owner=name):
+            cleaned = clean_hostname(ptr_name)
+            if cleaned:
+                return cleaned
+    return ""
+
+
+def llmnr_reverse_hostname(ip):
+    name = reverse_dns_name(ip)
+    if not name:
+        return ""
+    packet = dns_query_packet(name, query_type=12, query_id=0x4C47)
+    responses = []
+    for address in ("224.0.0.252", ip):
+        try:
+            responses.append(udp_exchange(packet, address, 5355, 0.6))
+        except OSError as exc:
+            LOGGER.debug("LLMNR reverse lookup failed for %s via %s: %s", ip, address, exc)
+    for response in responses:
+        for ptr_name in dns_ptr_names(response, expected_owner=name):
             cleaned = clean_hostname(ptr_name)
             if cleaned:
                 return cleaned
@@ -380,10 +423,86 @@ def netbios_hostname(ip):
     return ""
 
 
+def ssdp_hostname(ip):
+    return ssdp_hostname_map().get(ip, "")
+
+
+def ssdp_hostname_map():
+    now = time.monotonic()
+    if SSDP_HOSTNAME_CACHE["expires_at"] > now:
+        return dict(SSDP_HOSTNAME_CACHE["hostnames"])
+
+    packet = (
+        "M-SEARCH * HTTP/1.1\r\n"
+        "HOST: 239.255.255.250:1900\r\n"
+        'MAN: "ssdp:discover"\r\n'
+        "MX: 1\r\n"
+        "ST: ssdp:all\r\n"
+        "USER-AGENT: LanGuard/1.0 UPnP/1.1\r\n"
+        "\r\n"
+    ).encode("ascii")
+    try:
+        responses = udp_responses(packet, "239.255.255.250", 1900, 0.7)
+    except OSError as exc:
+        LOGGER.debug("SSDP lookup failed: %s", exc)
+        return {}
+
+    hostnames = {}
+    for response, source_ip in responses:
+        hostname = ssdp_hostname_from_response(response, source_ip)
+        if hostname:
+            hostnames[source_ip] = hostname
+
+    SSDP_HOSTNAME_CACHE["expires_at"] = now + SSDP_CACHE_TTL_SECONDS
+    SSDP_HOSTNAME_CACHE["hostnames"] = hostnames
+    return dict(hostnames)
+
+
+def ssdp_hostname_from_response(response, ip):
+    text = response.decode("utf-8", "ignore")
+    headers = parse_http_headers(text)
+    location = headers.get("location", "")
+    if not location:
+        return ""
+    parsed = urlparse(location)
+    if parsed.hostname and parsed.hostname != ip:
+        return ""
+    try:
+        result = requests.get(location, timeout=1.0, headers={"User-Agent": "LanGuard/1.0"})
+    except requests.RequestException as exc:
+        LOGGER.debug("SSDP device description fetch failed for %s: %s", ip, exc)
+        return ""
+    body = result.text[:128_000]
+    return hostname_from_device_description(body, ip)
+
+
+def parse_http_headers(text):
+    headers = {}
+    for line in text.splitlines()[1:]:
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        headers[key.strip().lower()] = value.strip()
+    return headers
+
+
+def hostname_from_device_description(body, ip=""):
+    for tag in ("friendlyName", "modelName"):
+        match = re.search(rf"<{tag}>\s*([^<]+)\s*</{tag}>", body or "", re.IGNORECASE)
+        if not match:
+            continue
+        hostname = clean_hostname(match.group(1))
+        if hostname and hostname != ip:
+            return hostname
+    return ""
+
+
 def get_hostname(ip):
     lookup_steps = (
         reverse_dns_hostname,
         mdns_reverse_hostname,
+        llmnr_reverse_hostname,
+        ssdp_hostname,
         netbios_hostname,
     )
     for lookup in lookup_steps:
@@ -958,8 +1077,9 @@ def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=Non
         device.online = True
         device.lastseen = scan_started_at
         device.missed_scans = 0
-        if hostname and device.hostname != hostname[:255]:
-            device.hostname = hostname[:255]
+        resolved_hostname = hostname[:255] if hostname else ""
+        if device.hostname != resolved_hostname:
+            device.hostname = resolved_hostname
             update_fields.append("hostname")
         resolved_vendor = preferred_vendor(
             observed_vendor=vendor_name,

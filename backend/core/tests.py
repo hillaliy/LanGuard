@@ -29,13 +29,18 @@ from .scan import (
     clean_hostname,
     default_gateway_from_proc_route,
     discover_devices,
+    dns_encode_name,
+    dns_ptr_names,
     guess_device_identity,
     get_hostname,
+    hostname_from_device_description,
+    llmnr_reverse_hostname,
     ManufVendorDB,
     mark_missing_devices_offline,
     manuf_vendor,
     normalize_scan_ports,
     preferred_vendor,
+    ssdp_hostname_from_response,
     sync_discovered_device,
     sync_device_ports,
     validate_ip_range,
@@ -82,16 +87,104 @@ class HostnameResolutionTests(SimpleTestCase):
         self.assertEqual(clean_hostname(""), "")
 
     @patch("core.scan.netbios_hostname", return_value="")
+    @patch("core.scan.ssdp_hostname", return_value="")
+    @patch("core.scan.llmnr_reverse_hostname", return_value="")
     @patch("core.scan.mdns_reverse_hostname", return_value="")
     @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_returns_blank_when_reverse_dns_is_unavailable(self, *_):
         self.assertEqual(get_hostname("192.168.1.10"), "")
 
     @patch("core.scan.netbios_hostname", return_value="")
+    @patch("core.scan.ssdp_hostname", return_value="")
+    @patch("core.scan.llmnr_reverse_hostname", return_value="")
     @patch("core.scan.mdns_reverse_hostname", return_value="haa switch")
     @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_mdns_fallback(self, *_):
         self.assertEqual(get_hostname("192.168.1.21"), "haa switch")
+
+    @patch("core.scan.netbios_hostname", return_value="")
+    @patch("core.scan.ssdp_hostname", return_value="")
+    @patch("core.scan.llmnr_reverse_hostname", return_value="office pc")
+    @patch("core.scan.mdns_reverse_hostname", return_value="")
+    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    def test_get_hostname_uses_llmnr_fallback(self, *_):
+        self.assertEqual(get_hostname("192.168.1.22"), "office pc")
+
+    @patch("core.scan.netbios_hostname", return_value="")
+    @patch("core.scan.ssdp_hostname", return_value="Archer BE550")
+    @patch("core.scan.llmnr_reverse_hostname", return_value="")
+    @patch("core.scan.mdns_reverse_hostname", return_value="")
+    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    def test_get_hostname_uses_ssdp_fallback(self, *_):
+        self.assertEqual(get_hostname("192.168.1.1"), "Archer BE550")
+
+    def test_dns_ptr_names_returns_matching_owner(self):
+        packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("21.1.168.192.in-addr.arpa")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("HAA-123456.local")).to_bytes(2, "big")
+            + dns_encode_name("HAA-123456.local")
+        )
+
+        self.assertEqual(
+            dns_ptr_names(packet, expected_owner="21.1.168.192.in-addr.arpa"),
+            ["HAA-123456.local"],
+        )
+
+    def test_dns_ptr_names_ignores_unrelated_mdns_answer(self):
+        packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("22.1.168.192.in-addr.arpa")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("Aqara-Hub.local")).to_bytes(2, "big")
+            + dns_encode_name("Aqara-Hub.local")
+        )
+
+        self.assertEqual(
+            dns_ptr_names(packet, expected_owner="21.1.168.192.in-addr.arpa"),
+            [],
+        )
+
+    @patch("core.scan.udp_exchange")
+    def test_llmnr_reverse_hostname_uses_matching_ptr(self, udp_exchange):
+        packet = (
+            b"\x4c\x47\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("22.1.168.192.in-addr.arpa")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("Office-PC.local")).to_bytes(2, "big")
+            + dns_encode_name("Office-PC.local")
+        )
+        udp_exchange.side_effect = [packet, OSError("timeout")]
+
+        self.assertEqual(llmnr_reverse_hostname("192.168.1.22"), "Office PC")
+
+    def test_hostname_from_device_description_prefers_friendly_name(self):
+        body = "<root><friendlyName>Archer BE550</friendlyName><modelName>Router</modelName></root>"
+
+        self.assertEqual(hostname_from_device_description(body, "192.168.1.1"), "Archer BE550")
+
+    @patch("core.scan.requests.get")
+    def test_ssdp_hostname_from_response_fetches_device_description(self, get):
+        get.return_value.text = "<root><friendlyName>Archer BE550</friendlyName></root>"
+        response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"LOCATION: http://192.168.1.1:80/rootDesc.xml\r\n"
+            b"\r\n"
+        )
+
+        self.assertEqual(ssdp_hostname_from_response(response, "192.168.1.1"), "Archer BE550")
+
+    @patch("core.scan.requests.get")
+    def test_ssdp_hostname_from_response_ignores_other_device_location(self, get):
+        response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"LOCATION: http://192.168.1.99:80/rootDesc.xml\r\n"
+            b"\r\n"
+        )
+
+        self.assertEqual(ssdp_hostname_from_response(response, "192.168.1.1"), "")
+        get.assert_not_called()
 
     def test_manuf_parser_preserves_original_vendor_name(self):
         entry = ManufVendorDB.parse_line(
@@ -602,6 +695,27 @@ class ScanStabilityTests(TestCase):
 
         device.refresh_from_db()
         self.assertEqual(device.vendor, "")
+        self.assertEqual(device.name, "Bedroom AC")
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname", return_value="")
+    def test_existing_device_hostname_is_cleared_when_current_scan_has_no_hostname(self, _):
+        device = Device.objects.create(
+            name="Bedroom AC",
+            ip="192.168.1.70",
+            mac="aa:bb:cc:dd:ee:ff",
+            hostname="Aqara Hub",
+            known=True,
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device.refresh_from_db()
+        self.assertEqual(device.hostname, "")
         self.assertEqual(device.name, "Bedroom AC")
 
     @patch("builtins.open")
