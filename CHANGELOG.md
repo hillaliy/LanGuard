@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.4 - 2026-08-15
+
+- Improved private/random MAC handling in Docker and macOS with clearer fallback names and labels.
+- Avoided misleading vendor guesses for locally administered MAC addresses.
+- Displayed Docker primary and secondary device icons together in device lists and map cards.
+- Improved Docker ceiling-light icon rendering and fixed port badge layout in the device list.
+
 ## 1.1.3 - 2026-08-13
 
 - Improved Docker hostname discovery for HomeKit/HAA devices through mDNS service answers.

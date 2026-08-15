@@ -399,7 +399,7 @@ textarea {
   align-items: center;
   display: grid;
   gap: 14px;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   min-height: 50px;
   width: 100%;
 }
@@ -424,7 +424,7 @@ textarea {
   display: inline-flex;
   height: 34px;
   justify-content: center;
-  width: 34px;
+  width: 42px;
 }
 
 .dashboard-insight-row-icon.blue {
@@ -500,6 +500,18 @@ textarea {
   width: 44px;
 }
 
+.device-icon-stack {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+  justify-content: center;
+}
+
+.device-icon-stack.has-secondary {
+  gap: 2px;
+}
+
 .device-list-meta {
   align-items: center;
   display: grid;
@@ -509,9 +521,9 @@ textarea {
     minmax(120px, 0.8fr)
     minmax(90px, 0.7fr)
     minmax(100px, 0.75fr)
-    minmax(78px, 0.55fr)
+    minmax(112px, 0.75fr)
     minmax(82px, 0.6fr)
-    minmax(190px, 1.25fr);
+    minmax(170px, 1.15fr);
   min-width: 0;
 }
 
@@ -527,7 +539,7 @@ textarea {
 }
 
 .device-list-last-seen {
-  min-width: 190px;
+  min-width: 170px;
 }
 
 .device-list-last-seen-value {
@@ -626,6 +638,7 @@ textarea {
   gap: 5px;
   max-width: 100%;
   min-width: 0;
+  overflow: hidden;
 }
 
 .port-badge {
@@ -668,7 +681,7 @@ textarea {
   flex: 0 0 auto;
   justify-content: center;
   min-height: 28px;
-  width: 24px;
+  width: 42px;
 }
 
 .device-mobile-title {
@@ -748,6 +761,8 @@ textarea {
 
 .network-device-icon {
   color: var(--brand-strong);
+  display: inline-flex;
+  min-width: 48px;
 }
 
 .network-device-grid {

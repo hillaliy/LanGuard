@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.1.4',
+    date: '2026-08-15',
+    items: [
+      'Improved private/random MAC handling in Docker and macOS with clearer fallback names and labels.',
+      'Avoided misleading vendor guesses for locally administered MAC addresses.',
+      'Displayed Docker primary and secondary device icons together in device lists and map cards.',
+      'Improved Docker ceiling-light icon rendering and fixed port badge layout in the device list.',
+    ],
+  },
+  {
     version: '1.1.3',
     date: '2026-08-13',
     items: [

@@ -848,6 +848,33 @@ class ScanStabilityTests(TestCase):
 
         self.assertEqual(identity["name"], "Espressif Inc.")
 
+    def test_guess_device_identity_uses_private_mac_fallback_name(self):
+        identity = guess_device_identity(
+            hostname="",
+            vendor="",
+            mac="c6:f5:3a:d8:da:f0",
+        )
+
+        self.assertEqual(identity["name"], "Private Device DAF0")
+
+    def test_guess_device_identity_uses_unknown_mac_fallback_name(self):
+        identity = guess_device_identity(
+            hostname="",
+            vendor="",
+            mac="00:11:22:33:44:55",
+        )
+
+        self.assertEqual(identity["name"], "Unknown Device 4455")
+
+    def test_mac_address_name_is_treated_as_default_name(self):
+        identity = guess_device_identity(
+            hostname="c6:f5:3a:d8:da:f0",
+            vendor="",
+            mac="c6:f5:3a:d8:da:f0",
+        )
+
+        self.assertEqual(identity["name"], "Private Device DAF0")
+
     @override_settings(PORT_SCAN_ENABLED=False)
     @patch("core.scan.get_hostname")
     def test_new_discovered_device_gets_guessed_name_and_icon(self, get_hostname):
