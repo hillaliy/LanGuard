@@ -39,6 +39,7 @@ import {
   IconBlind,
   IconBrandGithub,
   IconBulb,
+  IconBulbFilled,
   IconCast,
   IconClock,
   IconDeviceCctv,
@@ -52,7 +53,6 @@ import {
   IconDownload,
   IconHistory,
   IconLamp,
-  IconLamp2,
   IconLine,
   IconLock,
   IconLogout,
@@ -123,6 +123,64 @@ function formatRoleLabel(value) {
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
     .replace(/[-_]+/g, ' ')
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function normalizeMacText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function compactMac(value) {
+  return normalizeMacText(value).replace(/[:-]/g, '');
+}
+
+function isMacAddressText(value) {
+  const compact = compactMac(value);
+  return compact.length === 12 && /^[0-9a-f]+$/.test(compact);
+}
+
+function isLocallyAdministeredMac(value) {
+  const compact = compactMac(value);
+  if (compact.length < 2 || !/^[0-9a-f]{2}/.test(compact)) {
+    return false;
+  }
+  return (Number.parseInt(compact.slice(0, 2), 16) & 0x02) === 0x02;
+}
+
+function macSuffix(value) {
+  return compactMac(value).slice(-4).toUpperCase();
+}
+
+function displayDeviceName(device) {
+  const name = String(device?.name || '').trim();
+  if (name && !isMacAddressText(name)) {
+    return name;
+  }
+
+  const suffix = macSuffix(device?.mac || name);
+  if (!suffix) {
+    return name || 'Unknown Device';
+  }
+
+  return isLocallyAdministeredMac(device?.mac || name)
+    ? `Private Device ${suffix}`
+    : `Unknown Device ${suffix}`;
+}
+
+function deviceSubtitle(device) {
+  const hostname = String(device?.hostname || '').trim();
+  const vendor = String(device?.vendor || '').trim();
+  const mac = String(device?.mac || '').trim();
+  const details = [hostname, vendor].filter(Boolean);
+
+  if (details.length) {
+    return details.join(' - ');
+  }
+
+  if (isLocallyAdministeredMac(mac)) {
+    return `Private/random MAC - ${mac}`;
+  }
+
+  return mac || '-';
 }
 
 const eventTypeOptions = [
@@ -264,7 +322,7 @@ const deviceIconOptions = [
   { value: 'light', label: 'Light', icon: IconBulb },
   { value: 'led-strip', label: 'LED strip', icon: IconLine },
   { value: 'desk-lamp', label: 'Desk lamp', icon: IconLamp },
-  { value: 'ceiling-light', label: 'Ceiling light', icon: IconLamp2 },
+  { value: 'ceiling-light', label: 'Ceiling light', icon: IconBulbFilled },
   { value: 'air-conditioner', label: 'Air conditioner', icon: IconAirConditioning },
   { value: 'fan', label: 'Fan', icon: IconPropeller },
   { value: 'ceiling-fan', label: 'Ceiling fan', icon: IconWindmill },
@@ -398,6 +456,29 @@ function DeviceIcon({ value, size = 18 }) {
   return <Icon size={size} stroke={1.8} />;
 }
 
+function deviceDisplayIcons(device) {
+  const primaryIcon = normalizeDeviceIcon(device?.icon);
+  const secondaryIcon = normalizeDeviceIcon(device?.secondary_icon);
+
+  if (!secondaryIcon || secondaryIcon === 'unknown' || secondaryIcon === primaryIcon) {
+    return [primaryIcon];
+  }
+
+  return [primaryIcon, secondaryIcon];
+}
+
+function DeviceIconStack({ device, size = 18, className = '' }) {
+  const icons = deviceDisplayIcons(device);
+
+  return (
+    <span className={`device-icon-stack ${icons.length > 1 ? 'has-secondary' : ''} ${className}`.trim()}>
+      {icons.map((icon) => (
+        <DeviceIcon key={icon} value={icon} size={size} />
+      ))}
+    </span>
+  );
+}
+
 function deviceMapShape(device) {
   const icon = normalizeDeviceIcon(device.icon);
   if (device.is_gateway) {
@@ -433,7 +514,7 @@ function NetworkMapDeviceNode({ device, onSelectDevice }) {
     >
       <Group justify="space-between" align="flex-start" wrap="nowrap">
         <span className="network-device-icon">
-          <DeviceIcon value={device.icon} size={22} />
+          <DeviceIconStack device={device} size={22} />
         </span>
         <Group gap={4} justify="flex-end" wrap="wrap">
           <RiskBadge device={device} compact />
@@ -442,7 +523,7 @@ function NetworkMapDeviceNode({ device, onSelectDevice }) {
           </Badge>
         </Group>
       </Group>
-      <Text fw={800} className="network-node-name">{device.name}</Text>
+      <Text fw={800} className="network-node-name">{displayDeviceName(device)}</Text>
       <Text size="xs" className="mobile-mono-value">{device.ip}</Text>
       <div className="network-device-ports">
         <PortSummary ports={device.open_ports || []} />
@@ -1226,10 +1307,10 @@ function DashboardAttentionRow({ device, onSelectDevice }) {
       onClick={() => onSelectDevice(device)}
     >
       <span className="dashboard-insight-row-icon orange">
-        <DeviceIcon value={device.icon} size={20} />
+        <DeviceIconStack device={device} size={18} />
       </span>
       <Box className="dashboard-insight-row-body">
-        <Text fw={800} className="truncate-cell">{device.name}</Text>
+        <Text fw={800} className="truncate-cell">{displayDeviceName(device)}</Text>
         <Text size="sm" c="dimmed" className="truncate-cell">
           {[reason, device.ip].filter(Boolean).join(' - ')}
         </Text>
@@ -1486,7 +1567,7 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
     <Modal
       opened={opened}
       onClose={closeModal}
-      title={device?.name || 'Device'}
+      title={displayDeviceName(device)}
       centered
       size="lg"
     >
@@ -2856,11 +2937,11 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                       >
                         <Group className="device-list-primary" gap="md" align="center" wrap="nowrap">
                           <span className="device-list-icon">
-                            <DeviceIcon value={device.icon} size={22} />
+                            <DeviceIconStack device={device} size={21} />
                           </span>
                           <Box className="device-list-title">
                             <Group gap="xs" wrap="nowrap">
-                              <Text fw={800} className="truncate-cell">{device.name}</Text>
+                              <Text fw={800} className="truncate-cell">{displayDeviceName(device)}</Text>
                               <Badge
                                 className="device-known-badge"
                                 color={device.known ? 'teal' : 'yellow'}
@@ -2870,7 +2951,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                               </Badge>
                             </Group>
                             <Text size="sm" c="dimmed" className="truncate-cell">
-                              {[device.hostname, device.vendor].filter(Boolean).join(' - ') || device.mac}
+                              {deviceSubtitle(device)}
                             </Text>
                           </Box>
                         </Group>
@@ -2923,10 +3004,10 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                         <Group justify="space-between" align="flex-start" wrap="nowrap">
                           <Group gap="sm" align="flex-start" wrap="nowrap" className="device-mobile-main">
                             <span className="device-mobile-icon">
-                              <DeviceIcon value={device.icon} size={19} />
+                              <DeviceIconStack device={device} size={18} />
                             </span>
                             <Box className="device-mobile-title">
-                              <Text fw={700} className="truncate-cell">{device.name}</Text>
+                              <Text fw={700} className="truncate-cell">{displayDeviceName(device)}</Text>
                               <DeviceStatusInline device={device} muted />
                             </Box>
                           </Group>

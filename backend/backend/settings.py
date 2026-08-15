@@ -67,7 +67,7 @@ def validate_production_settings(environment, secret_key, debug, allowed_hosts):
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
-APP_VERSION = os.getenv("APP_VERSION", "1.1.3")
+APP_VERSION = os.getenv("APP_VERSION", "1.1.4")
 LATEST_VERSION_URL = os.getenv(
     "LATEST_VERSION_URL",
     "https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/package.json",

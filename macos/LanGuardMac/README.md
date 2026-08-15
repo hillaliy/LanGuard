@@ -35,7 +35,7 @@ The app bundle is created at `.build/app/LanGuard.app`.
 
 ```bash
 ./Scripts/build_dmg.sh
-open .build/release/LanGuard-1.1.3.dmg
+open .build/release/LanGuard-1.1.4.dmg
 ```
 
 Drag `LanGuard.app` into `Applications` from the DMG window.

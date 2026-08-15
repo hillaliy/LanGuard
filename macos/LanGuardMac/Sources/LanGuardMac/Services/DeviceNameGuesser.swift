@@ -43,16 +43,31 @@ enum DeviceNameGuesser {
             return "\(vendor) Device"
         }
 
-        let suffix = macAddress
-            .split(separator: ":")
-            .suffix(2)
-            .joined()
-            .uppercased()
+        let suffix = macSuffix(macAddress)
 
         if suffix.isEmpty {
             return "Unknown Device"
         }
 
+        if MACVendorResolver.isLocallyAdministered(macAddress) {
+            return "Private Device \(suffix)"
+        }
+
         return "Unknown Device \(suffix)"
+    }
+
+    static func isMACAddressText(_ value: String) -> Bool {
+        let compact = value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .filter(\.isHexDigit)
+
+        return compact.count == 12
+    }
+
+    static func macSuffix(_ macAddress: String) -> String {
+        macAddress
+            .filter(\.isHexDigit)
+            .suffix(4)
+            .uppercased()
     }
 }

@@ -697,9 +697,28 @@ def vendor_display_name(vendor):
     return trim_vendor(vendor)
 
 
+def mac_suffix(mac, length=4):
+    cleaned = "".join(character for character in (mac or "") if character.isalnum())
+    return cleaned[-length:].upper() if cleaned else ""
+
+
+def is_mac_address_text(value):
+    cleaned = (value or "").strip().lower()
+    if not cleaned:
+        return False
+    compact = cleaned.replace(":", "").replace("-", "")
+    return len(compact) == 12 and all(character in "0123456789abcdef" for character in compact)
+
+
 def is_default_device_name(name):
     cleaned = (name or "").strip().lower()
-    return not cleaned or cleaned == DEFAULT_DEVICE_NAME.lower()
+    return (
+        not cleaned
+        or cleaned == DEFAULT_DEVICE_NAME.lower()
+        or cleaned.startswith("unknown device")
+        or cleaned.startswith("private device")
+        or is_mac_address_text(cleaned)
+    )
 
 
 def is_default_device_icon(icon):
@@ -727,6 +746,11 @@ def guess_device_name(hostname, vendor, mac):
         return hostname
     if vendor:
         return vendor_display_name(vendor)
+    suffix = mac_suffix(mac)
+    if suffix and is_locally_administered_mac(mac):
+        return f"Private Device {suffix}"
+    if suffix:
+        return f"Unknown Device {suffix}"
     return DEFAULT_DEVICE_NAME
 
 

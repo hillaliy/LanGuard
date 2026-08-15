@@ -485,7 +485,7 @@ private struct DeviceCardRow: View {
 
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 8) {
-                        Text(device.name)
+                        Text(displayName)
                             .font(.headline.weight(.semibold))
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -574,13 +574,25 @@ private struct DeviceCardRow: View {
         .background(Color(nsColor: .controlBackgroundColor))
     }
 
+    private var displayName: String {
+        DeviceNameGuesser.isMACAddressText(device.name)
+            ? DeviceNameGuesser.displayName(hostname: nil, macAddress: device.macAddress)
+            : device.name
+    }
+
     private var subtitle: String {
         let details = [device.hostname, device.vendor]
             .compactMap { value in
                 let cleaned = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 return cleaned.isEmpty ? nil : cleaned
             }
-        return details.isEmpty ? device.macAddress : details.joined(separator: " - ")
+        if !details.isEmpty {
+            return details.joined(separator: " - ")
+        }
+        if MACVendorResolver.isLocallyAdministered(device.macAddress) {
+            return "Private/random MAC - \(device.macAddress)"
+        }
+        return device.macAddress
     }
 }
 
@@ -634,7 +646,7 @@ private struct CompactDeviceRow: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
-                        Text(device.name)
+                        Text(displayName)
                             .font(.headline.weight(.semibold))
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -705,7 +717,7 @@ private struct CompactDeviceRow: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 7) {
-                        Text(device.name)
+                        Text(displayName)
                             .font(.headline.weight(.semibold))
                             .lineLimit(1)
                             .truncationMode(.tail)
@@ -788,13 +800,25 @@ private struct CompactDeviceRow: View {
             .lineLimit(1)
     }
 
+    private var displayName: String {
+        DeviceNameGuesser.isMACAddressText(device.name)
+            ? DeviceNameGuesser.displayName(hostname: nil, macAddress: device.macAddress)
+            : device.name
+    }
+
     private var subtitle: String {
         let details = [device.hostname, device.vendor]
             .compactMap { value in
                 let cleaned = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
                 return cleaned.isEmpty ? nil : cleaned
             }
-        return details.isEmpty ? device.macAddress : details.joined(separator: " - ")
+        if !details.isEmpty {
+            return details.joined(separator: " - ")
+        }
+        if MACVendorResolver.isLocallyAdministered(device.macAddress) {
+            return "Private/random MAC - \(device.macAddress)"
+        }
+        return device.macAddress
     }
 }
 

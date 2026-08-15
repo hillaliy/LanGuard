@@ -75,6 +75,18 @@ func deviceNameGuesserFallsBackToMacSuffix() {
 }
 
 @Test
+func deviceNameGuesserMarksPrivateMACFallbackName() {
+    #expect(DeviceNameGuesser.displayName(hostname: nil, macAddress: "c6:f5:3a:d8:da:f0") == "Private Device DAF0")
+}
+
+@Test
+func deviceNameGuesserDetectsMACAddressText() {
+    #expect(DeviceNameGuesser.isMACAddressText("c6:f5:3a:d8:da:f0"))
+    #expect(DeviceNameGuesser.isMACAddressText("c6-f5-3a-d8-da-f0"))
+    #expect(!DeviceNameGuesser.isMACAddressText("Living Room TV"))
+}
+
+@Test
 func deviceInventoryExportUsesEffectiveRole() throws {
     let device = NetworkDevice(
         id: "aa:bb:cc:dd:ee:ff",
@@ -539,7 +551,7 @@ func deviceProfilerClearsStaleVendorForRandomizedMacAddress() {
     let enriched = DeviceProfiler.enrich(device)
 
     #expect(enriched.vendor == nil)
-    #expect(enriched.name == "Unknown Device 6694")
+    #expect(enriched.name == "Private Device 6694")
 }
 
 @Test
