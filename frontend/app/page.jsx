@@ -94,29 +94,6 @@ import { APP_VERSION, CHANGELOG_ENTRIES } from './version';
 
 const changelogSeenStorageKey = 'languard_changelog_seen_version';
 const versionCheckFallbackInterval = 6 * 60 * 60 * 1000;
-const versionCheckUnitOptions = [
-  { value: 'minutes', label: 'Minutes' },
-  { value: 'hours', label: 'Hours' },
-];
-
-function splitVersionCheckInterval(seconds) {
-  const normalizedSeconds = Number(seconds) || versionCheckFallbackInterval / 1000;
-  if (normalizedSeconds >= 3600 && normalizedSeconds % 3600 === 0) {
-    return {
-      value: normalizedSeconds / 3600,
-      unit: 'hours',
-    };
-  }
-  return {
-    value: Math.max(1, Math.round(normalizedSeconds / 60)),
-    unit: 'minutes',
-  };
-}
-
-function buildVersionCheckInterval(value, unit) {
-  const normalizedValue = Math.max(1, Number(value) || 1);
-  return normalizedValue * (unit === 'hours' ? 3600 : 60);
-}
 
 function formatRoleLabel(value) {
   return String(value || 'device')
@@ -2076,8 +2053,6 @@ function SettingsModal({ opened, onClose, onSaved }) {
   const [ipRange, setIpRange] = useState('');
   const [scanInterval, setScanInterval] = useState(10);
   const [timeZone, setTimeZone] = useState('UTC');
-  const [versionCheckValue, setVersionCheckValue] = useState(6);
-  const [versionCheckUnit, setVersionCheckUnit] = useState('hours');
   const [discordEnabled, setDiscordEnabled] = useState(true);
   const [telegramEnabled, setTelegramEnabled] = useState(true);
   const [discordConfigured, setDiscordConfigured] = useState(false);
@@ -2107,9 +2082,6 @@ function SettingsModal({ opened, onClose, onSaved }) {
       setIpRange(data.ip_range || '');
       setScanInterval(data.scan_interval || 10);
       setTimeZone(data.time_zone || 'UTC');
-      const versionInterval = splitVersionCheckInterval(data.version_check_interval);
-      setVersionCheckValue(versionInterval.value);
-      setVersionCheckUnit(versionInterval.unit);
       setDiscordEnabled(Boolean(data.discord_enabled));
       setTelegramEnabled(Boolean(data.telegram_enabled));
       setDiscordConfigured(Boolean(data.discord_configured));
@@ -2146,7 +2118,6 @@ function SettingsModal({ opened, onClose, onSaved }) {
         ip_range: ipRange,
         scan_interval: scanInterval,
         time_zone: timeZone,
-        version_check_interval: buildVersionCheckInterval(versionCheckValue, versionCheckUnit),
         discord_enabled: discordEnabled,
         telegram_enabled: telegramEnabled,
         notify_new_devices: notifyNewDevices,
@@ -2164,7 +2135,7 @@ function SettingsModal({ opened, onClose, onSaved }) {
       const savedSettings = await apiRequest('settings/', { method: 'PUT', body });
       await loadSettings();
       await onSaved(savedSettings.data || {});
-      showSuccessNotification('Settings saved', 'Scanner, version, and notification settings were updated.');
+      showSuccessNotification('Settings saved', 'Scanner and notification settings were updated.');
       onClose();
     } catch (err) {
       setError(err.message);
@@ -2279,26 +2250,6 @@ function SettingsModal({ opened, onClose, onSaved }) {
         <Text size="xs" c="dimmed">
           The interval starts after each scan completes. Restart the scanner container after changing scan interval or timezone.
         </Text>
-
-        <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <NumberInput
-            label="Version check interval"
-            value={versionCheckValue}
-            onChange={(value) => setVersionCheckValue(Number(value) || 1)}
-            min={1}
-            max={versionCheckUnit === 'hours' ? 168 : 10080}
-            required
-          />
-          <Select
-            label="Interval unit"
-            data={versionCheckUnitOptions}
-            value={versionCheckUnit}
-            onChange={(value) => setVersionCheckUnit(value || 'hours')}
-            required
-          />
-        </SimpleGrid>
-
-        <Divider />
 
         <Stack gap="sm">
           <Text fw={700}>Notification rules</Text>
@@ -3258,10 +3209,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         <SettingsModal
           opened={settingsModalOpened}
           onClose={settingsModal.close}
-          onSaved={async (settingsData) => {
-            if (settingsData.version_check_interval) {
-              setVersionCheckInterval(settingsData.version_check_interval * 1000);
-            }
+          onSaved={async () => {
             await loadData({ quiet: true });
           }}
         />
