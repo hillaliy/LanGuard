@@ -100,7 +100,8 @@ struct LocalNetworkScanner: NetworkScanning {
                     scannedDevice.hostname = metadata.hostname ?? scannedDevice.hostname
                     scannedDevice.risk = DeviceRiskScorer.risk(
                         for: scannedDevice.openPorts,
-                        isKnown: scannedDevice.isKnown
+                        isKnown: scannedDevice.isKnown,
+                        role: scannedDevice.role ?? .device
                     )
                     return DeviceProfiler.enrich(scannedDevice)
                 }

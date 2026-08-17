@@ -120,11 +120,19 @@ RISKY_PORTS = {
     8080: "Admin web",
 }
 HIGH_RISK_PORTS = {23, 445, 3389, 5900}
+ROLE_EXPECTED_PORTS = {
+    "camera": {80, 443, 554, 8000, 8080, 8443, 8554},
+    "intercom": {80, 443, 554, 8000, 8080, 8443, 8554},
+    "server": {22, 80, 443, 445, 3000, 5000, 8080, 8443},
+}
+PORT_DENSE_ROLES = {"camera", "intercom", "server"}
 
 
 def device_risk(device):
     score = 0
     reasons = []
+    role = (device.role or "").strip().lower()
+    expected_ports = ROLE_EXPECTED_PORTS.get(role, set()) if device.known else set()
 
     if not device.known:
         score += 3
@@ -134,14 +142,16 @@ def device_risk(device):
     risky_ports = [
         f"{protocol}/{port} ({RISKY_PORTS[port]})"
         for port, protocol in open_ports
-        if port in RISKY_PORTS
+        if port in RISKY_PORTS and port not in expected_ports
     ]
     if risky_ports:
-        high_risk_count = sum(1 for port, _protocol in open_ports if port in HIGH_RISK_PORTS)
+        high_risk_count = sum(
+            1 for port, _protocol in open_ports if port in HIGH_RISK_PORTS and port not in expected_ports
+        )
         score += 3 if high_risk_count else 2
         reasons.append(f"Risky open ports: {', '.join(risky_ports)}")
 
-    if len(open_ports) >= 4:
+    if len(open_ports) >= 4 and not (device.known and role in PORT_DENSE_ROLES):
         score += 2
         reasons.append("Many open ports")
 

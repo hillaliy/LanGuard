@@ -435,6 +435,21 @@ textarea {
   color: var(--mantine-color-orange-6);
 }
 
+.dashboard-clickable-card {
+  color: inherit;
+  cursor: pointer;
+  display: block;
+  font: inherit;
+  text-align: left;
+  transition: border-color 120ms ease, transform 120ms ease;
+  width: 100%;
+}
+
+.dashboard-clickable-card:hover {
+  border-color: color-mix(in srgb, var(--mantine-color-blue-5) 45%, var(--border-color));
+  transform: translateY(-1px);
+}
+
 .dashboard-insight-row-body {
   min-width: 0;
 }

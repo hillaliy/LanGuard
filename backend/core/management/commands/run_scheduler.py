@@ -1,7 +1,7 @@
 import logging
 import signal
+import threading
 
-from apscheduler.schedulers.blocking import BlockingScheduler
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -45,7 +45,7 @@ class Command(BaseCommand):
         ip_range = options["ip_range"] or app_config.ip_range
         interval = options["interval"] or app_config.scan_interval
         retry_interval = options["retry_interval"]
-        scheduler = BlockingScheduler(timezone=app_config.time_zone)
+        stop_event = threading.Event()
 
         def scheduled_scan():
             LOGGER.info("Starting scheduled scan for %s", ip_range)
@@ -64,38 +64,40 @@ class Command(BaseCommand):
                     )
                 )
 
-        scheduler.add_job(
-            scheduled_scan,
-            "interval",
-            minutes=interval,
-            id="network_scan",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True,
-        )
-        scheduler.add_job(
-            scheduled_notification_retry,
-            "interval",
-            minutes=retry_interval,
-            id="notification_retry",
-            max_instances=1,
-            coalesce=True,
-            replace_existing=True,
-        )
+        def run_scheduled_scan():
+            try:
+                scheduled_scan()
+            except Exception:
+                LOGGER.exception("Scheduled scan failed for %s", ip_range)
+                self.stderr.write(self.style.ERROR(f"Scheduled scan failed for {ip_range}"))
+
+        def run_notification_retry():
+            try:
+                scheduled_notification_retry()
+            except Exception:
+                LOGGER.exception("Scheduled notification retry failed")
+                self.stderr.write(self.style.ERROR("Scheduled notification retry failed"))
+
+        def retry_loop():
+            while not stop_event.wait(retry_interval * 60):
+                run_notification_retry()
 
         def stop_scheduler(signum, frame):
             self.stdout.write("Stopping scheduler...")
-            scheduler.shutdown(wait=False)
+            stop_event.set()
 
         signal.signal(signal.SIGTERM, stop_scheduler)
         signal.signal(signal.SIGINT, stop_scheduler)
 
+        retry_thread = threading.Thread(target=retry_loop, daemon=True)
+        retry_thread.start()
+
         if options["run_now"]:
-            scheduled_scan()
+            run_scheduled_scan()
 
         self.stdout.write(
             self.style.SUCCESS(
-                f"Scheduled network scans every {interval} minutes for {ip_range}"
+                f"Scheduled network scans {interval} minutes after each scan completes for {ip_range}"
             )
         )
         self.stdout.write(
@@ -103,4 +105,6 @@ class Command(BaseCommand):
                 f"Scheduled notification retries every {retry_interval} minutes"
             )
         )
-        scheduler.start()
+
+        while not stop_event.wait(interval * 60):
+            run_scheduled_scan()

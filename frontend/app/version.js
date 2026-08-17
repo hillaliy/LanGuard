@@ -4,6 +4,18 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.1.5',
+    date: '2026-08-17',
+    items: [
+      'Added public README demo media with fictional device data for screenshots and previews.',
+      'Added Latest Scan detail views in Docker and macOS.',
+      'Made Docker automatic scans wait the configured interval after the current scan completes.',
+      'Improved role-aware risk scoring for known cameras, intercoms, and servers.',
+      'Added clearer macOS inventory import/export feedback and Docker login greetings with full names.',
+      'Updated the copy-paste Docker Compose example and Discord icon cache-busting.',
+    ],
+  },
+  {
     version: '1.1.4',
     date: '2026-08-15',
     items: [

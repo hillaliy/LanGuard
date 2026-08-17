@@ -981,7 +981,7 @@ function AuthScreen({ onLogin }) {
       storeUser(user);
       showSuccessNotification(
         mode === 'register' ? 'Account created' : 'Signed in',
-        `Welcome, ${user.username}.`
+        `Welcome, ${userDisplayName(user)}.`
       );
       onLogin(user);
     } catch (err) {
@@ -1059,12 +1059,12 @@ function AuthScreen({ onLogin }) {
   );
 }
 
-function ThemeIconLike({ children, color }) {
+function ThemeIconLike({ children, color, size = 42 }) {
   return (
     <Box
       style={{
-        width: 42,
-        height: 42,
+        width: size,
+        height: size,
         borderRadius: 8,
         display: 'grid',
         placeItems: 'center',
@@ -1177,7 +1177,54 @@ function AutomaticScanningCard({ appSettings, scanVisibility }) {
   );
 }
 
-function LatestScanCard({ scanStatus, scanVisibility, timeZone }) {
+function ScanDetailsContent({ scanStatus, scanVisibility, timeZone }) {
+  const checks = [
+    'Device discovery and online status checks',
+    'Open port scanning for the configured TCP ports',
+    'Hostname discovery using local network name protocols',
+    'Metadata probing from device services when available',
+    'Offline confirmation before a device is marked unavailable',
+  ];
+
+  return (
+    <Stack gap="md">
+      <SimpleGrid cols={{ base: 1, sm: 2 }}>
+        <SummaryMetric label="Status" value={scanVisibility?.is_scanning ? 'Scanning' : scanStatus?.status || '-'} />
+        <SummaryMetric label="Devices" value={scanStatus?.devices_seen ?? 0} />
+        <SummaryMetric label="Duration" value={formatDuration(scanVisibility?.duration_seconds)} />
+        <SummaryMetric label="Range" value={scanVisibility?.current_range || '-'} />
+        <SummaryMetric label="Started" value={formatDate(scanVisibility?.started_at, timeZone)} />
+        <SummaryMetric label="Finished" value={formatDate(scanVisibility?.finished_at, timeZone)} />
+      </SimpleGrid>
+
+      {scanVisibility?.last_error && (
+        <Alert color="red" icon={<IconAlertCircle size={18} />}>
+          {scanVisibility.last_error}
+        </Alert>
+      )}
+
+      <Divider />
+
+      <Stack gap={8}>
+        <Text fw={700}>Deep scan checks</Text>
+        {checks.map((check) => (
+          <Group key={check} gap="sm" wrap="nowrap">
+            <ThemeIconLike color="blue" size={28}>
+              <IconShieldCheck size={16} />
+            </ThemeIconLike>
+            <Text c="dimmed">{check}</Text>
+          </Group>
+        ))}
+      </Stack>
+
+      <Text c="dimmed" size="sm">
+        Longer scans are usually caused by devices that do not answer and force timeout-based checks.
+      </Text>
+    </Stack>
+  );
+}
+
+function LatestScanCard({ scanStatus, scanVisibility, timeZone, onOpenDetails }) {
   const statusColor = scanVisibility?.is_scanning
     ? 'blue'
     : scanStatus?.status === 'failed'
@@ -1186,7 +1233,13 @@ function LatestScanCard({ scanStatus, scanVisibility, timeZone }) {
   const statusLabel = scanVisibility?.is_scanning ? 'Scanning' : scanStatus?.status || '-';
 
   return (
-    <Paper className="dashboard-summary-card latest-scan-card" radius="md">
+    <Paper
+      className="dashboard-summary-card latest-scan-card dashboard-clickable-card"
+      radius="md"
+      component="button"
+      type="button"
+      onClick={onOpenDetails}
+    >
       <Group justify="space-between" align="center" mb="lg" wrap="nowrap">
         <Group gap="sm" wrap="nowrap">
           <IconClock size={28} />
@@ -2224,7 +2277,7 @@ function SettingsModal({ opened, onClose, onSaved }) {
         </SimpleGrid>
 
         <Text size="xs" c="dimmed">
-          Restart the scanner container after changing scan interval or timezone.
+          The interval starts after each scan completes. Restart the scanner container after changing scan interval or timezone.
         </Text>
 
         <SimpleGrid cols={{ base: 1, sm: 2 }}>
@@ -2435,6 +2488,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [logoutModalOpened, logoutModal] = useDisclosure(false);
   const [usersModalOpened, usersModal] = useDisclosure(false);
   const [settingsModalOpened, settingsModal] = useDisclosure(false);
+  const [scanDetailsOpened, scanDetailsModal] = useDisclosure(false);
   const tableStateRef = useRef({
     search: '',
     deviceStatus: '',
@@ -2807,6 +2861,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
               scanStatus={scanStatus}
               scanVisibility={scanVisibility}
               timeZone={displayTimeZone}
+              onOpenDetails={scanDetailsModal.open}
             />
           </div>
 
@@ -3170,6 +3225,20 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
           </Tabs>
         </Stack>
       </Container>
+
+      <Modal
+        opened={scanDetailsOpened}
+        onClose={scanDetailsModal.close}
+        title="Latest scan details"
+        centered
+        size="lg"
+      >
+        <ScanDetailsContent
+          scanStatus={scanStatus}
+          scanVisibility={scanVisibility}
+          timeZone={displayTimeZone}
+        />
+      </Modal>
 
       <DeviceModal
         device={activeDevice}
