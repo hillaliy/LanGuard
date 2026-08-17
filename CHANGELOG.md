@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.1.5 - 2026-08-17
+
+- Added public README demo media with fictional device data for screenshots and previews.
+- Added Latest Scan detail views in Docker and macOS.
+- Made Docker automatic scans wait the configured interval after the current scan completes.
+- Improved role-aware risk scoring for known cameras, intercoms, and servers.
+- Added clearer macOS inventory import/export feedback and Docker login greetings with full names.
+- Updated the copy-paste Docker Compose example and Discord icon cache-busting.
+
 ## 1.1.4 - 2026-08-15
 
 - Improved private/random MAC handling in Docker and macOS with clearer fallback names and labels.

@@ -24,7 +24,11 @@ enum DeviceMerger {
                 var newDevice = device
                 newDevice.status = .online
                 newDevice.missedScans = 0
-                newDevice.risk = DeviceRiskScorer.risk(for: newDevice.openPorts, isKnown: newDevice.isKnown)
+                newDevice.risk = DeviceRiskScorer.risk(
+                    for: newDevice.openPorts,
+                    isKnown: newDevice.isKnown,
+                    role: newDevice.role ?? .device
+                )
                 newDevices.append(newDevice)
                 if !newDevice.isKnown, newDevice.risk == .high {
                     riskyDevices.append(newDevice)
@@ -50,7 +54,11 @@ enum DeviceMerger {
             merged.firstSeen = previous.firstSeen
             merged.status = .online
             merged.missedScans = 0
-            merged.risk = DeviceRiskScorer.risk(for: merged.openPorts, isKnown: merged.isKnown)
+            merged.risk = DeviceRiskScorer.risk(
+                for: merged.openPorts,
+                isKnown: merged.isKnown,
+                role: merged.role ?? .device
+            )
 
             if previous.ipAddress != merged.ipAddress {
                 changes.append(DeviceChange(deviceID: merged.id, deviceName: merged.name, ipAddress: merged.ipAddress, kind: .ipAddress))

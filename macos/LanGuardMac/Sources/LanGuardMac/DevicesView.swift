@@ -962,7 +962,8 @@ struct DeviceDetailView: View {
                     updatedDevice.secondaryIconName = sanitizedSecondaryIconName
                     updatedDevice.risk = DeviceRiskScorer.risk(
                         for: updatedDevice.openPorts,
-                        isKnown: updatedDevice.isKnown
+                        isKnown: updatedDevice.isKnown,
+                        role: updatedDevice.role ?? .device
                     )
                     onSave(updatedDevice)
                 }

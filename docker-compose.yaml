@@ -1,45 +1,50 @@
 services:
   backend:
-    volumes:
-      - static:/static
-      - database:/data
-    env_file:
-      - .env
+    image: ghcr.io/hillaliy/languard-backend:latest
+    container_name: languard-backend
+    privileged: true
+    network_mode: host
     environment:
+      SECRET_KEY: change-this-to-a-long-random-secret
+      ALLOWED_HOSTS: 192.168.1.10,languard.local
       DB_PATH: /data/db.sqlite3
       STATIC_ROOT: /static
-    build:
-      context: .
-    network_mode: host
-    privileged: true
+    volumes:
+      - languard_database:/data
+      - languard_static:/static
+    restart: unless-stopped
+
   scanner:
-    volumes:
-      - static:/static
-      - database:/data
-    env_file:
-      - .env
+    image: ghcr.io/hillaliy/languard-backend:latest
+    container_name: languard-scanner
+    privileged: true
+    network_mode: host
+    command: ["python", "-u", "manage.py", "run_scheduler", "--run-now"]
     environment:
+      SECRET_KEY: change-this-to-a-long-random-secret
+      ALLOWED_HOSTS: 192.168.1.10,languard.local
       DB_PATH: /data/db.sqlite3
       STATIC_ROOT: /static
-    build:
-      context: .
-    command: ["python", "-u", "manage.py", "run_scheduler", "--run-now"]
-    network_mode: host
-    privileged: true
+    volumes:
+      - languard_database:/data
+      - languard_static:/static
+    restart: unless-stopped
     depends_on:
       - backend
+
   frontend:
-    build:
-      context: ./frontend
+    image: ghcr.io/hillaliy/languard-frontend:latest
+    container_name: languard-frontend
     environment:
       BACKEND_UPSTREAM: host.docker.internal:8000
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - host.docker.internal:host-gateway
     ports:
-      - '8080:80'
+      - "8080:80"
+    restart: unless-stopped
     depends_on:
       - backend
 
 volumes:
-  static:
-  database:
+  languard_database:
+  languard_static:

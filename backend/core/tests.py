@@ -21,7 +21,7 @@ from .models import (
     NotificationDelivery,
     ScanRun,
 )
-from .notifications import notify_event, retry_failed_notifications
+from .notifications import format_discord_payload, notify_event, retry_failed_notifications
 from .views import parse_inventory_datetime
 from .scan import (
     clear_stale_gateways,
@@ -1045,6 +1045,15 @@ class NotificationTests(TestCase):
         self.event.refresh_from_db()
         self.assertTrue(self.event.notified)
 
+    @override_settings(DISCORD_ICON_URL="https://example.com/languard.png?v=1.1.4")
+    def test_discord_payload_preserves_cache_busting_icon_url(self):
+        payload = format_discord_payload(self.event)
+        embed = payload["embeds"][0]
+
+        self.assertEqual(payload["avatar_url"], "https://example.com/languard.png?v=1.1.4")
+        self.assertEqual(embed["author"]["icon_url"], "https://example.com/languard.png?v=1.1.4")
+        self.assertEqual(embed["thumbnail"]["url"], "https://example.com/languard.png?v=1.1.4")
+
     @override_settings(
         NOTIFICATIONS_ENABLED=True,
         DISCORD_WEBHOOK="https://discord.example/webhook",
@@ -1809,6 +1818,52 @@ class ScanApiTests(TestCase):
         self.assertEqual(device["risk_level"], "high")
         self.assertGreaterEqual(device["risk_score"], 5)
         self.assertIn("New unknown device", device["risk_reasons"])
+        self.assertTrue(
+            any("Risky open ports" in reason for reason in device["risk_reasons"])
+        )
+
+    def test_device_endpoint_keeps_known_camera_with_expected_ports_low_risk(self):
+        self.device.known = True
+        self.device.role = "camera"
+        self.device.vendor = "Hikvision"
+        self.device.save()
+        for port in [80, 443, 554, 8443]:
+            DevicePort.objects.create(device=self.device, port=port, protocol="tcp", open=True)
+
+        response = self.client.get("/api/v1/device/")
+
+        self.assertEqual(response.status_code, 200)
+        device = response.data["data"][0]
+        self.assertEqual(device["risk_level"], "low")
+        self.assertNotIn("Many open ports", device["risk_reasons"])
+
+    def test_device_endpoint_keeps_known_server_with_expected_ports_low_risk(self):
+        self.device.known = True
+        self.device.role = "server"
+        self.device.vendor = "Linux"
+        self.device.save()
+        for port in [22, 80, 443, 8080, 8443]:
+            DevicePort.objects.create(device=self.device, port=port, protocol="tcp", open=True)
+
+        response = self.client.get("/api/v1/device/")
+
+        self.assertEqual(response.status_code, 200)
+        device = response.data["data"][0]
+        self.assertEqual(device["risk_level"], "low")
+        self.assertNotIn("Many open ports", device["risk_reasons"])
+
+    def test_device_endpoint_still_flags_known_server_with_dangerous_remote_port(self):
+        self.device.known = True
+        self.device.role = "server"
+        self.device.vendor = "Linux"
+        self.device.save()
+        DevicePort.objects.create(device=self.device, port=3389, protocol="tcp", open=True)
+
+        response = self.client.get("/api/v1/device/")
+
+        self.assertEqual(response.status_code, 200)
+        device = response.data["data"][0]
+        self.assertEqual(device["risk_level"], "medium")
         self.assertTrue(
             any("Risky open ports" in reason for reason in device["risk_reasons"])
         )

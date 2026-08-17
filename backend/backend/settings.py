@@ -67,7 +67,7 @@ def validate_production_settings(environment, secret_key, debug, allowed_hosts):
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
-APP_VERSION = os.getenv("APP_VERSION", "1.1.4")
+APP_VERSION = os.getenv("APP_VERSION", "1.1.5")
 LATEST_VERSION_URL = os.getenv(
     "LATEST_VERSION_URL",
     "https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/package.json",
@@ -342,7 +342,7 @@ NOTIFICATION_EVENT_TYPES = env_list("NOTIFICATION_EVENT_TYPES", default=["new_de
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 DISCORD_ICON_URL = os.getenv(
     "DISCORD_ICON_URL",
-    "https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png",
+    f"https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png?v={APP_VERSION}",
 )
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_USERID = os.getenv("TELEGRAM_USERID")

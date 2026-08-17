@@ -3,6 +3,7 @@ import SwiftUI
 struct DashboardView: View {
     @Environment(AppModel.self) private var appModel
     @State private var editingDevice: NetworkDevice?
+    @State private var showingLatestScanDetails = false
 
     var body: some View {
         ScrollView {
@@ -20,6 +21,11 @@ struct DashboardView: View {
             } onDelete: { device in
                 appModel.deleteDevice(device)
                 editingDevice = nil
+            }
+        }
+        .sheet(isPresented: $showingLatestScanDetails) {
+            if let latestScan = appModel.latestScan {
+                ScanDetailsSheet(scan: latestScan)
             }
         }
     }
@@ -189,7 +195,9 @@ struct DashboardView: View {
     @ViewBuilder
     private var latestScanContent: some View {
         if let latestScan = appModel.latestScan {
-            LatestScanCard(scan: latestScan)
+            LatestScanCard(scan: latestScan) {
+                showingLatestScanDetails = true
+            }
         } else {
             EmptyScanCard()
         }
@@ -198,7 +206,9 @@ struct DashboardView: View {
     @ViewBuilder
     private var latestScanSummaryContent: some View {
         if let latestScan = appModel.latestScan {
-            LatestScanSummaryCard(scan: latestScan)
+            LatestScanSummaryCard(scan: latestScan) {
+                showingLatestScanDetails = true
+            }
         } else {
             EmptyScanSummaryCard()
         }
@@ -207,7 +217,9 @@ struct DashboardView: View {
     @ViewBuilder
     private var compactLatestScanCard: some View {
         if let latestScan = appModel.latestScan {
-            CompactLatestScanCard(scan: latestScan)
+            CompactLatestScanCard(scan: latestScan) {
+                showingLatestScanDetails = true
+            }
         } else {
             CompactEmptyScanCard()
         }
@@ -973,40 +985,44 @@ private struct CompactSummaryCard: View {
 
 private struct LatestScanCard: View {
     let scan: ScanRecord
+    let showDetails: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack {
-                Label("Latest Scan", systemImage: "clock")
-                    .font(.title3.weight(.semibold))
+        Button(action: showDetails) {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack {
+                    Label("Latest Scan", systemImage: "clock")
+                        .font(.title3.weight(.semibold))
 
-                Spacer()
+                    Spacer()
 
-                ScanStatusBadge(isScanning: scan.status == .running, latestScan: scan)
-            }
-
-            Grid(alignment: .leading, horizontalSpacing: 32, verticalSpacing: 14) {
-                GridRow {
-                    ScanMetric(title: "Status", value: scan.status.rawValue.capitalized)
-                    ScanMetric(title: "Devices", value: "\(scan.discoveredCount)")
-                    ScanMetric(title: "Started", value: scan.startedAt.formatted(date: .abbreviated, time: .shortened))
+                    ScanStatusBadge(isScanning: scan.status == .running, latestScan: scan)
                 }
 
-                GridRow {
-                    ScanMetric(title: "Finished", value: scan.finishedAt?.formatted(date: .abbreviated, time: .shortened) ?? "-")
-                    ScanMetric(title: "Duration", value: formattedDuration(scan.duration))
-                    ScanMetric(title: "Error", value: scan.errorMessage ?? "-")
+                Grid(alignment: .leading, horizontalSpacing: 32, verticalSpacing: 14) {
+                    GridRow {
+                        ScanMetric(title: "Status", value: scan.status.rawValue.capitalized)
+                        ScanMetric(title: "Devices", value: "\(scan.discoveredCount)")
+                        ScanMetric(title: "Started", value: scan.startedAt.formatted(date: .abbreviated, time: .shortened))
+                    }
+
+                    GridRow {
+                        ScanMetric(title: "Finished", value: scan.finishedAt?.formatted(date: .abbreviated, time: .shortened) ?? "-")
+                        ScanMetric(title: "Duration", value: formattedDuration(scan.duration))
+                        ScanMetric(title: "Error", value: scan.errorMessage ?? "-")
+                    }
                 }
             }
+            .padding(22)
+            .frame(minHeight: 192, maxHeight: 192)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(.quaternary)
+            }
         }
-        .padding(22)
-        .frame(minHeight: 192, maxHeight: 192)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(.quaternary)
-        }
+        .buttonStyle(.plain)
     }
 
     private func formattedDuration(_ duration: TimeInterval?) -> String {
@@ -1017,37 +1033,41 @@ private struct LatestScanCard: View {
 
 private struct LatestScanSummaryCard: View {
     let scan: ScanRecord
+    let showDetails: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("Latest Scan", systemImage: "clock")
-                    .font(.headline)
+        Button(action: showDetails) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Label("Latest Scan", systemImage: "clock")
+                        .font(.headline)
 
-                Spacer()
+                    Spacer()
 
-                ScanStatusBadge(isScanning: scan.status == .running, latestScan: scan)
-            }
-
-            Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
-                GridRow {
-                    ScanMetric(title: "Devices", value: "\(scan.discoveredCount)")
-                    ScanMetric(title: "Duration", value: formattedDuration(scan.duration))
+                    ScanStatusBadge(isScanning: scan.status == .running, latestScan: scan)
                 }
 
-                GridRow {
-                    ScanMetric(title: "Started", value: scan.startedAt.formatted(date: .omitted, time: .shortened))
-                    ScanMetric(title: "Finished", value: scan.finishedAt?.formatted(date: .omitted, time: .shortened) ?? "-")
+                Grid(alignment: .leading, horizontalSpacing: 18, verticalSpacing: 10) {
+                    GridRow {
+                        ScanMetric(title: "Devices", value: "\(scan.discoveredCount)")
+                        ScanMetric(title: "Duration", value: formattedDuration(scan.duration))
+                    }
+
+                    GridRow {
+                        ScanMetric(title: "Started", value: scan.startedAt.formatted(date: .omitted, time: .shortened))
+                        ScanMetric(title: "Finished", value: scan.finishedAt?.formatted(date: .omitted, time: .shortened) ?? "-")
+                    }
                 }
             }
+            .padding(20)
+            .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150, alignment: .leading)
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(.quaternary)
+            }
         }
-        .padding(20)
-        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(.quaternary)
-        }
+        .buttonStyle(.plain)
     }
 
     private func formattedDuration(_ duration: TimeInterval?) -> String {
@@ -1058,47 +1078,122 @@ private struct LatestScanSummaryCard: View {
 
 private struct CompactLatestScanCard: View {
     let scan: ScanRecord
+    let showDetails: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 8) {
-                Image(systemName: "clock")
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 24)
+        Button(action: showDetails) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock")
+                        .font(.system(size: 17, weight: .semibold))
+                        .frame(width: 24)
 
-                Text("Latest Scan")
-                    .font(.headline.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .layoutPriority(0)
+                    Text("Latest Scan")
+                        .font(.headline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .layoutPriority(0)
 
-                Spacer(minLength: 4)
+                    Spacer(minLength: 4)
 
-                CompactScanStatusBadge(isScanning: scan.status == .running, latestScan: scan)
-                    .layoutPriority(1)
+                    CompactScanStatusBadge(isScanning: scan.status == .running, latestScan: scan)
+                        .layoutPriority(1)
+                }
+
+                Spacer(minLength: 2)
+
+                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                    GridRow {
+                        ScanMetric(title: "Devices", value: "\(scan.discoveredCount)")
+                        ScanMetric(title: "Duration", value: formattedDuration(scan.duration))
+                    }
+
+                    GridRow {
+                        ScanMetric(title: "Started", value: scan.startedAt.formatted(date: .omitted, time: .shortened))
+                        ScanMetric(title: "Finished", value: scan.finishedAt?.formatted(date: .omitted, time: .shortened) ?? "-")
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150, alignment: .leading)
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(.quaternary)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func formattedDuration(_ duration: TimeInterval?) -> String {
+        guard let duration else { return "-" }
+        return Duration.seconds(duration).formatted(.time(pattern: .minuteSecond))
+    }
+}
+
+private struct ScanDetailsSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let scan: ScanRecord
+
+    private let checks = [
+        "Device discovery and online status checks",
+        "Open port scanning for the configured TCP ports",
+        "Hostname discovery using local network name protocols",
+        "Metadata probing from device services when available",
+        "Offline confirmation before a device is marked unavailable",
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack {
+                Label("Latest Scan Details", systemImage: "clock")
+                    .font(.title2.weight(.semibold))
+
+                Spacer()
+
+                Button("Done") {
+                    dismiss()
+                }
+                .keyboardShortcut(.defaultAction)
             }
 
-            Spacer(minLength: 2)
-
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+            Grid(alignment: .leading, horizontalSpacing: 28, verticalSpacing: 14) {
                 GridRow {
+                    ScanMetric(title: "Status", value: scan.status.rawValue.capitalized)
                     ScanMetric(title: "Devices", value: "\(scan.discoveredCount)")
-                    ScanMetric(title: "Duration", value: formattedDuration(scan.duration))
                 }
 
                 GridRow {
-                    ScanMetric(title: "Started", value: scan.startedAt.formatted(date: .omitted, time: .shortened))
-                    ScanMetric(title: "Finished", value: scan.finishedAt?.formatted(date: .omitted, time: .shortened) ?? "-")
+                    ScanMetric(title: "Duration", value: formattedDuration(scan.duration))
+                    ScanMetric(title: "Started", value: scan.startedAt.formatted(date: .abbreviated, time: .shortened))
+                }
+
+                GridRow {
+                    ScanMetric(title: "Finished", value: scan.finishedAt?.formatted(date: .abbreviated, time: .shortened) ?? "-")
+                    ScanMetric(title: "Error", value: scan.errorMessage ?? "-")
                 }
             }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Deep scan checks")
+                    .font(.headline)
+
+                ForEach(checks, id: \.self) { check in
+                    Label(check, systemImage: "checkmark.shield")
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text("Longer scans are usually caused by devices that do not answer and force timeout-based checks.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 0)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: 150, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
-        .overlay {
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(.quaternary)
-        }
+        .padding(28)
+        .frame(minWidth: 520, minHeight: 440)
     }
 
     private func formattedDuration(_ duration: TimeInterval?) -> String {

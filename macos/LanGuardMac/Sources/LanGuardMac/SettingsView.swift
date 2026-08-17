@@ -17,6 +17,8 @@ struct SettingsView: View {
     @State private var launchAtLoginEnabled = LaunchAtLoginService.isEnabled
     @State private var validationMessage: String?
     @State private var validationMessageIsError = false
+    @State private var inventoryTransferMessage: String?
+    @State private var inventoryTransferIsError = false
     @State private var isSendingTestNotification = false
 
     var body: some View {
@@ -139,6 +141,22 @@ struct SettingsView: View {
                         } label: {
                             Label("Import Devices", systemImage: "square.and.arrow.up")
                         }
+                    }
+
+                    if let inventoryTransferMessage {
+                        Label(
+                            inventoryTransferMessage,
+                            systemImage: inventoryTransferIsError ? "xmark.circle.fill" : "checkmark.circle.fill"
+                        )
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(inventoryTransferIsError ? .red : .green)
+                        .padding(.vertical, 8)
+                        .padding(.horizontal, 10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            (inventoryTransferIsError ? Color.red : Color.green).opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 8)
+                        )
                     }
                 }
 
@@ -298,9 +316,13 @@ struct SettingsView: View {
             try appModel.exportDeviceInventory(to: url)
             validationMessage = "Device inventory exported."
             validationMessageIsError = false
+            inventoryTransferMessage = "Device inventory exported successfully."
+            inventoryTransferIsError = false
         } catch {
             validationMessage = "Could not export device inventory: \(error.localizedDescription)"
             validationMessageIsError = true
+            inventoryTransferMessage = "Export failed: \(error.localizedDescription)"
+            inventoryTransferIsError = true
         }
     }
 
@@ -319,9 +341,13 @@ struct SettingsView: View {
             let result = try appModel.importDeviceInventory(from: url)
             validationMessage = "Imported \(result.created) new, updated \(result.updated), skipped \(result.skipped)."
             validationMessageIsError = false
+            inventoryTransferMessage = "Import completed: \(result.created) new, \(result.updated) updated, \(result.skipped) skipped."
+            inventoryTransferIsError = false
         } catch {
             validationMessage = "Could not import device inventory: \(error.localizedDescription)"
             validationMessageIsError = true
+            inventoryTransferMessage = "Import failed: \(error.localizedDescription)"
+            inventoryTransferIsError = true
         }
     }
 

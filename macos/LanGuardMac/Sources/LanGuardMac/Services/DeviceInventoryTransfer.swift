@@ -92,7 +92,8 @@ struct DeviceInventoryItem: Codable {
         let deviceStatus = DeviceStatus(rawValue: status ?? "") ?? existing?.status ?? .unknown
         let deviceRisk = DeviceRisk(rawValue: risk ?? "") ?? existing?.risk ?? DeviceRiskScorer.risk(
             for: normalizedPorts,
-            isKnown: known
+            isKnown: known,
+            role: normalizedRole ?? .device
         )
         let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let fallbackName = existing?.name ?? DeviceNameGuesser.displayName(hostname: hostname, macAddress: normalizedMAC)

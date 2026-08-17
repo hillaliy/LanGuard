@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-1.1.4-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.1.5-blue">
   <a href="https://github.com/users/hillaliy/packages/container/package/languard-backend">
     <img alt="Backend image" src="https://img.shields.io/badge/backend-GHCR-2ea44f">
   </a>
@@ -16,18 +16,25 @@
 
 LanGuard is a self-hosted LAN visibility tool for home networks. It finds devices, tracks online/offline state, scans common ports, keeps history, and can send Discord or Telegram alerts for new devices.
 
+## Preview
+
+![LanGuard demo tour](docs/demo-tour.gif)
+
+The preview uses fictional demo data only. Use [`docs/demo-inventory.json`](docs/demo-inventory.json) when preparing public screenshots or recordings.
+
 ## Features
 
 - Device inventory with IP, MAC, vendor, hostname, icon, known/new state, and last seen time
 - Open port tracking and port change events
 - Scan history, event history, and notification history
-- Scheduled scans
+- Scheduled scans that wait for the configured interval after each scan completes
+- Device inventory export/import for moving names, icons, rooms, roles, vendors, IPs, MAC addresses, and open ports between installs
 - Swagger, ReDoc, and schema endpoints
 - First-user setup: the first account created in the app becomes admin
 
 ## Portainer
 
-Create a new Portainer stack and paste:
+Use the included [`docker-compose.yaml`](docker-compose.yaml), or create a new Portainer stack and paste:
 
 ```yaml
 services:
@@ -101,9 +108,23 @@ Open `http://<docker-host-ip>:8080` and create the first user. That user becomes
 
 After sign in, open Settings to change the scan range, scan interval, timezone, Discord webhook, or Telegram settings.
 
+The scanner waits for the configured scan interval after a scan completes before starting the next scheduled scan. For example, with a 5 minute interval, a scan that finishes at 20:14 will schedule the next scan for about 20:19.
+
+If you override `DISCORD_ICON_URL`, use a versioned URL when replacing the icon so Discord mobile clients do not reuse an old cached image, for example:
+
+```env
+DISCORD_ICON_URL=https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png?v=1.1.5
+```
+
 Portainer will create the stack network automatically.
 
 Backend and scanner use host networking so ARP discovery can see LAN devices. Without host networking, Docker bridge networking may only show the Docker host/gateway.
+
+## Demo Screenshots
+
+Use [`docs/demo-inventory.json`](docs/demo-inventory.json) when preparing public screenshots. It contains only fictional device names, private demo IPs, and locally administered demo MAC addresses.
+
+Import the demo inventory from Settings before taking screenshots so README images never expose real device names, IP addresses, MAC addresses, rooms, or hostnames.
 
 ## Phone MAC Randomization
 
