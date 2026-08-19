@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.6 - 2026-08-19
+
+- Improved Docker HAA/HomeKit hostname discovery with repeated cached mDNS service probing.
+- Prevented later hostname metadata from overwriting an already resolved hostname in the macOS scanner.
+- Added regression coverage for hostname precedence in Docker and macOS.
+
 ## 1.1.5 - 2026-08-17
 
 - Added public README demo media with fictional device data for screenshots and previews.

@@ -38,6 +38,8 @@ from .scan import (
     ManufVendorDB,
     mark_missing_devices_offline,
     mdns_service_hostname,
+    mdns_service_hostname_map,
+    MDNS_SERVICE_HOSTNAME_CACHE,
     mdns_service_hostname_from_response,
     mdns_service_hostnames_from_response,
     manuf_vendor,
@@ -83,6 +85,10 @@ class ProductionSettingsTests(SimpleTestCase):
 
 
 class HostnameResolutionTests(SimpleTestCase):
+    def setUp(self):
+        MDNS_SERVICE_HOSTNAME_CACHE["expires_at"] = 0.0
+        MDNS_SERVICE_HOSTNAME_CACHE["hostnames"] = {}
+
     def test_clean_hostname_normalizes_dns_name(self):
         self.assertEqual(clean_hostname("living-room-device.local."), "living room device")
 
@@ -115,6 +121,27 @@ class HostnameResolutionTests(SimpleTestCase):
     @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_mdns_service_fallback(self, *_):
         self.assertEqual(get_hostname("192.168.1.42"), "HAA 123456")
+
+    @patch("core.scan.netbios_hostname", return_value="")
+    @patch("core.scan.ssdp_hostname", return_value="")
+    @patch("core.scan.llmnr_reverse_hostname", return_value="")
+    @patch("core.scan.mdns_service_hostname", return_value="living room speaker")
+    @patch("core.scan.mdns_reverse_hostname", return_value="")
+    @patch("core.scan.socket.gethostbyaddr", return_value=("iphone.local", [], ["192.168.1.30"]))
+    def test_get_hostname_keeps_direct_hostname_before_metadata_hostname(
+        self,
+        _reverse_dns,
+        _mdns_reverse,
+        mdns_service,
+        llmnr,
+        ssdp,
+        netbios,
+    ):
+        self.assertEqual(get_hostname("192.168.1.30"), "iphone")
+        mdns_service.assert_not_called()
+        llmnr.assert_not_called()
+        ssdp.assert_not_called()
+        netbios.assert_not_called()
 
     @patch("core.scan.netbios_hostname", return_value="")
     @patch("core.scan.ssdp_hostname", return_value="")
@@ -222,9 +249,26 @@ class HostnameResolutionTests(SimpleTestCase):
             + len(dns_encode_name("HAA-123456._hap._tcp.local")).to_bytes(2, "big")
             + dns_encode_name("HAA-123456._hap._tcp.local")
         )
-        udp_responses.side_effect = [[(packet, "192.168.1.42")]] + [[]] * 6
+        udp_responses.side_effect = [[(packet, "192.168.1.42")]] + [[]] * 20
 
         self.assertEqual(mdns_service_hostname("192.168.1.42"), "HAA 123456")
+
+    @patch("core.scan.time.sleep")
+    @patch("core.scan.udp_responses")
+    def test_mdns_service_hostname_retries_and_caches_service_map(self, udp_responses, sleep):
+        packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("_hap._tcp.local")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("HAA-ABCDEF._hap._tcp.local")).to_bytes(2, "big")
+            + dns_encode_name("HAA-ABCDEF._hap._tcp.local")
+        )
+        udp_responses.side_effect = [[]] * 7 + [[(packet, "192.168.1.55")]] + [[]] * 13
+
+        self.assertEqual(mdns_service_hostname_map(), {"192.168.1.55": "HAA ABCDEF"})
+        self.assertEqual(mdns_service_hostname("192.168.1.55"), "HAA ABCDEF")
+        self.assertEqual(udp_responses.call_count, 21)
+        self.assertEqual(sleep.call_count, 2)
 
     @patch("core.scan.requests.get")
     def test_ssdp_hostname_from_response_fetches_device_description(self, get):

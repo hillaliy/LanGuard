@@ -59,6 +59,43 @@ private struct StubNetworkMetadataDiscovery: NetworkMetadataDiscovering {
     }
 }
 
+private struct HostnameMetadataDiscovery: NetworkMetadataDiscovering {
+    let ipAddress: String
+    let hostname: String
+
+    func discoverMetadata(for ipAddresses: [String]) async -> [String: DeviceMetadata] {
+        [
+            ipAddress: DeviceMetadata(hostname: hostname)
+        ]
+    }
+}
+
+private struct AppleARPCommandRunner: CommandRunning {
+    func run(_ launchPath: String, arguments: [String]) async throws -> String {
+        switch launchPath {
+        case "/usr/sbin/arp":
+            "iphone.local (192.168.0.30) at 90:dd:5d:b7:bd:01 on en0 ifscope [ethernet]"
+        case "/sbin/route":
+            "gateway: 192.168.0.1"
+        default:
+            ""
+        }
+    }
+}
+
+private struct PrivateAddressARPCommandRunner: CommandRunning {
+    func run(_ launchPath: String, arguments: [String]) async throws -> String {
+        switch launchPath {
+        case "/usr/sbin/arp":
+            "? (192.168.0.31) at c6:f5:3a:d8:da:f0 on en0 ifscope [ethernet]"
+        case "/sbin/route":
+            "gateway: 192.168.0.1"
+        default:
+            ""
+        }
+    }
+}
+
 private struct EmptyNetworkMetadataDiscovery: NetworkMetadataDiscovering {
     func discoverMetadata(for ipAddresses: [String]) async -> [String: DeviceMetadata] {
         [:]
@@ -206,6 +243,52 @@ func localScannerUsesNetworkMetadataDiscoveryBeforePerDeviceProbe() async throws
     ))
 
     let camera = try #require(devices.first { $0.ipAddress == "192.168.0.20" })
-    #expect(camera.hostname == "Front Door Camera")
+    #expect(camera.hostname == "camera")
     #expect(camera.vendor == "Hangzhou Hikvision Digital Technology Co., Ltd.")
+}
+
+@Test
+func localScannerDoesNotReplaceExistingHostnameWithNetworkMetadataHostname() async throws {
+    let scanner = LocalNetworkScanner(
+        commandRunner: AppleARPCommandRunner(),
+        portScanner: StubPortScanner(),
+        metadataDiscovery: HostnameMetadataDiscovery(
+            ipAddress: "192.168.0.30",
+            hostname: "living-room-speaker"
+        ),
+        metadataProbe: EmptyMetadataProbe()
+    )
+
+    let devices = try await scanner.scan(settings: AppSettings(
+        defaultScanRange: "192.168.0.0/24",
+        scanIntervalMinutes: 5,
+        tcpPorts: [80],
+        scheduledScanningEnabled: false
+    ))
+
+    let iphone = try #require(devices.first { $0.ipAddress == "192.168.0.30" })
+    #expect(iphone.hostname == "iphone")
+}
+
+@Test
+func localScannerUsesNetworkMetadataHostnameWhenCurrentHostnameIsMissing() async throws {
+    let scanner = LocalNetworkScanner(
+        commandRunner: PrivateAddressARPCommandRunner(),
+        portScanner: StubPortScanner(),
+        metadataDiscovery: HostnameMetadataDiscovery(
+            ipAddress: "192.168.0.31",
+            hostname: "HAA-123456"
+        ),
+        metadataProbe: EmptyMetadataProbe()
+    )
+
+    let devices = try await scanner.scan(settings: AppSettings(
+        defaultScanRange: "192.168.0.0/24",
+        scanIntervalMinutes: 5,
+        tcpPorts: [80],
+        scheduledScanningEnabled: false
+    ))
+
+    let device = try #require(devices.first { $0.ipAddress == "192.168.0.31" })
+    #expect(device.hostname == "HAA 123456")
 }
