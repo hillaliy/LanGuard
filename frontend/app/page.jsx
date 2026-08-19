@@ -2968,7 +2968,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           </Box>
                           <Box>
                             <Text size="xs" c="dimmed">IP</Text>
-                            <Text fw={700} className="mobile-mono-value">{device.ip}</Text>
+                            <Text fw={700} className="mobile-mono-value device-list-ip-value">{device.ip}</Text>
                           </Box>
                           <Box>
                             <Text size="xs" c="dimmed">Room</Text>
