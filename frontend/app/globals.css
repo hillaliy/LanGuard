@@ -553,6 +553,13 @@ textarea {
   white-space: nowrap;
 }
 
+.device-list-ip-value {
+  display: block;
+  min-width: 108px;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
 .device-list-last-seen {
   min-width: 170px;
 }
