@@ -87,7 +87,10 @@ struct LocalNetworkScanner: NetworkScanning {
                     var scannedDevice = device
                     let networkMetadata = discoveredMetadata[device.ipAddress]
                     scannedDevice.vendor = networkMetadata?.vendor ?? scannedDevice.vendor
-                    scannedDevice.hostname = networkMetadata?.hostname ?? scannedDevice.hostname
+                    scannedDevice.hostname = preferredHostname(
+                        current: scannedDevice.hostname,
+                        candidate: networkMetadata?.hostname
+                    )
                     scannedDevice.openPorts = await portScanner.scanOpenPorts(
                         host: device.ipAddress,
                         ports: settings.tcpPorts
@@ -97,7 +100,10 @@ struct LocalNetworkScanner: NetworkScanning {
                         openPorts: scannedDevice.openPorts
                     )
                     scannedDevice.vendor = metadata.vendor ?? scannedDevice.vendor
-                    scannedDevice.hostname = metadata.hostname ?? scannedDevice.hostname
+                    scannedDevice.hostname = preferredHostname(
+                        current: scannedDevice.hostname,
+                        candidate: metadata.hostname
+                    )
                     scannedDevice.risk = DeviceRiskScorer.risk(
                         for: scannedDevice.openPorts,
                         isKnown: scannedDevice.isKnown,
@@ -116,6 +122,17 @@ struct LocalNetworkScanner: NetworkScanning {
                 IPAddressSortKey(left.ipAddress) < IPAddressSortKey(right.ipAddress)
             }
         }
+    }
+
+    private func preferredHostname(
+        current: String?,
+        candidate: String?
+    ) -> String? {
+        if let current = HostnameResolver.clean(current) {
+            return current
+        }
+
+        return HostnameResolver.clean(candidate)
     }
 
     private func sweep(_ hosts: [String]) async {

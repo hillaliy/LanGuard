@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-1.1.5-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.1.6-blue">
   <a href="https://github.com/users/hillaliy/packages/container/package/languard-backend">
     <img alt="Backend image" src="https://img.shields.io/badge/backend-GHCR-2ea44f">
   </a>
@@ -118,7 +118,7 @@ The scanner waits for the configured scan interval after a scan completes before
 If you override `DISCORD_ICON_URL`, use a versioned URL when replacing the icon so Discord mobile clients do not reuse an old cached image, for example:
 
 ```env
-DISCORD_ICON_URL=https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png?v=1.1.5
+DISCORD_ICON_URL=https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png?v=1.1.6
 ```
 
 Portainer will create the stack network automatically.

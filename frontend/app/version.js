@@ -4,6 +4,15 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.1.6',
+    date: '2026-08-19',
+    items: [
+      'Improved Docker HAA/HomeKit hostname discovery with repeated cached mDNS service probing.',
+      'Prevented later hostname metadata from overwriting an already resolved hostname in the macOS scanner.',
+      'Added regression coverage for hostname precedence in Docker and macOS.',
+    ],
+  },
+  {
     version: '1.1.5',
     date: '2026-08-17',
     items: [

@@ -23,6 +23,11 @@ DEFAULT_DEVICE_NAME = "Device"
 DEFAULT_DEVICE_ICONS = {"", "plus", "unknown", "device", "desktop"}
 SSDP_CACHE_TTL_SECONDS = 10
 SSDP_HOSTNAME_CACHE = {"expires_at": 0.0, "hostnames": {}}
+MDNS_SERVICE_CACHE_TTL_SECONDS = 10
+MDNS_SERVICE_HOSTNAME_CACHE = {"expires_at": 0.0, "hostnames": {}}
+MDNS_SERVICE_TIMEOUT_SECONDS = 1.8
+MDNS_SERVICE_RETRY_COUNT = 3
+MDNS_SERVICE_RETRY_DELAY_SECONDS = 0.25
 MDNS_SERVICE_TYPES = (
     "_hap._tcp.local",
     "_services._dns-sd._udp.local",
@@ -423,14 +428,29 @@ def mdns_service_hostname(ip):
 
 
 def mdns_service_hostname_map():
+    now = time.monotonic()
+    if MDNS_SERVICE_HOSTNAME_CACHE["expires_at"] > now:
+        return dict(MDNS_SERVICE_HOSTNAME_CACHE["hostnames"])
+
     hostnames_by_ip = {}
     responses = []
-    for service_type in MDNS_SERVICE_TYPES:
-        packet = dns_query_packet(service_type, query_type=12, query_id=0)
-        try:
-            responses.extend(udp_responses(packet, "224.0.0.251", 5353, 0.7, max_responses=24))
-        except OSError as exc:
-            LOGGER.debug("mDNS service lookup failed for %s: %s", service_type, exc)
+    for attempt in range(MDNS_SERVICE_RETRY_COUNT):
+        for service_type in MDNS_SERVICE_TYPES:
+            packet = dns_query_packet(service_type, query_type=12, query_id=0)
+            try:
+                responses.extend(
+                    udp_responses(
+                        packet,
+                        "224.0.0.251",
+                        5353,
+                        MDNS_SERVICE_TIMEOUT_SECONDS,
+                        max_responses=48,
+                    )
+                )
+            except OSError as exc:
+                LOGGER.debug("mDNS service lookup failed for %s: %s", service_type, exc)
+        if attempt + 1 < MDNS_SERVICE_RETRY_COUNT:
+            time.sleep(MDNS_SERVICE_RETRY_DELAY_SECONDS)
 
     for response, source_ip in responses:
         for ip_address, hostname in mdns_service_hostnames_from_response(response).items():
@@ -439,6 +459,8 @@ def mdns_service_hostname_map():
             hostname = mdns_service_hostname_from_response(response)
             if hostname:
                 hostnames_by_ip[source_ip] = hostname
+    MDNS_SERVICE_HOSTNAME_CACHE["expires_at"] = now + MDNS_SERVICE_CACHE_TTL_SECONDS
+    MDNS_SERVICE_HOSTNAME_CACHE["hostnames"] = dict(hostnames_by_ip)
     return hostnames_by_ip
 
 
