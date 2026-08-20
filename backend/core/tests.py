@@ -42,6 +42,7 @@ from .scan import (
     MDNS_SERVICE_HOSTNAME_CACHE,
     mdns_service_hostname_from_response,
     mdns_service_hostnames_from_response,
+    mdns_multicast_responses,
     manuf_vendor,
     normalize_scan_ports,
     preferred_vendor,
@@ -240,8 +241,8 @@ class HostnameResolutionTests(SimpleTestCase):
 
         self.assertEqual(mdns_service_hostname_from_response(packet), "HAA 123456")
 
-    @patch("core.scan.udp_responses")
-    def test_mdns_service_hostname_uses_source_ip_for_ptr_only_response(self, udp_responses):
+    @patch("core.scan.mdns_multicast_responses")
+    def test_mdns_service_hostname_uses_source_ip_for_ptr_only_response(self, mdns_responses):
         packet = (
             b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
             + dns_encode_name("_hap._tcp.local")
@@ -249,13 +250,13 @@ class HostnameResolutionTests(SimpleTestCase):
             + len(dns_encode_name("HAA-123456._hap._tcp.local")).to_bytes(2, "big")
             + dns_encode_name("HAA-123456._hap._tcp.local")
         )
-        udp_responses.side_effect = [[(packet, "192.168.1.42")]] + [[]] * 20
+        mdns_responses.side_effect = [[(packet, "192.168.1.42")], [], []]
 
         self.assertEqual(mdns_service_hostname("192.168.1.42"), "HAA 123456")
 
     @patch("core.scan.time.sleep")
-    @patch("core.scan.udp_responses")
-    def test_mdns_service_hostname_retries_and_caches_service_map(self, udp_responses, sleep):
+    @patch("core.scan.mdns_multicast_responses")
+    def test_mdns_service_hostname_retries_and_caches_service_map(self, mdns_responses, sleep):
         packet = (
             b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
             + dns_encode_name("_hap._tcp.local")
@@ -263,12 +264,33 @@ class HostnameResolutionTests(SimpleTestCase):
             + len(dns_encode_name("HAA-ABCDEF._hap._tcp.local")).to_bytes(2, "big")
             + dns_encode_name("HAA-ABCDEF._hap._tcp.local")
         )
-        udp_responses.side_effect = [[]] * 7 + [[(packet, "192.168.1.55")]] + [[]] * 13
+        mdns_responses.side_effect = [[], [(packet, "192.168.1.55")], []]
 
         self.assertEqual(mdns_service_hostname_map(), {"192.168.1.55": "HAA ABCDEF"})
         self.assertEqual(mdns_service_hostname("192.168.1.55"), "HAA ABCDEF")
-        self.assertEqual(udp_responses.call_count, 21)
+        self.assertEqual(mdns_responses.call_count, 3)
         self.assertEqual(sleep.call_count, 2)
+
+    @patch("core.scan.time.sleep")
+    @patch("core.scan.udp_responses")
+    @patch("core.scan.mdns_multicast_responses", side_effect=OSError("bind failed"))
+    def test_mdns_service_hostname_falls_back_when_multicast_bind_fails(
+        self,
+        _mdns_responses,
+        udp_responses,
+        _sleep,
+    ):
+        packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("_hap._tcp.local")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("HAA-FALLBACK._hap._tcp.local")).to_bytes(2, "big")
+            + dns_encode_name("HAA-FALLBACK._hap._tcp.local")
+        )
+        udp_responses.side_effect = [[(packet, "192.168.1.56")]] + [[]] * 20
+
+        self.assertEqual(mdns_service_hostname("192.168.1.56"), "HAA FALLBACK")
+        self.assertEqual(udp_responses.call_count, 21)
 
     @patch("core.scan.requests.get")
     def test_ssdp_hostname_from_response_fetches_device_description(self, get):

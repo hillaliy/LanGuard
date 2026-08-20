@@ -404,6 +404,35 @@ def udp_responses(packet, address, port, timeout, max_responses=12):
     return responses
 
 
+def mdns_multicast_responses(packets, timeout, max_responses=48):
+    responses = []
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if hasattr(socket, "SO_REUSEPORT"):
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+
+        sock.bind(("", 5353))
+        membership = socket.inet_aton("224.0.0.251") + socket.inet_aton("0.0.0.0")
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, membership)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, struct.pack("B", 255))
+
+        for packet in packets:
+            sock.sendto(packet, ("224.0.0.251", 5353))
+
+        deadline = time.monotonic() + timeout
+        while len(responses) < max_responses:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            sock.settimeout(max(0.05, remaining))
+            try:
+                response, source = sock.recvfrom(4096)
+            except socket.timeout:
+                break
+            responses.append((response, source[0]))
+    return responses
+
+
 def mdns_reverse_hostname(ip):
     name = reverse_dns_name(ip)
     if not name:
@@ -435,20 +464,33 @@ def mdns_service_hostname_map():
     hostnames_by_ip = {}
     responses = []
     for attempt in range(MDNS_SERVICE_RETRY_COUNT):
-        for service_type in MDNS_SERVICE_TYPES:
-            packet = dns_query_packet(service_type, query_type=12, query_id=0)
-            try:
-                responses.extend(
-                    udp_responses(
-                        packet,
-                        "224.0.0.251",
-                        5353,
-                        MDNS_SERVICE_TIMEOUT_SECONDS,
-                        max_responses=48,
-                    )
+        packets = [
+            dns_query_packet(service_type, query_type=12, query_id=0)
+            for service_type in MDNS_SERVICE_TYPES
+        ]
+        try:
+            responses.extend(
+                mdns_multicast_responses(
+                    packets,
+                    MDNS_SERVICE_TIMEOUT_SECONDS,
+                    max_responses=48,
                 )
-            except OSError as exc:
-                LOGGER.debug("mDNS service lookup failed for %s: %s", service_type, exc)
+            )
+        except OSError as exc:
+            LOGGER.debug("mDNS multicast service lookup failed: %s", exc)
+            for packet in packets:
+                try:
+                    responses.extend(
+                        udp_responses(
+                            packet,
+                            "224.0.0.251",
+                            5353,
+                            MDNS_SERVICE_TIMEOUT_SECONDS,
+                            max_responses=48,
+                        )
+                    )
+                except OSError as fallback_exc:
+                    LOGGER.debug("mDNS unicast service lookup failed: %s", fallback_exc)
         if attempt + 1 < MDNS_SERVICE_RETRY_COUNT:
             time.sleep(MDNS_SERVICE_RETRY_DELAY_SECONDS)
 

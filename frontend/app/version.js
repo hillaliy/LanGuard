@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.1.7',
+    date: '2026-08-20',
+    items: [
+      'Improved Docker mDNS hostname discovery by listening on the multicast group used by HomeKit/HAA devices.',
+      'Added fallback coverage for Docker mDNS environments that cannot bind to multicast port 5353.',
+      'Added a GitHub release downloads badge to the README.',
+      'Replaced the README GIF preview with a clearer static dashboard image using fictional demo data.',
+    ],
+  },
+  {
     version: '1.1.6',
     date: '2026-08-19',
     items: [
