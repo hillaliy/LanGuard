@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.7 - 2026-08-20
+
+- Improved Docker mDNS hostname discovery by listening on the multicast group used by HomeKit/HAA devices.
+- Added fallback coverage for Docker mDNS environments that cannot bind to multicast port 5353.
+- Added a GitHub release downloads badge to the README.
+- Replaced the README GIF preview with a clearer static dashboard image using fictional demo data.
+
 ## 1.1.6 - 2026-08-19
 
 - Improved Docker HAA/HomeKit hostname discovery with repeated cached mDNS service probing.
