@@ -6,8 +6,8 @@
 
 <p align="center">
   <img alt="Version" src="https://img.shields.io/badge/version-1.1.7-blue">
-  <a href="https://github.com/hillaliy/LanGuard/releases">
-    <img alt="Downloads" src="https://img.shields.io/github/downloads/hillaliy/LanGuard/total?label=downloads">
+  <a href="https://github.com/hillaliy/LanGuard/pkgs/container/languard-backend">
+    <img alt="Docker pulls" src="https://ghcr-badge.elias.eu.org/shield/hillaliy/LanGuard/languard-backend">
   </a>
   <a href="https://github.com/users/hillaliy/packages/container/package/languard-backend">
     <img alt="Backend image" src="https://img.shields.io/badge/backend-GHCR-2ea44f">
