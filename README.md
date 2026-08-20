@@ -5,15 +5,15 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-1.1.7-blue">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.1.7-2496ed?style=for-the-badge">
   <a href="https://github.com/hillaliy/LanGuard/pkgs/container/languard-backend">
     <img alt="Docker pulls" src="https://ghcr-badge.elias.eu.org/shield/hillaliy/LanGuard/languard-backend">
   </a>
   <a href="https://github.com/users/hillaliy/packages/container/package/languard-backend">
-    <img alt="Backend image" src="https://img.shields.io/badge/backend-GHCR-2ea44f">
+    <img alt="Backend image" src="https://img.shields.io/badge/backend-GHCR-2ea44f?style=for-the-badge&logo=github">
   </a>
   <a href="https://github.com/users/hillaliy/packages/container/package/languard-frontend">
-    <img alt="Frontend image" src="https://img.shields.io/badge/frontend-GHCR-2ea44f">
+    <img alt="Frontend image" src="https://img.shields.io/badge/frontend-GHCR-2ea44f?style=for-the-badge&logo=github">
   </a>
 </p>
 
