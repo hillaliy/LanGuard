@@ -25,11 +25,14 @@ LanGuard is a self-hosted LAN visibility tool for home networks. It finds device
   <img src="docs/demo-preview.png" alt="LanGuard dashboard preview with fictional device data" width="920">
 </p>
 
-The preview uses fictional demo data only. Use [`docs/demo-inventory.json`](docs/demo-inventory.json) when preparing public screenshots.
+<p align="center">
+  <img src="docs/home-map-preview.png" alt="LanGuard home map preview with fictional rooms and devices" width="920">
+</p>
 
 ## Features
 
 - Device inventory with IP, MAC, vendor, hostname, icon, known/new state, and last seen time
+- Home Map view for arranging rooms and device icons into a simple floor-plan style layout
 - Open port tracking and port change events
 - Scan history, event history, and notification history
 - Scheduled scans that wait for the configured interval after each scan completes
