@@ -17,6 +17,7 @@ from .views import (
     export_db,
     import_db,
     export_devices,
+    home_map_layout,
     import_devices,
     users,
 )
@@ -30,6 +31,7 @@ urlpatterns = [
     path("logout/", UserLogoutView.as_view(), name="logout"),
     path("users/", users, name="users"),
     path("settings/", app_settings, name="app-settings"),
+    path("home-map-layout/", home_map_layout, name="home-map-layout"),
     path("device/", device, name="device"),
     path("scan/", scan_now, name="scan_now"),
     path("scan/status/", scan_status, name="scan_status"),

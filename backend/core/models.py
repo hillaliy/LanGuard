@@ -197,6 +197,7 @@ class AppSettings(models.Model):
     notification_quiet_hours_enabled = models.BooleanField(default=False)
     notification_quiet_hours_start = models.CharField(max_length=5, default="22:00")
     notification_quiet_hours_end = models.CharField(max_length=5, default="07:00")
+    home_map_layout = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
@@ -229,6 +230,7 @@ class AppSettings(models.Model):
             "notification_quiet_hours_enabled": False,
             "notification_quiet_hours_start": "22:00",
             "notification_quiet_hours_end": "07:00",
+            "home_map_layout": {},
         }
         config, _ = cls.objects.get_or_create(singleton_key=1, defaults=defaults)
         return config

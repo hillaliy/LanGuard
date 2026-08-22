@@ -1546,6 +1546,42 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_home_map_layout_endpoint_requires_authentication(self):
+        client = APIClient()
+
+        response = client.get("/api/v1/home-map-layout/")
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_home_map_layout_endpoint_saves_layout_for_authenticated_user(self):
+        layout = {
+            "order": ["Floor", "Bedroom"],
+            "parents": {"Bedroom": "Floor"},
+        }
+
+        response = self.client.put(
+            "/api/v1/home-map-layout/",
+            {"layout": layout},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["layout"], layout)
+        self.assertEqual(AppSettings.load().home_map_layout, layout)
+
+        get_response = self.client.get("/api/v1/home-map-layout/")
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(get_response.data["data"]["layout"], layout)
+
+    def test_home_map_layout_endpoint_rejects_invalid_layout(self):
+        response = self.client.put(
+            "/api/v1/home-map-layout/",
+            {"layout": {"order": "Floor", "parents": {}}},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     def test_settings_endpoint_updates_scan_and_notification_settings(self):
         response = self.client.put(
             "/api/v1/settings/",
@@ -1566,6 +1602,10 @@ class ScanApiTests(TestCase):
                 "discord_webhook": "https://discord.example/webhook",
                 "telegram_token": "token",
                 "telegram_user_id": "123",
+                "home_map_layout": {
+                    "order": ["Floor", "Bedroom"],
+                    "parents": {"Bedroom": "Floor"},
+                },
             },
             format="json",
         )
@@ -1585,6 +1625,10 @@ class ScanApiTests(TestCase):
         self.assertTrue(config.notification_quiet_hours_enabled)
         self.assertEqual(config.notification_quiet_hours_start, "23:00")
         self.assertEqual(config.notification_quiet_hours_end, "06:30")
+        self.assertEqual(
+            config.home_map_layout,
+            {"order": ["Floor", "Bedroom"], "parents": {"Bedroom": "Floor"}},
+        )
         self.assertEqual(config.discord_webhook, "https://discord.example/webhook")
         self.assertEqual(config.telegram_token, "token")
         self.assertEqual(config.telegram_user_id, "123")
@@ -1604,6 +1648,10 @@ class ScanApiTests(TestCase):
         self.assertTrue(response.data["data"]["notification_quiet_hours_enabled"])
         self.assertEqual(response.data["data"]["notification_quiet_hours_start"], "23:00")
         self.assertEqual(response.data["data"]["notification_quiet_hours_end"], "06:30")
+        self.assertEqual(
+            response.data["data"]["home_map_layout"],
+            {"order": ["Floor", "Bedroom"], "parents": {"Bedroom": "Floor"}},
+        )
 
     def test_settings_endpoint_rejects_short_version_check_interval(self):
         response = self.client.put(
