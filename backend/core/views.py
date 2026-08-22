@@ -30,6 +30,7 @@ from .datetime_utils import utc_isoformat
 from .serializers import (
     AppSettingsSerializer,
     DeviceSerializer,
+    HomeMapLayoutSerializer,
     NetworkEventSerializer,
     NotificationDeliverySerializer,
     ScanRunSerializer,
@@ -599,6 +600,30 @@ def app_settings(request):
     serializer.is_valid(raise_exception=True)
     serializer.save()
     return Response({"data": AppSettingsSerializer(config).data})
+
+
+@extend_schema(
+    methods=["GET"],
+    responses=HomeMapLayoutSerializer,
+)
+@extend_schema(
+    methods=["PUT"],
+    request=HomeMapLayoutSerializer,
+    responses=HomeMapLayoutSerializer,
+)
+@api_view(["GET", "PUT"])
+@permission_classes([permissions.IsAuthenticated])
+def home_map_layout(request):
+    config = AppSettings.load()
+
+    if request.method == "GET":
+        return Response({"data": {"layout": config.home_map_layout or {}}})
+
+    serializer = HomeMapLayoutSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    config.home_map_layout = serializer.validated_data["layout"]
+    config.save(update_fields=["home_map_layout", "updated_at"])
+    return Response({"data": {"layout": config.home_map_layout or {}}})
 
 
 @extend_schema(

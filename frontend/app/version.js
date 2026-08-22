@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.2.0',
+    date: '2026-08-22',
+    items: [
+      'Added a dedicated Docker Home Map view with room nesting, drag-and-drop layout editing, and device icons.',
+      'Persisted Home Map layout preferences in the backend database.',
+      'Added explicit Home Map layout saving with success and error notifications.',
+      'Improved the Docker room visualization with cleaner spacing, offline icon styling, and reset confirmation.',
+    ],
+  },
+  {
     version: '1.1.7',
     date: '2026-08-20',
     items: [
