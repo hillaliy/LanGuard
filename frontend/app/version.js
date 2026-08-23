@@ -9,6 +9,8 @@ export const CHANGELOG_ENTRIES = [
     items: [
       'Reduced SQLite database lock errors in Docker by enabling a longer busy timeout and WAL mode.',
       'Prevented scheduled activity cleanup from running at the same time as the startup scan.',
+      'Improved Docker dashboard and page navigation speed by loading activity history only when needed.',
+      'Added database indexes for scan history, events, and notification history.',
     ],
   },
   {

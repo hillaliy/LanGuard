@@ -3197,7 +3197,7 @@ function ActivityTablePanel({ children }) {
   );
 }
 
-function EventsPage({ events, eventType, setEventType, timeZone }) {
+function EventsPage({ events, eventType, setEventType, timeZone, pagination }) {
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
@@ -3211,7 +3211,7 @@ function EventsPage({ events, eventType, setEventType, timeZone }) {
           </Box>
         </Group>
         <Group gap="sm">
-          <Badge variant="light">{events.length} records</Badge>
+          <Badge variant="light">{activityRecordLabel(pagination, events.length)}</Badge>
           <Select
             w={220}
             placeholder="Event type"
@@ -3257,7 +3257,7 @@ function EventsPage({ events, eventType, setEventType, timeZone }) {
   );
 }
 
-function ScanHistoryPage({ scanRuns, timeZone }) {
+function ScanHistoryPage({ scanRuns, timeZone, pagination }) {
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
@@ -3270,7 +3270,7 @@ function ScanHistoryPage({ scanRuns, timeZone }) {
             <Text c="dimmed">Recent scan runs and detected changes</Text>
           </Box>
         </Group>
-        <Badge variant="light">{scanRuns.length} records</Badge>
+        <Badge variant="light">{activityRecordLabel(pagination, scanRuns.length)}</Badge>
       </Group>
 
       <ActivityTablePanel>
@@ -3305,7 +3305,7 @@ function ScanHistoryPage({ scanRuns, timeZone }) {
   );
 }
 
-function NotificationsPage({ notifications: deliveries, timeZone }) {
+function NotificationsPage({ notifications: deliveries, timeZone, pagination }) {
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
@@ -3318,7 +3318,7 @@ function NotificationsPage({ notifications: deliveries, timeZone }) {
             <Text c="dimmed">Delivery status for external notification channels</Text>
           </Box>
         </Group>
-        <Badge variant="light">{deliveries.length} records</Badge>
+        <Badge variant="light">{activityRecordLabel(pagination, deliveries.length)}</Badge>
       </Group>
 
       <ActivityTablePanel>
@@ -3351,27 +3351,14 @@ function NotificationsPage({ notifications: deliveries, timeZone }) {
   );
 }
 
-async function fetchAllPaginated(path, params = {}) {
-  const limit = 100;
-  let offset = 0;
-  const allItems = [];
+const activityPageLimit = 500;
 
-  while (true) {
-    const payload = await apiRequest(path, {
-      params: {
-        ...params,
-        limit,
-        offset,
-      },
-    });
-    allItems.push(...(payload.data || []));
-
-    const nextOffset = payload.pagination?.next_offset;
-    if (nextOffset === null || nextOffset === undefined) {
-      return allItems;
-    }
-    offset = nextOffset;
+function activityRecordLabel(pagination, loadedCount) {
+  const total = pagination?.count ?? loadedCount;
+  if (total > loadedCount) {
+    return `Latest ${loadedCount} of ${total} records`;
   }
+  return `${loadedCount} records`;
 }
 
 function Dashboard({ user, onLogout, onUserUpdated }) {
@@ -3392,8 +3379,12 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [scanStatus, setScanStatus] = useState(null);
   const [scanVisibility, setScanVisibility] = useState(null);
   const [scanRuns, setScanRuns] = useState([]);
+  const [scanRunPagination, setScanRunPagination] = useState(null);
+  const [dashboardEvents, setDashboardEvents] = useState([]);
   const [events, setEvents] = useState([]);
+  const [eventPagination, setEventPagination] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [notificationPagination, setNotificationPagination] = useState(null);
   const [appSettings, setAppSettings] = useState(null);
   const [dashboardTimeZone, setDashboardTimeZone] = useState();
   const [search, setSearch] = useState('');
@@ -3416,7 +3407,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const tableStateRef = useRef({
     search: '',
     deviceStatus: '',
-    eventType: '',
     deviceLimit: 100,
     deviceOffset: 0,
     deviceOrdering: '',
@@ -3442,12 +3432,11 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     tableStateRef.current = {
       search,
       deviceStatus,
-      eventType,
       deviceLimit,
       deviceOffset,
       deviceOrdering,
     };
-  }, [search, deviceStatus, eventType, deviceOrdering]);
+  }, [search, deviceStatus, deviceOrdering]);
 
   async function loadData({ quiet = false, notifyOnError = false, notifyOnSuccess = false } = {}) {
     if (quiet) {
@@ -3470,25 +3459,23 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         offset: currentTableState.deviceOffset,
         ordering: currentTableState.deviceOrdering || undefined,
       };
-      const eventParams = {
-        event_type: currentTableState.eventType || undefined,
-      };
       const mapDeviceParams = {
         limit: 100,
         ordering: 'ip',
+      };
+      const dashboardEventParams = {
+        limit: 8,
       };
 
       const settingsRequest = canManageUsers
         ? apiRequest('settings/')
         : Promise.resolve({ data: null });
-      const [deviceData, mapDeviceData, statusData, runData, eventData, notificationData, settingsData] =
+      const [deviceData, mapDeviceData, statusData, dashboardEventData, settingsData] =
         await Promise.all([
           apiRequest('device/', { params: deviceParams }),
           apiRequest('device/', { params: mapDeviceParams }),
           apiRequest('scan/status/'),
-          fetchAllPaginated('scan/runs/'),
-          fetchAllPaginated('events/', eventParams),
-          fetchAllPaginated('notifications/'),
+          apiRequest('events/', { params: dashboardEventParams }),
           settingsRequest,
         ]);
 
@@ -3509,9 +3496,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
       }
-      setScanRuns(runData || []);
-      setEvents(eventData || []);
-      setNotifications(notificationData || []);
+      setDashboardEvents(dashboardEventData.data || []);
       if (settingsData.data) {
         setAppSettings(settingsData.data);
       }
@@ -3549,6 +3534,58 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     } catch (err) {
       if (notifyOnError) {
         showErrorNotification('Scan refresh failed', err.message);
+      }
+    }
+  }
+
+  async function loadEventsData({ notifyOnError = false } = {}) {
+    try {
+      const payload = await apiRequest('events/', {
+        params: {
+          event_type: eventType || undefined,
+          limit: activityPageLimit,
+          offset: 0,
+        },
+      });
+      setEvents(payload.data || []);
+      setEventPagination(payload.pagination || null);
+    } catch (err) {
+      if (notifyOnError) {
+        showErrorNotification('Events refresh failed', err.message);
+      }
+    }
+  }
+
+  async function loadScanRunsData({ notifyOnError = false } = {}) {
+    try {
+      const payload = await apiRequest('scan/runs/', {
+        params: {
+          limit: activityPageLimit,
+          offset: 0,
+        },
+      });
+      setScanRuns(payload.data || []);
+      setScanRunPagination(payload.pagination || null);
+    } catch (err) {
+      if (notifyOnError) {
+        showErrorNotification('Scan history refresh failed', err.message);
+      }
+    }
+  }
+
+  async function loadNotificationsData({ notifyOnError = false } = {}) {
+    try {
+      const payload = await apiRequest('notifications/', {
+        params: {
+          limit: activityPageLimit,
+          offset: 0,
+        },
+      });
+      setNotifications(payload.data || []);
+      setNotificationPagination(payload.pagination || null);
+    } catch (err) {
+      if (notifyOnError) {
+        showErrorNotification('Notifications refresh failed', err.message);
       }
     }
   }
@@ -3599,9 +3636,27 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   }, []);
 
   useEffect(() => {
+    if (mainView === 'events') {
+      loadEventsData({ notifyOnError: true });
+    }
+  }, [mainView, eventType]);
+
+  useEffect(() => {
+    if (mainView === 'history') {
+      loadScanRunsData({ notifyOnError: true });
+    }
+  }, [mainView]);
+
+  useEffect(() => {
+    if (mainView === 'notifications') {
+      loadNotificationsData({ notifyOnError: true });
+    }
+  }, [mainView]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => loadData({ quiet: true }), 250);
     return () => window.clearTimeout(timer);
-  }, [search, deviceStatus, eventType, deviceOrdering]);
+  }, [search, deviceStatus, deviceOrdering]);
 
   async function runScan() {
     setRefreshing(true);
@@ -3849,11 +3904,20 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
               eventType={eventType}
               setEventType={setEventType}
               timeZone={displayTimeZone}
+              pagination={eventPagination}
             />
           ) : mainView === 'history' ? (
-            <ScanHistoryPage scanRuns={scanRuns} timeZone={displayTimeZone} />
+            <ScanHistoryPage
+              scanRuns={scanRuns}
+              timeZone={displayTimeZone}
+              pagination={scanRunPagination}
+            />
           ) : mainView === 'notifications' ? (
-            <NotificationsPage notifications={notifications} timeZone={displayTimeZone} />
+            <NotificationsPage
+              notifications={notifications}
+              timeZone={displayTimeZone}
+              pagination={notificationPagination}
+            />
           ) : (
             <>
           <DashboardStatusCards counters={counters} />
@@ -3870,7 +3934,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
           </div>
 
           <DashboardInsightCards
-            events={events}
+            events={dashboardEvents}
             devices={mapDevices}
             onSelectDevice={(device) => {
               setActiveDevice(device);

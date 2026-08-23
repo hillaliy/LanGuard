@@ -99,6 +99,10 @@ class ScanRun(models.Model):
 
     class Meta:
         ordering = ["-started_at"]
+        indexes = [
+            models.Index(fields=["-started_at"], name="core_scanrun_started_desc_idx"),
+            models.Index(fields=["status", "-started_at"], name="core_scanrun_status_idx"),
+        ]
 
     def __str__(self):
         return f"Scan {self.ip_range} - {self.status}"
@@ -139,6 +143,11 @@ class NetworkEvent(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["-created_at"], name="core_event_created_desc_idx"),
+            models.Index(fields=["event_type", "-created_at"], name="core_event_type_created_idx"),
+            models.Index(fields=["notified", "-created_at"], name="core_event_notified_idx"),
+        ]
 
     def __str__(self):
         return self.message
@@ -175,6 +184,11 @@ class NotificationDelivery(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["-created_at"], name="core_notify_created_desc_idx"),
+            models.Index(fields=["channel", "-created_at"], name="core_notify_channel_idx"),
+            models.Index(fields=["status", "-created_at"], name="core_notify_status_created_idx"),
+        ]
 
     def __str__(self):
         return f"{self.channel} {self.status} - {self.event_id}"
