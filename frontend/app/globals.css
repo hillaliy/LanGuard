@@ -188,12 +188,41 @@ textarea {
   background: var(--muted-panel-bg);
 }
 
-.topbar-admin-button {
+.topbar-scan-button {
   flex: 0 0 auto;
 }
 
-.topbar-scan-button {
-  flex: 0 0 auto;
+.app-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 20px;
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 24px 24px 32px;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 82px;
+  align-self: start;
+  padding: 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: var(--shadow-soft);
+}
+
+.sidebar-nav-button {
+  min-height: 42px;
+  border-radius: 8px;
+}
+
+.app-content {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  padding-inline: 0;
+  padding-top: 0;
 }
 
 .version-pill {
@@ -254,6 +283,40 @@ textarea {
 .content-panel {
   border: 1px solid var(--border-color);
   background: var(--panel-bg);
+}
+
+.activity-table-panel {
+  overflow: hidden;
+}
+
+.activity-table-scroll {
+  min-height: 100%;
+}
+
+.activity-table-scroll table {
+  min-width: 760px;
+}
+
+.activity-table-scroll thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel-bg);
+  box-shadow: 0 1px 0 var(--border-color);
+}
+
+.settings-page {
+  position: relative;
+}
+
+.page-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  color: var(--brand-strong);
+  background: var(--brand-soft);
+  border-radius: 12px;
 }
 
 .dashboard-summary-card,
@@ -1184,6 +1247,11 @@ textarea {
   width: 100%;
 }
 
+.device-room-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .user-list-panel {
   min-width: 0;
   padding: 12px;
@@ -1285,12 +1353,33 @@ textarea {
     background-size: 320px;
   }
 
-  .topbar-admin-button {
-    padding-inline: 10px;
-  }
-
   .topbar-clock {
     display: none;
+  }
+
+  .app-layout {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .app-sidebar {
+    position: static;
+    overflow-x: auto;
+    padding: 8px;
+  }
+
+  .sidebar-nav {
+    flex-direction: row;
+    min-width: max-content;
+  }
+
+  .sidebar-nav .mantine-Divider-root {
+    display: none;
+  }
+
+  .sidebar-nav-button {
+    min-width: 138px;
   }
 
   .color-scheme-control {

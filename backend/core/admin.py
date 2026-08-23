@@ -68,6 +68,7 @@ class AppSettingsAdmin(admin.ModelAdmin):
         "ip_range",
         "scan_interval",
         "version_check_interval",
+        "activity_cleanup_retention_days",
         "time_zone",
         "notifications_enabled",
         "updated_at",

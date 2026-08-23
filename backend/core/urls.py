@@ -19,6 +19,7 @@ from .views import (
     export_devices,
     home_map_layout,
     import_devices,
+    maintenance_cleanup,
     users,
 )
 
@@ -32,6 +33,7 @@ urlpatterns = [
     path("users/", users, name="users"),
     path("settings/", app_settings, name="app-settings"),
     path("home-map-layout/", home_map_layout, name="home-map-layout"),
+    path("maintenance/cleanup/", maintenance_cleanup, name="maintenance-cleanup"),
     path("device/", device, name="device"),
     path("scan/", scan_now, name="scan_now"),
     path("scan/status/", scan_status, name="scan_status"),

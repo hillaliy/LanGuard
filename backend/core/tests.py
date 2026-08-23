@@ -1232,6 +1232,28 @@ class NotificationTests(TestCase):
         NOTIFICATION_MAX_ATTEMPTS=3,
     )
     @patch("core.notifications.requests.post")
+    def test_failed_notification_without_event_is_not_retried(self, post):
+        NotificationDelivery.objects.create(
+            event=None,
+            channel=NotificationDelivery.Channel.DISCORD,
+            status=NotificationDelivery.Status.FAILED,
+            attempts=1,
+        )
+
+        retried = retry_failed_notifications()
+
+        self.assertEqual(retried, [])
+        post.assert_not_called()
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
+        NOTIFICATION_MAX_ATTEMPTS=3,
+    )
+    @patch("core.notifications.requests.post")
     def test_retry_notifications_command(self, post):
         post.return_value = Mock(raise_for_status=Mock())
         NotificationDelivery.objects.create(
@@ -1599,6 +1621,7 @@ class ScanApiTests(TestCase):
                 "notification_quiet_hours_enabled": True,
                 "notification_quiet_hours_start": "23:00",
                 "notification_quiet_hours_end": "06:30",
+                "activity_cleanup_retention_days": 45,
                 "discord_webhook": "https://discord.example/webhook",
                 "telegram_token": "token",
                 "telegram_user_id": "123",
@@ -1625,6 +1648,7 @@ class ScanApiTests(TestCase):
         self.assertTrue(config.notification_quiet_hours_enabled)
         self.assertEqual(config.notification_quiet_hours_start, "23:00")
         self.assertEqual(config.notification_quiet_hours_end, "06:30")
+        self.assertEqual(config.activity_cleanup_retention_days, 45)
         self.assertEqual(
             config.home_map_layout,
             {"order": ["Floor", "Bedroom"], "parents": {"Bedroom": "Floor"}},
@@ -1648,6 +1672,7 @@ class ScanApiTests(TestCase):
         self.assertTrue(response.data["data"]["notification_quiet_hours_enabled"])
         self.assertEqual(response.data["data"]["notification_quiet_hours_start"], "23:00")
         self.assertEqual(response.data["data"]["notification_quiet_hours_end"], "06:30")
+        self.assertEqual(response.data["data"]["activity_cleanup_retention_days"], 45)
         self.assertEqual(
             response.data["data"]["home_map_layout"],
             {"order": ["Floor", "Bedroom"], "parents": {"Bedroom": "Floor"}},
@@ -1693,6 +1718,189 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("time_zone", response.data)
+
+    def test_maintenance_cleanup_requires_admin_user(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.post(
+            "/api/v1/maintenance/cleanup/",
+            {"target": "events", "older_than_days": 30},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_maintenance_cleanup_deletes_old_events_only(self):
+        old_scan = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            status=ScanRun.Status.SUCCESS,
+            started_at=timezone.now() - timedelta(days=400),
+            finished_at=timezone.now() - timedelta(days=400),
+        )
+        old_event = NetworkEvent.objects.create(
+            scan_run=old_scan,
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_OFFLINE,
+            message="Laptop went offline",
+            created_at=timezone.now() - timedelta(days=400),
+        )
+        old_delivery = NotificationDelivery.objects.create(
+            event=old_event,
+            channel=NotificationDelivery.Channel.DISCORD,
+            status=NotificationDelivery.Status.SENT,
+            created_at=timezone.now() - timedelta(days=400),
+        )
+        running_scan = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            status=ScanRun.Status.RUNNING,
+            started_at=timezone.now() - timedelta(days=400),
+        )
+
+        response = self.client.post(
+            "/api/v1/maintenance/cleanup/",
+            {"target": "events", "older_than_days": 365},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["target"], "events")
+        self.assertEqual(response.data["data"]["deleted"]["events"], 1)
+        self.assertEqual(response.data["data"]["deleted"]["scan_runs"], 0)
+        self.assertEqual(response.data["data"]["deleted"]["notifications"], 0)
+        self.assertFalse(NetworkEvent.objects.filter(id=old_event.id).exists())
+        self.assertTrue(NotificationDelivery.objects.filter(id=old_delivery.id).exists())
+        old_delivery.refresh_from_db()
+        self.assertIsNone(old_delivery.event_id)
+        self.assertTrue(ScanRun.objects.filter(id=old_scan.id).exists())
+        self.assertTrue(ScanRun.objects.filter(id=running_scan.id).exists())
+        self.assertTrue(NetworkEvent.objects.filter(id=self.event.id).exists())
+        self.assertTrue(NotificationDelivery.objects.filter(id=self.delivery.id).exists())
+        self.assertTrue(ScanRun.objects.filter(id=self.scan_run.id).exists())
+
+    def test_maintenance_cleanup_clean_all_deletes_current_events(self):
+        response = self.client.post(
+            "/api/v1/maintenance/cleanup/",
+            {"target": "events", "clean_all": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["data"]["clean_all"])
+        self.assertEqual(response.data["data"]["deleted"]["events"], 1)
+        self.assertEqual(response.data["data"]["deleted"]["notifications"], 0)
+        self.assertFalse(NetworkEvent.objects.filter(id=self.event.id).exists())
+        self.assertTrue(NotificationDelivery.objects.filter(id=self.delivery.id).exists())
+        self.delivery.refresh_from_db()
+        self.assertIsNone(self.delivery.event_id)
+
+    def test_maintenance_cleanup_clean_all_deletes_current_scan_runs(self):
+        response = self.client.post(
+            "/api/v1/maintenance/cleanup/",
+            {"target": "scan_runs", "clean_all": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["data"]["clean_all"])
+        self.assertEqual(response.data["data"]["deleted"]["scan_runs"], 1)
+        self.assertFalse(ScanRun.objects.filter(id=self.scan_run.id).exists())
+
+    def test_maintenance_cleanup_clean_all_deletes_current_notifications(self):
+        response = self.client.post(
+            "/api/v1/maintenance/cleanup/",
+            {"target": "notifications", "clean_all": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["data"]["clean_all"])
+        self.assertEqual(response.data["data"]["deleted"]["notifications"], 1)
+        self.assertFalse(NotificationDelivery.objects.filter(id=self.delivery.id).exists())
+        self.assertTrue(NetworkEvent.objects.filter(id=self.event.id).exists())
+
+    def test_maintenance_cleanup_rejects_zero_day_retention(self):
+        response = self.client.post(
+            "/api/v1/maintenance/cleanup/",
+            {"target": "events", "older_than_days": 0},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("older_than_days", response.data)
+
+    def test_maintenance_cleanup_deletes_old_scan_runs_only(self):
+        old_scan = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            status=ScanRun.Status.SUCCESS,
+            started_at=timezone.now() - timedelta(days=400),
+            finished_at=timezone.now() - timedelta(days=400),
+        )
+        running_scan = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            status=ScanRun.Status.RUNNING,
+            started_at=timezone.now() - timedelta(days=400),
+        )
+
+        response = self.client.post(
+            "/api/v1/maintenance/cleanup/",
+            {"target": "scan_runs", "older_than_days": 365},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["target"], "scan_runs")
+        self.assertEqual(response.data["data"]["deleted"]["events"], 0)
+        self.assertEqual(response.data["data"]["deleted"]["scan_runs"], 1)
+        self.assertEqual(response.data["data"]["deleted"]["notifications"], 0)
+        self.assertFalse(ScanRun.objects.filter(id=old_scan.id).exists())
+        self.assertTrue(ScanRun.objects.filter(id=running_scan.id).exists())
+        self.assertTrue(NetworkEvent.objects.filter(id=self.event.id).exists())
+        self.assertTrue(NotificationDelivery.objects.filter(id=self.delivery.id).exists())
+
+    def test_maintenance_cleanup_deletes_old_notifications_only(self):
+        old_delivery = NotificationDelivery.objects.create(
+            event=self.event,
+            channel=NotificationDelivery.Channel.DISCORD,
+            status=NotificationDelivery.Status.SENT,
+            created_at=timezone.now() - timedelta(days=400),
+        )
+
+        response = self.client.post(
+            "/api/v1/maintenance/cleanup/",
+            {"target": "notifications", "older_than_days": 365},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["target"], "notifications")
+        self.assertEqual(response.data["data"]["deleted"]["events"], 0)
+        self.assertEqual(response.data["data"]["deleted"]["scan_runs"], 0)
+        self.assertEqual(response.data["data"]["deleted"]["notifications"], 1)
+        self.assertFalse(NotificationDelivery.objects.filter(id=old_delivery.id).exists())
+        self.assertTrue(NetworkEvent.objects.filter(id=self.event.id).exists())
+        self.assertTrue(NotificationDelivery.objects.filter(id=self.delivery.id).exists())
+
+    def test_maintenance_cleanup_rejects_invalid_retention(self):
+        response = self.client.post(
+            "/api/v1/maintenance/cleanup/",
+            {"target": "events", "older_than_days": -1},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("older_than_days", response.data)
+
+    def test_maintenance_cleanup_rejects_invalid_target(self):
+        response = self.client.post(
+            "/api/v1/maintenance/cleanup/",
+            {"target": "devices", "older_than_days": 365},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("target", response.data)
 
     def test_scan_status_endpoint_returns_latest_scan_and_counters(self):
         self.scan_run.started_at = timezone.now() - timedelta(minutes=2)

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.3.0 - 2026-08-23
+
+- Moved Docker navigation into a sidebar and converted Settings into a full page.
+- Added separate cleanup controls for events, scan history, and notification logs with retention settings.
+- Added scheduled automatic cleanup for activity data, defaulting to 90 days.
+- Improved the Home Map with persistent room nesting, layout reset confirmation, and clearer editing behavior.
+
+## 1.2.0 - 2026-08-22
+
+- Added a dedicated Docker Home Map view with room nesting, drag-and-drop layout editing, and device icons.
+- Persisted Home Map layout preferences in the backend database.
+- Added explicit Home Map layout saving with success and error notifications.
+- Improved the Docker room visualization with cleaner spacing, offline icon styling, and reset confirmation.
+
 ## 1.1.7 - 2026-08-20
 
 - Improved Docker mDNS hostname discovery by listening on the multicast group used by HomeKit/HAA devices.

@@ -286,6 +286,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "notification_quiet_hours_enabled",
             "notification_quiet_hours_start",
             "notification_quiet_hours_end",
+            "activity_cleanup_retention_days",
             "home_map_layout",
             "updated_at",
         )
@@ -337,6 +338,13 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Version check interval must be at least 1 minute.")
         if value > 604800:
             raise serializers.ValidationError("Version check interval must be 7 days or less.")
+        return value
+
+    def validate_activity_cleanup_retention_days(self, value):
+        if value < 1:
+            raise serializers.ValidationError("Activity cleanup retention must be at least 1 day.")
+        if value > 3650:
+            raise serializers.ValidationError("Activity cleanup retention must be 3650 days or less.")
         return value
 
     def validate_notification_quiet_hours_start(self, value):

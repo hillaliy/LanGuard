@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
   Alert,
+  Autocomplete,
   Badge,
   Box,
   Button,
   Container,
   Divider,
+  FileButton,
   Group,
   Image,
   LoadingOverlay,
@@ -19,14 +21,15 @@ import {
   Select,
   SegmentedControl,
   SimpleGrid,
+  ScrollArea,
   Stack,
   Switch,
   Table,
-  Tabs,
   Text,
   TextInput,
   Title,
   Tooltip,
+  UnstyledButton,
   useMantineColorScheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -54,6 +57,7 @@ import {
   IconGripVertical,
   IconHistory,
   IconLamp,
+  IconLayoutDashboard,
   IconLine,
   IconLock,
   IconLogout,
@@ -208,11 +212,6 @@ const deviceRoleOptions = [
 const inventoryViewOptions = [
   { value: 'table', label: 'List' },
   { value: 'roles', label: 'Roles' },
-];
-
-const mainViewOptions = [
-  { value: 'dashboard', label: 'Dashboard' },
-  { value: 'home-map', label: 'Home Map' },
 ];
 
 const homeMapFilterOptions = [
@@ -499,8 +498,7 @@ function NetworkMapDeviceNode({ device, onSelectDevice }) {
   const status = deviceStatus(device);
 
   return (
-    <button
-      type="button"
+    <UnstyledButton
       key={device.id}
       className={`network-device-node ${deviceMapShape(device)} ${device.online ? 'online' : 'offline'}`}
       onClick={() => onSelectDevice(device)}
@@ -521,7 +519,7 @@ function NetworkMapDeviceNode({ device, onSelectDevice }) {
       <div className="network-device-ports">
         <PortSummary ports={device.open_ports || []} />
       </div>
-    </button>
+    </UnstyledButton>
   );
 }
 
@@ -669,8 +667,7 @@ function HomeMapDeviceButton({ device, onSelectDevice }) {
 
   return (
     <Tooltip label={tooltip} withArrow>
-      <button
-        type="button"
+      <UnstyledButton
         className={`home-map-device ${homeMapDeviceStatusClass(device)}`}
         onClick={() => onSelectDevice(device)}
         aria-label={tooltip}
@@ -679,7 +676,7 @@ function HomeMapDeviceButton({ device, onSelectDevice }) {
         {(risk === 'medium' || risk === 'high') && (
           <span className={`home-map-device-risk ${risk}`} aria-hidden="true" />
         )}
-      </button>
+      </UnstyledButton>
     </Tooltip>
   );
 }
@@ -1299,8 +1296,7 @@ function SortableHeader({ field, label, ordering, onChange, className }) {
 
   return (
     <Table.Th className={className}>
-      <button
-        type="button"
+      <UnstyledButton
         className={`sortable-header ${active ? 'active' : ''}`}
         onClick={() => onChange(sortableOrdering(field, ordering))}
         aria-label={title}
@@ -1311,7 +1307,7 @@ function SortableHeader({ field, label, ordering, onChange, className }) {
           stroke={1.9}
           className={direction ? `sort-icon ${direction}` : 'sort-icon'}
         />
-      </button>
+      </UnstyledButton>
     </Table.Th>
   );
 }
@@ -1964,8 +1960,7 @@ function DashboardAttentionRow({ device, onSelectDevice }) {
   const reason = !device.known ? 'Unknown device' : risk.label;
 
   return (
-    <button
-      type="button"
+    <UnstyledButton
       className="dashboard-insight-row dashboard-insight-button"
       onClick={() => onSelectDevice(device)}
     >
@@ -1981,7 +1976,7 @@ function DashboardAttentionRow({ device, onSelectDevice }) {
       <Badge className="dashboard-insight-risk" color={risk.color} variant="light">
         {risk.label}
       </Badge>
-    </button>
+    </UnstyledButton>
   );
 }
 
@@ -2056,8 +2051,8 @@ function DeviceField({ label, value, editable = false, required = false, onChang
         {required && <Text size="xs" c="red">*</Text>}
       </Group>
       {editable ? (
-        <input
-          className="device-field-input"
+        <TextInput
+          classNames={{ input: 'device-field-input' }}
           value={value}
           onChange={(event) => onChange(event.currentTarget.value)}
         />
@@ -2085,18 +2080,14 @@ function RoomField({ value, onChange, roomOptions = [] }) {
     <Box className="device-field editable">
       <Text size="xs" c="dimmed">Room</Text>
       <Group gap="xs" wrap="nowrap">
-        <input
-          className="device-field-input"
-          list="device-room-options"
+        <Autocomplete
+          className="device-room-input"
+          classNames={{ input: 'device-field-input' }}
+          data={roomOptions}
           value={value || ''}
-          onChange={(event) => onChange(event.currentTarget.value)}
+          onChange={onChange}
           placeholder="Unassigned"
         />
-        <datalist id="device-room-options">
-          {roomOptions.map((option) => (
-            <option key={option.value} value={option.value} />
-          ))}
-        </datalist>
         {value ? (
           <Tooltip label="Clear room">
             <ActionIcon
@@ -2127,14 +2118,13 @@ function DeviceIconPicker({ value, onChange, label = 'Icon' }) {
 
           return (
             <Tooltip key={option.value} label={option.label}>
-              <button
-                type="button"
+              <UnstyledButton
                 className={`icon-picker-button ${selected ? 'selected' : ''}`}
                 onClick={() => onChange(option.value)}
                 aria-label={option.label}
               >
                 <Icon size={18} stroke={1.8} />
-              </button>
+              </UnstyledButton>
             </Tooltip>
           );
         })}
@@ -2271,11 +2261,15 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
           />
           <Box className="device-field">
             <Text size="xs" c="dimmed">Role</Text>
-            <select className="device-field-input" value={role} onChange={(event) => setRole(event.currentTarget.value)}>
-              {deviceRoleOptions.map((value) => (
-                <option key={value} value={value}>{formatRoleLabel(value)}</option>
-              ))}
-            </select>
+            <Select
+              classNames={{ input: 'device-field-input' }}
+              data={deviceRoleOptions.map((value) => ({
+                value,
+                label: formatRoleLabel(value),
+              }))}
+              value={role}
+              onChange={(value) => setRole(value || 'device')}
+            />
           </Box>
           <DeviceIconPicker value={icon} onChange={setIcon} />
           <DeviceIconPicker label="Secondary icon" value={secondaryIcon} onChange={setSecondaryIcon} />
@@ -2548,9 +2542,8 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
                 </Group>
                 <Stack gap="xs">
                   {users.map((item) => (
-                    <button
+                    <UnstyledButton
                       key={item.id}
-                      type="button"
                       className={`user-list-button ${String(item.id) === String(selectedUserId) ? 'active' : ''}`}
                       onClick={() => setSelectedUserId(String(item.id))}
                     >
@@ -2563,7 +2556,7 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
                           </Text>
                         </Box>
                       </Group>
-                    </button>
+                    </UnstyledButton>
                   ))}
                 </Stack>
               </Box>
@@ -2681,8 +2674,7 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
   );
 }
 
-function SettingsModal({ opened, onClose, onSaved }) {
-  const importInputRef = useRef(null);
+function SettingsPage({ onSaved }) {
   const [ipRange, setIpRange] = useState('');
   const [scanInterval, setScanInterval] = useState(10);
   const [timeZone, setTimeZone] = useState('UTC');
@@ -2704,7 +2696,11 @@ function SettingsModal({ opened, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [cleanupDays, setCleanupDays] = useState(90);
+  const [cleanupTarget, setCleanupTarget] = useState(null);
+  const [cleaningActivity, setCleaningActivity] = useState('');
   const [error, setError] = useState('');
+  const [cleanupConfirmOpened, cleanupConfirm] = useDisclosure(false);
 
   async function loadSettings() {
     setLoading(true);
@@ -2729,6 +2725,7 @@ function SettingsModal({ opened, onClose, onSaved }) {
       setQuietHoursEnabled(Boolean(data.notification_quiet_hours_enabled));
       setQuietHoursStart(data.notification_quiet_hours_start || '22:00');
       setQuietHoursEnd(data.notification_quiet_hours_end || '07:00');
+      setCleanupDays(Number(data.activity_cleanup_retention_days ?? 90));
     } catch (err) {
       setError(err.message);
       showErrorNotification('Could not load settings', err.message);
@@ -2738,10 +2735,8 @@ function SettingsModal({ opened, onClose, onSaved }) {
   }
 
   useEffect(() => {
-    if (opened) {
-      loadSettings();
-    }
-  }, [opened]);
+    loadSettings();
+  }, []);
 
   async function saveSettings() {
     setSaving(true);
@@ -2760,6 +2755,7 @@ function SettingsModal({ opened, onClose, onSaved }) {
         notification_quiet_hours_enabled: quietHoursEnabled,
         notification_quiet_hours_start: quietHoursStart,
         notification_quiet_hours_end: quietHoursEnd,
+        activity_cleanup_retention_days: cleanupDays,
       };
       body.discord_webhook = discordWebhook;
       body.telegram_token = telegramToken;
@@ -2769,7 +2765,6 @@ function SettingsModal({ opened, onClose, onSaved }) {
       await loadSettings();
       await onSaved(savedSettings.data || {});
       showSuccessNotification('Settings saved', 'Scanner and notification settings were updated.');
-      onClose();
     } catch (err) {
       setError(err.message);
       showErrorNotification('Could not save settings', err.message);
@@ -2803,9 +2798,7 @@ function SettingsModal({ opened, onClose, onSaved }) {
     }
   }
 
-  async function importInventoryFile(event) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = '';
+  async function importInventoryFile(file) {
     if (!file) {
       return;
     }
@@ -2834,17 +2827,67 @@ function SettingsModal({ opened, onClose, onSaved }) {
     }
   }
 
+  const cleanupTargetLabels = {
+    events: 'Events',
+    scan_runs: 'Scan history',
+    notifications: 'Notifications',
+  };
+
+  async function cleanupActivity(cleanAll = false) {
+    if (!cleanupTarget) {
+      return false;
+    }
+
+    setCleaningActivity(cleanupTarget);
+    setError('');
+    try {
+      const result = await apiRequest('maintenance/cleanup/', {
+        method: 'POST',
+        body: cleanAll
+          ? { target: cleanupTarget, clean_all: true }
+          : { target: cleanupTarget, older_than_days: cleanupDays },
+      });
+      await onSaved({});
+      const deleted = result.data?.deleted || {};
+      const targetLabel = cleanupTargetLabels[cleanupTarget] || 'Activity';
+      showSuccessNotification(
+        `${targetLabel} cleaned`,
+        `Deleted ${deleted.events || 0} events, ${deleted.scan_runs || 0} scan runs, and ${deleted.notifications || 0} notifications.`
+      );
+      return true;
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('Could not clean activity', err.message);
+      return false;
+    } finally {
+      setCleaningActivity('');
+    }
+  }
+
+  function openCleanupConfirm(target) {
+    setCleanupTarget(target);
+    cleanupConfirm.open();
+  }
+
   return (
-    <Modal opened={opened} onClose={onClose} title="Settings" centered size="lg">
+    <Paper className="content-panel settings-page" radius="md" p="lg">
       <LoadingOverlay visible={loading} />
-      <input
-        ref={importInputRef}
-        type="file"
-        accept="application/json,.json"
-        hidden
-        onChange={importInventoryFile}
-      />
       <Stack>
+        <Group justify="space-between" align="flex-start">
+          <Group gap="sm">
+            <span className="page-icon">
+              <IconSettings size={26} />
+            </span>
+            <Box>
+              <Title order={2}>Settings</Title>
+              <Text c="dimmed">Scanner, notifications, and inventory tools</Text>
+            </Box>
+          </Group>
+          <Button onClick={saveSettings} loading={saving}>
+            Save
+          </Button>
+        </Group>
+
         {error && (
           <Alert color="red" icon={<IconAlertCircle size={18} />}>
             {error}
@@ -2994,6 +3037,55 @@ function SettingsModal({ opened, onClose, onSaved }) {
 
         <Group justify="space-between" align="flex-start">
           <Box>
+            <Text fw={700}>Activity cleanup</Text>
+            <Text size="sm" c="dimmed">
+              Scheduled cleanup runs every 24 hours using this retention period. Use clean all only for manual resets.
+            </Text>
+          </Box>
+          <Group gap="sm" align="flex-end">
+            <NumberInput
+              w={150}
+              label="Older than"
+              value={cleanupDays}
+              onChange={(value) => setCleanupDays(value === '' || value === null ? 90 : Number(value))}
+              min={1}
+              max={3650}
+              suffix=" days"
+            />
+            <Button
+              color="red"
+              variant="light"
+              leftSection={<IconTrash size={18} />}
+              onClick={() => openCleanupConfirm('events')}
+              loading={cleaningActivity === 'events'}
+            >
+              Clean events
+            </Button>
+            <Button
+              color="red"
+              variant="light"
+              leftSection={<IconTrash size={18} />}
+              onClick={() => openCleanupConfirm('scan_runs')}
+              loading={cleaningActivity === 'scan_runs'}
+            >
+              Clean history
+            </Button>
+            <Button
+              color="red"
+              variant="light"
+              leftSection={<IconTrash size={18} />}
+              onClick={() => openCleanupConfirm('notifications')}
+              loading={cleaningActivity === 'notifications'}
+            >
+              Clean notifications
+            </Button>
+          </Group>
+        </Group>
+
+        <Divider />
+
+        <Group justify="space-between" align="flex-start">
+          <Box>
             <Text fw={700}>Device inventory</Text>
             <Text size="sm" c="dimmed">
               Export or import known devices, names, icons, vendors, IPs, and open ports.
@@ -3008,29 +3100,278 @@ function SettingsModal({ opened, onClose, onSaved }) {
             >
               Export
             </Button>
-            <Button
-              variant="light"
-              leftSection={<IconUpload size={18} />}
-              onClick={() => importInputRef.current?.click()}
-              loading={importing}
-            >
-              Import
-            </Button>
+            <FileButton onChange={importInventoryFile} accept="application/json,.json">
+              {(props) => (
+                <Button
+                  {...props}
+                  variant="light"
+                  leftSection={<IconUpload size={18} />}
+                  loading={importing}
+                >
+                  Import
+                </Button>
+              )}
+            </FileButton>
           </Group>
         </Group>
 
         <Divider />
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose}>
-            Close
-          </Button>
+        <Group justify="flex-end" className="settings-page-actions">
           <Button onClick={saveSettings} loading={saving}>
             Save
           </Button>
         </Group>
       </Stack>
-    </Modal>
+      <Modal
+        opened={cleanupConfirmOpened}
+        onClose={cleanupConfirm.close}
+        title={`Clean ${cleanupTargetLabels[cleanupTarget] || 'activity'}`}
+        centered
+      >
+        <Stack>
+          <Text>
+            Delete {cleanupTargetLabels[cleanupTarget] || 'activity'} records older than {cleanupDays} days?
+          </Text>
+          <Text size="sm" c="dimmed">
+            Device inventory and current device data will not be deleted.
+            {cleanupTarget === 'events'
+              ? ' Notifications linked to deleted events will be kept, but their event link will be cleared.'
+              : ''}
+            {cleanupTarget === 'scan_runs'
+              ? ' Running scans are never deleted.'
+              : ''}
+            {' '}Clean all deletes every record of this type and cannot be undone.
+          </Text>
+          <Group justify="flex-end">
+            <Button
+              color="red"
+              variant="light"
+              leftSection={<IconTrash size={18} />}
+              loading={Boolean(cleaningActivity)}
+              onClick={async () => {
+                const cleaned = await cleanupActivity(false);
+                if (cleaned) {
+                  cleanupConfirm.close();
+                }
+              }}
+            >
+              Clean
+            </Button>
+            <Button variant="default" onClick={cleanupConfirm.close}>
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              leftSection={<IconTrash size={18} />}
+              loading={Boolean(cleaningActivity)}
+              onClick={async () => {
+                const cleaned = await cleanupActivity(true);
+                if (cleaned) {
+                  cleanupConfirm.close();
+                }
+              }}
+            >
+              Clean all
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </Paper>
   );
+}
+
+function ActivityTablePanel({ children }) {
+  return (
+    <Paper className="content-panel activity-table-panel" radius="md">
+      <ScrollArea
+        h="min(640px, calc(100vh - 250px))"
+        offsetScrollbars
+        scrollbarSize={10}
+        type="always"
+      >
+        <Box className="activity-table-scroll">
+          {children}
+        </Box>
+      </ScrollArea>
+    </Paper>
+  );
+}
+
+function EventsPage({ events, eventType, setEventType, timeZone }) {
+  return (
+    <Stack gap="lg">
+      <Group justify="space-between" align="flex-end">
+        <Group gap="sm">
+          <span className="page-icon">
+            <IconBell size={26} />
+          </span>
+          <Box>
+            <Title order={2}>Events</Title>
+            <Text c="dimmed">Network changes and alert decisions</Text>
+          </Box>
+        </Group>
+        <Group gap="sm">
+          <Badge variant="light">{events.length} records</Badge>
+          <Select
+            w={220}
+            placeholder="Event type"
+            clearable
+            data={eventTypeOptions}
+            value={eventType}
+            onChange={(value) => setEventType(value || '')}
+          />
+        </Group>
+      </Group>
+
+      <ActivityTablePanel>
+        <Table verticalSpacing="sm">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Type</Table.Th>
+              <Table.Th>Message</Table.Th>
+              <Table.Th>Created</Table.Th>
+              <Table.Th>Status</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {events.map((event) => (
+              <Table.Tr key={event.id}>
+                <Table.Td>
+                  <Badge variant="light">
+                    {event.event_type_display || event.event_type}
+                  </Badge>
+                </Table.Td>
+                <Table.Td>{event.message}</Table.Td>
+                <Table.Td>{formatDate(event.created_at, timeZone)}</Table.Td>
+                <Table.Td>
+                  <Badge color={event.notified ? 'teal' : 'gray'} variant="light">
+                    {event.notified ? 'Handled' : 'Pending'}
+                  </Badge>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </ActivityTablePanel>
+    </Stack>
+  );
+}
+
+function ScanHistoryPage({ scanRuns, timeZone }) {
+  return (
+    <Stack gap="lg">
+      <Group justify="space-between" align="flex-end">
+        <Group gap="sm">
+          <span className="page-icon">
+            <IconHistory size={26} />
+          </span>
+          <Box>
+            <Title order={2}>Scan history</Title>
+            <Text c="dimmed">Recent scan runs and detected changes</Text>
+          </Box>
+        </Group>
+        <Badge variant="light">{scanRuns.length} records</Badge>
+      </Group>
+
+      <ActivityTablePanel>
+        <Table verticalSpacing="sm">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Status</Table.Th>
+              <Table.Th>Range</Table.Th>
+              <Table.Th>Started</Table.Th>
+              <Table.Th>Seen</Table.Th>
+              <Table.Th>Port changes</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {scanRuns.map((run) => (
+              <Table.Tr key={run.id}>
+                <Table.Td>
+                  <Badge color={run.status === 'success' ? 'teal' : run.status === 'failed' ? 'red' : 'blue'} variant="light">
+                    {run.status}
+                  </Badge>
+                </Table.Td>
+                <Table.Td>{run.ip_range}</Table.Td>
+                <Table.Td>{formatDate(run.started_at, timeZone)}</Table.Td>
+                <Table.Td>{run.devices_seen}</Table.Td>
+                <Table.Td>{run.ports_opened} / {run.ports_closed}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </ActivityTablePanel>
+    </Stack>
+  );
+}
+
+function NotificationsPage({ notifications: deliveries, timeZone }) {
+  return (
+    <Stack gap="lg">
+      <Group justify="space-between" align="flex-end">
+        <Group gap="sm">
+          <span className="page-icon">
+            <IconBell size={26} />
+          </span>
+          <Box>
+            <Title order={2}>Notifications</Title>
+            <Text c="dimmed">Delivery status for external notification channels</Text>
+          </Box>
+        </Group>
+        <Badge variant="light">{deliveries.length} records</Badge>
+      </Group>
+
+      <ActivityTablePanel>
+        <Table verticalSpacing="sm">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Channel</Table.Th>
+              <Table.Th>Status</Table.Th>
+              <Table.Th>Attempts</Table.Th>
+              <Table.Th>Created</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {deliveries.map((delivery) => (
+              <Table.Tr key={delivery.id}>
+                <Table.Td>{delivery.channel_display || delivery.channel}</Table.Td>
+                <Table.Td>
+                  <Badge color={delivery.status === 'sent' ? 'teal' : delivery.status === 'failed' ? 'red' : 'gray'} variant="light">
+                    {delivery.status_display || delivery.status}
+                  </Badge>
+                </Table.Td>
+                <Table.Td>{delivery.attempts}</Table.Td>
+                <Table.Td>{formatDate(delivery.created_at, timeZone)}</Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </ActivityTablePanel>
+    </Stack>
+  );
+}
+
+async function fetchAllPaginated(path, params = {}) {
+  const limit = 100;
+  let offset = 0;
+  const allItems = [];
+
+  while (true) {
+    const payload = await apiRequest(path, {
+      params: {
+        ...params,
+        limit,
+        offset,
+      },
+    });
+    allItems.push(...(payload.data || []));
+
+    const nextOffset = payload.pagination?.next_offset;
+    if (nextOffset === null || nextOffset === undefined) {
+      return allItems;
+    }
+    offset = nextOffset;
+  }
 }
 
 function Dashboard({ user, onLogout, onUserUpdated }) {
@@ -3060,7 +3401,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [inventoryView, setInventoryView] = useState('table');
   const [mainView, setMainView] = useState('dashboard');
   const [deviceOrdering, setDeviceOrdering] = useState('');
-  const [activeTab, setActiveTab] = useState('events');
   const [eventType, setEventType] = useState('');
   const [activeDevice, setActiveDevice] = useState(null);
   const [changelogOpened, setChangelogOpened] = useState(false);
@@ -3072,7 +3412,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [modalOpened, modal] = useDisclosure(false);
   const [logoutModalOpened, logoutModal] = useDisclosure(false);
   const [usersModalOpened, usersModal] = useDisclosure(false);
-  const [settingsModalOpened, settingsModal] = useDisclosure(false);
   const [scanDetailsOpened, scanDetailsModal] = useDisclosure(false);
   const tableStateRef = useRef({
     search: '',
@@ -3133,7 +3472,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
       };
       const eventParams = {
         event_type: currentTableState.eventType || undefined,
-        limit: 8,
       };
       const mapDeviceParams = {
         limit: 100,
@@ -3148,9 +3486,9 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
           apiRequest('device/', { params: deviceParams }),
           apiRequest('device/', { params: mapDeviceParams }),
           apiRequest('scan/status/'),
-          apiRequest('scan/runs/', { params: { limit: 8 } }),
-          apiRequest('events/', { params: eventParams }),
-          apiRequest('notifications/', { params: { limit: 8 } }),
+          fetchAllPaginated('scan/runs/'),
+          fetchAllPaginated('events/', eventParams),
+          fetchAllPaginated('notifications/'),
           settingsRequest,
         ]);
 
@@ -3171,9 +3509,9 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
       }
-      setScanRuns(runData.data || []);
-      setEvents(eventData.data || []);
-      setNotifications(notificationData.data || []);
+      setScanRuns(runData || []);
+      setEvents(eventData || []);
+      setNotifications(notificationData || []);
       if (settingsData.data) {
         setAppSettings(settingsData.data);
       }
@@ -3199,16 +3537,12 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
 
   async function loadScanData({ notifyOnError = false, notifyOnSuccess = false } = {}) {
     try {
-      const [statusData, runData] = await Promise.all([
-        apiRequest('scan/status/'),
-        apiRequest('scan/runs/', { params: { limit: 8 } }),
-      ]);
+      const statusData = await apiRequest('scan/status/');
       setScanStatus(statusData.data || statusData.active_scan || null);
       setScanVisibility(statusData.visibility || null);
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
       }
-      setScanRuns(runData.data || []);
       if (notifyOnSuccess) {
         showSuccessNotification('Scan refreshed', 'Latest scan status loaded.');
       }
@@ -3319,15 +3653,14 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 <Group gap="xs" wrap="nowrap">
                   <Title order={3}>LanGuard</Title>
                   <Tooltip label={versionTooltip}>
-                    <button
-                      type="button"
+                    <UnstyledButton
                       className={`version-pill ${hasVersionIndicator ? 'has-update' : ''}`}
                       onClick={() => setChangelogOpened(true)}
                       aria-label={`LanGuard version ${APP_VERSION}`}
                     >
                       v{APP_VERSION}
                       {hasVersionIndicator && <span className="version-dot" aria-hidden="true" />}
-                    </button>
+                    </UnstyledButton>
                   </Tooltip>
                   <Tooltip label="GitHub project">
                     <ActionIcon
@@ -3350,12 +3683,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
               </Box>
             </Group>
             <Group gap="xs">
-              <SegmentedControl
-                data={mainViewOptions}
-                value={mainView}
-                onChange={setMainView}
-                aria-label="Main view"
-              />
               <Group className="topbar-clock" gap="xs" wrap="nowrap">
                 <IconClock size={18} />
                 <Box>
@@ -3377,20 +3704,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
               >
                 Run Scan
               </Button>
-              {canManageUsers && (
-                <Button
-                  component="a"
-                  href={getAdminUrl()}
-                  target="_blank"
-                  rel="noreferrer"
-                  variant="light"
-                  size="sm"
-                  leftSection={<IconShieldLock size={17} />}
-                  className="topbar-admin-button"
-                >
-                  Admin site
-                </Button>
-              )}
               <Tooltip label="Refresh">
                 <ActionIcon
                   variant="light"
@@ -3401,18 +3714,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                   <IconRefresh size={19} />
                 </ActionIcon>
               </Tooltip>
-              {canManageUsers && (
-                <Tooltip label="Settings">
-                  <ActionIcon
-                    variant="light"
-                    size="lg"
-                    onClick={settingsModal.open}
-                    aria-label="Settings"
-                  >
-                    <IconSettings size={19} />
-                  </ActionIcon>
-                </Tooltip>
-              )}
               <Tooltip label={canManageUsers ? 'Manage users' : 'Edit account'}>
                 <ActionIcon
                   variant="light"
@@ -3434,7 +3735,92 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         </Container>
       </header>
 
-      <Container size="xl" py="xl">
+      <div className="app-layout">
+        <aside className="app-sidebar" aria-label="Primary navigation">
+          <Stack className="sidebar-nav" gap={6}>
+            <Button
+              className="sidebar-nav-button"
+              variant={mainView === 'dashboard' ? 'filled' : 'subtle'}
+              justify="flex-start"
+              leftSection={<IconLayoutDashboard size={18} />}
+              onClick={() => setMainView('dashboard')}
+              fullWidth
+            >
+              Dashboard
+            </Button>
+            <Button
+              className="sidebar-nav-button"
+              variant={mainView === 'home-map' ? 'filled' : 'subtle'}
+              justify="flex-start"
+              leftSection={<IconSmartHome size={18} />}
+              onClick={() => setMainView('home-map')}
+              fullWidth
+            >
+              Home Map
+            </Button>
+            <Divider my={4} />
+            <Button
+              className="sidebar-nav-button"
+              variant={mainView === 'events' ? 'filled' : 'subtle'}
+              justify="flex-start"
+              leftSection={<IconBell size={18} />}
+              onClick={() => setMainView('events')}
+              fullWidth
+            >
+              Events
+            </Button>
+            <Button
+              className="sidebar-nav-button"
+              variant={mainView === 'history' ? 'filled' : 'subtle'}
+              justify="flex-start"
+              leftSection={<IconHistory size={18} />}
+              onClick={() => setMainView('history')}
+              fullWidth
+            >
+              Scan history
+            </Button>
+            <Button
+              className="sidebar-nav-button"
+              variant={mainView === 'notifications' ? 'filled' : 'subtle'}
+              justify="flex-start"
+              leftSection={<IconBell size={18} />}
+              onClick={() => setMainView('notifications')}
+              fullWidth
+            >
+              Notifications
+            </Button>
+            {canManageUsers && (
+              <>
+                <Divider my={4} />
+                <Button
+                  className="sidebar-nav-button"
+                  component="a"
+                  href={getAdminUrl()}
+                  target="_blank"
+                  rel="noreferrer"
+                  variant="subtle"
+                  justify="flex-start"
+                  leftSection={<IconShieldLock size={18} />}
+                  fullWidth
+                >
+                  Admin site
+                </Button>
+                <Button
+                  className="sidebar-nav-button"
+                  variant={mainView === 'settings' ? 'filled' : 'subtle'}
+                  justify="flex-start"
+                  leftSection={<IconSettings size={18} />}
+                  onClick={() => setMainView('settings')}
+                  fullWidth
+                >
+                  Settings
+                </Button>
+              </>
+            )}
+          </Stack>
+        </aside>
+
+      <Container size="xl" py="xl" className="app-content">
         <LoadingOverlay visible={loading} />
         <Stack gap="lg">
           {error && (
@@ -3451,6 +3837,23 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 modal.open();
               }}
             />
+          ) : mainView === 'settings' && canManageUsers ? (
+            <SettingsPage
+              onSaved={async () => {
+                await loadData({ quiet: true });
+              }}
+            />
+          ) : mainView === 'events' ? (
+            <EventsPage
+              events={events}
+              eventType={eventType}
+              setEventType={setEventType}
+              timeZone={displayTimeZone}
+            />
+          ) : mainView === 'history' ? (
+            <ScanHistoryPage scanRuns={scanRuns} timeZone={displayTimeZone} />
+          ) : mainView === 'notifications' ? (
+            <NotificationsPage notifications={notifications} timeZone={displayTimeZone} />
           ) : (
             <>
           <DashboardStatusCards counters={counters} />
@@ -3569,8 +3972,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                   </Box>
                   <Stack className="device-list" gap={0}>
                     {filteredDevices.map((device) => (
-                      <button
-                        type="button"
+                      <UnstyledButton
                         className="device-list-row"
                         key={device.id}
                         onClick={() => {
@@ -3630,13 +4032,12 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                             </Text>
                           </Box>
                         </div>
-                      </button>
+                      </UnstyledButton>
                     ))}
                   </Stack>
                   <Stack className="device-mobile-list" gap={0}>
                     {filteredDevices.map((device) => (
-                      <button
-                        type="button"
+                      <UnstyledButton
                         className="device-mobile-row"
                         key={device.id}
                         onClick={() => {
@@ -3691,7 +4092,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                             <PortSummary ports={device.open_ports || []} />
                           </Box>
                         </SimpleGrid>
-                      </button>
+                      </UnstyledButton>
                     ))}
                   </Stack>
                 </>
@@ -3699,122 +4100,11 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
             </Stack>
           </Paper>
 
-          <Tabs value={activeTab} onChange={(value) => setActiveTab(value || 'events')}>
-            <Group justify="space-between" align="flex-end">
-              <Tabs.List>
-                <Tabs.Tab value="events" leftSection={<IconBell size={16} />}>Events</Tabs.Tab>
-                <Tabs.Tab value="history" leftSection={<IconHistory size={16} />}>Scan history</Tabs.Tab>
-                <Tabs.Tab value="notifications" leftSection={<IconBell size={16} />}>Notifications</Tabs.Tab>
-              </Tabs.List>
-              {activeTab === 'events' && (
-                <Select
-                  w={210}
-                  placeholder="Event type"
-                  clearable
-                  data={eventTypeOptions}
-                  value={eventType}
-                  onChange={(value) => setEventType(value || '')}
-                />
-              )}
-            </Group>
-
-            <Tabs.Panel value="events" pt="md">
-              <Paper className="content-panel" radius="md">
-                <Table verticalSpacing="sm">
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>Type</Table.Th>
-                      <Table.Th>Message</Table.Th>
-                      <Table.Th>Created</Table.Th>
-                      <Table.Th>Status</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {events.map((event) => (
-                      <Table.Tr key={event.id}>
-                        <Table.Td>
-                          <Badge variant="light">
-                            {event.event_type_display || event.event_type}
-                          </Badge>
-                        </Table.Td>
-                        <Table.Td>{event.message}</Table.Td>
-                        <Table.Td>{formatDate(event.created_at, displayTimeZone)}</Table.Td>
-                        <Table.Td>
-                          <Badge color={event.notified ? 'teal' : 'gray'} variant="light">
-                            {event.notified ? 'Handled' : 'Pending'}
-                          </Badge>
-                        </Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </Paper>
-            </Tabs.Panel>
-
-            <Tabs.Panel value="history" pt="md">
-              <Paper className="content-panel" radius="md">
-                <Table verticalSpacing="sm">
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>Status</Table.Th>
-                      <Table.Th>Range</Table.Th>
-                      <Table.Th>Started</Table.Th>
-                      <Table.Th>Seen</Table.Th>
-                      <Table.Th>Port changes</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {scanRuns.map((run) => (
-                      <Table.Tr key={run.id}>
-                        <Table.Td>
-                          <Badge color={run.status === 'success' ? 'teal' : run.status === 'failed' ? 'red' : 'blue'} variant="light">
-                            {run.status}
-                          </Badge>
-                        </Table.Td>
-                        <Table.Td>{run.ip_range}</Table.Td>
-                        <Table.Td>{formatDate(run.started_at, displayTimeZone)}</Table.Td>
-                        <Table.Td>{run.devices_seen}</Table.Td>
-                        <Table.Td>{run.ports_opened} / {run.ports_closed}</Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </Paper>
-            </Tabs.Panel>
-
-            <Tabs.Panel value="notifications" pt="md">
-              <Paper className="content-panel" radius="md">
-                <Table verticalSpacing="sm">
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th>Channel</Table.Th>
-                      <Table.Th>Status</Table.Th>
-                      <Table.Th>Attempts</Table.Th>
-                      <Table.Th>Created</Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {notifications.map((delivery) => (
-                      <Table.Tr key={delivery.id}>
-                        <Table.Td>{delivery.channel_display || delivery.channel}</Table.Td>
-                        <Table.Td>
-                          <Badge color={delivery.status === 'sent' ? 'teal' : delivery.status === 'failed' ? 'red' : 'gray'} variant="light">
-                            {delivery.status_display || delivery.status}
-                          </Badge>
-                        </Table.Td>
-                        <Table.Td>{delivery.attempts}</Table.Td>
-                        <Table.Td>{formatDate(delivery.created_at, displayTimeZone)}</Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </Paper>
-            </Tabs.Panel>
-          </Tabs>
             </>
           )}
         </Stack>
       </Container>
+      </div>
 
       <Modal
         opened={scanDetailsOpened}
@@ -3844,15 +4134,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         currentUser={user}
         onCurrentUserUpdated={updateCurrentUser}
       />
-      {canManageUsers && (
-        <SettingsModal
-          opened={settingsModalOpened}
-          onClose={settingsModal.close}
-          onSaved={async () => {
-            await loadData({ quiet: true });
-          }}
-        />
-      )}
       <Modal opened={logoutModalOpened} onClose={logoutModal.close} title="Log off" centered>
         <Stack>
           <Text>Are you sure you want to log off?</Text>

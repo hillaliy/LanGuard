@@ -27,6 +27,7 @@ import logging
 
 from django.utils import timezone
 from .datetime_utils import utc_isoformat
+from .maintenance import cleanup_activity
 from .serializers import (
     AppSettingsSerializer,
     DeviceSerializer,
@@ -624,6 +625,46 @@ def home_map_layout(request):
     config.home_map_layout = serializer.validated_data["layout"]
     config.save(update_fields=["home_map_layout", "updated_at"])
     return Response({"data": {"layout": config.home_map_layout or {}}})
+
+
+@extend_schema(
+    request=inline_serializer(
+        name="MaintenanceCleanupRequest",
+        fields={
+            "target": serializers.ChoiceField(
+                choices=["events", "scan_runs", "notifications"]
+            ),
+            "older_than_days": serializers.IntegerField(min_value=1, max_value=3650, required=False),
+            "clean_all": serializers.BooleanField(required=False),
+        },
+    ),
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def maintenance_cleanup(request):
+    target = str(request.data.get("target") or "").strip()
+    if target not in {"events", "scan_runs", "notifications"}:
+        raise ValidationError(
+            {"target": "Must be one of: events, scan_runs, notifications."}
+        )
+
+    clean_all = request.data.get("clean_all") is True
+    older_than_days = request.data.get("older_than_days", 90)
+
+    if not clean_all:
+        try:
+            older_than_days = int(older_than_days)
+        except (TypeError, ValueError):
+            raise ValidationError({"older_than_days": "Must be a number of days."})
+
+        if older_than_days < 1 or older_than_days > 3650:
+            raise ValidationError({"older_than_days": "Must be between 1 and 3650 days."})
+
+    return Response(
+        {"data": cleanup_activity(target, older_than_days, clean_all=clean_all)},
+        status=status.HTTP_200_OK,
+    )
 
 
 @extend_schema(
