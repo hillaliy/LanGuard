@@ -4,6 +4,14 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.3.1',
+    date: '2026-08-23',
+    items: [
+      'Reduced SQLite database lock errors in Docker by enabling a longer busy timeout and WAL mode.',
+      'Prevented scheduled activity cleanup from running at the same time as the startup scan.',
+    ],
+  },
+  {
     version: '1.3.0',
     date: '2026-08-23',
     items: [

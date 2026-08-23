@@ -67,7 +67,7 @@ def validate_production_settings(environment, secret_key, debug, allowed_hosts):
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
-APP_VERSION = os.getenv("APP_VERSION", "1.3.0")
+APP_VERSION = os.getenv("APP_VERSION", "1.3.1")
 LATEST_VERSION_URL = os.getenv(
     "LATEST_VERSION_URL",
     "https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/package.json",
@@ -184,6 +184,9 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": os.getenv("DB_PATH", BASE_DIR / "db.sqlite3"),
+        "OPTIONS": {
+            "timeout": int(os.getenv("SQLITE_TIMEOUT", "30")),
+        },
     }
 }
 
