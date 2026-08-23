@@ -4,6 +4,8 @@
 
 - Reduced SQLite database lock errors in Docker by enabling a longer busy timeout and WAL mode.
 - Prevented scheduled activity cleanup from running at the same time as the startup scan.
+- Improved Docker dashboard/page responsiveness by avoiding full activity-history loads during startup and page navigation.
+- Added database indexes for scan history, events, and notification history.
 
 ## 1.3.0 - 2026-08-23
 

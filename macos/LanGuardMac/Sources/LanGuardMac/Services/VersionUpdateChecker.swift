@@ -7,10 +7,11 @@ struct VersionUpdateStatus: Equatable {
 }
 
 enum VersionUpdateChecker {
-    private static let latestReleaseAPIURL = URL(string: "https://api.github.com/repos/hillaliy/LanGuard/releases/latest")!
+    private static let releasesAPIURL = URL(string: "https://api.github.com/repos/hillaliy/LanGuard/releases?per_page=20")!
+    private static let releasesPageURL = URL(string: "https://github.com/hillaliy/LanGuard/releases")!
 
     static func check(currentVersion: String) async throws -> VersionUpdateStatus {
-        var request = URLRequest(url: latestReleaseAPIURL)
+        var request = URLRequest(url: releasesAPIURL)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("LanGuardMac", forHTTPHeaderField: "User-Agent")
 
@@ -21,7 +22,15 @@ enum VersionUpdateChecker {
             throw VersionUpdateError.badResponse
         }
 
-        let release = try JSONDecoder().decode(GitHubReleaseResponse.self, from: data)
+        let releases = try JSONDecoder().decode([GitHubReleaseResponse].self, from: data)
+        guard let release = releases.first(where: isMacRelease) else {
+            return VersionUpdateStatus(
+                latestVersion: normalizedVersionString(currentVersion),
+                releaseURL: releasesPageURL,
+                isUpdateAvailable: false
+            )
+        }
+
         let latestVersion = normalizedVersionString(release.tagName)
 
         return VersionUpdateStatus(
@@ -67,6 +76,39 @@ enum VersionUpdateChecker {
 
         return components.isEmpty ? [0] : components
     }
+
+    static func isMacRelease(
+        body: String?,
+        assetNames: [String],
+        isDraft: Bool = false,
+        isPrerelease: Bool = false
+    ) -> Bool {
+        if isDraft || isPrerelease {
+            return false
+        }
+
+        let hasMacDownload = assetNames.contains { assetName in
+            assetName.lowercased().hasSuffix(".dmg")
+        }
+        if hasMacDownload {
+            return true
+        }
+
+        let bodyText = (body ?? "").lowercased()
+        return !bodyText.contains("no new macos app build")
+            && !bodyText.contains("same macos app as")
+            && !bodyText.contains("docker/web only")
+            && !bodyText.contains("docker only")
+    }
+
+    private static func isMacRelease(_ release: GitHubReleaseResponse) -> Bool {
+        isMacRelease(
+            body: release.body,
+            assetNames: release.assets.map(\.name),
+            isDraft: release.isDraft,
+            isPrerelease: release.isPrerelease
+        )
+    }
 }
 
 private enum VersionUpdateError: Error {
@@ -76,9 +118,21 @@ private enum VersionUpdateError: Error {
 private struct GitHubReleaseResponse: Decodable {
     let tagName: String
     let htmlURL: URL
+    let body: String?
+    let isDraft: Bool
+    let isPrerelease: Bool
+    let assets: [GitHubReleaseAsset]
 
     private enum CodingKeys: String, CodingKey {
         case tagName = "tag_name"
         case htmlURL = "html_url"
+        case body
+        case isDraft = "draft"
+        case isPrerelease = "prerelease"
+        case assets
     }
+}
+
+private struct GitHubReleaseAsset: Decodable {
+    let name: String
 }

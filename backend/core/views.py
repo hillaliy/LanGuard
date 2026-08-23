@@ -1093,7 +1093,7 @@ def scan_runs(request):
         runs,
         ScanRunSerializer,
         default_limit=25,
-        max_limit=100,
+        max_limit=500,
     )
 
 
@@ -1172,7 +1172,7 @@ def events(request):
         queryset,
         NetworkEventSerializer,
         default_limit=50,
-        max_limit=200,
+        max_limit=500,
     )
 
 
@@ -1209,7 +1209,7 @@ def notifications(request):
         queryset,
         NotificationDeliverySerializer,
         default_limit=50,
-        max_limit=200,
+        max_limit=500,
     )
 
 
