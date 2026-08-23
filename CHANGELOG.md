@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.3.1 - 2026-08-23
+
+- Reduced SQLite database lock errors in Docker by enabling a longer busy timeout and WAL mode.
+- Prevented scheduled activity cleanup from running at the same time as the startup scan.
+
 ## 1.3.0 - 2026-08-23
 
 - Moved Docker navigation into a sidebar and converted Settings into a full page.

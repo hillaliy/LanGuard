@@ -3,6 +3,7 @@ import signal
 import threading
 
 from django.conf import settings
+from django.db import close_old_connections
 from django.core.management.base import BaseCommand
 
 from core.maintenance import cleanup_all_activity
@@ -84,32 +85,40 @@ class Command(BaseCommand):
             )
 
         def run_scheduled_scan():
+            close_old_connections()
             try:
                 scheduled_scan()
             except Exception:
                 LOGGER.exception("Scheduled scan failed for %s", ip_range)
                 self.stderr.write(self.style.ERROR(f"Scheduled scan failed for {ip_range}"))
+            finally:
+                close_old_connections()
 
         def run_notification_retry():
+            close_old_connections()
             try:
                 scheduled_notification_retry()
             except Exception:
                 LOGGER.exception("Scheduled notification retry failed")
                 self.stderr.write(self.style.ERROR("Scheduled notification retry failed"))
+            finally:
+                close_old_connections()
 
         def run_activity_cleanup():
+            close_old_connections()
             try:
                 scheduled_activity_cleanup()
             except Exception:
                 LOGGER.exception("Scheduled activity cleanup failed")
                 self.stderr.write(self.style.ERROR("Scheduled activity cleanup failed"))
+            finally:
+                close_old_connections()
 
         def retry_loop():
             while not stop_event.wait(retry_interval * 60):
                 run_notification_retry()
 
         def activity_cleanup_loop():
-            run_activity_cleanup()
             while not stop_event.wait(24 * 60 * 60):
                 run_activity_cleanup()
 
