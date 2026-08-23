@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.3.0',
+    date: '2026-08-23',
+    items: [
+      'Moved Docker navigation into a sidebar and converted Settings into a full page.',
+      'Added separate cleanup controls for events, scan history, and notification logs with retention settings.',
+      'Added scheduled automatic cleanup for activity data, defaulting to 90 days.',
+      'Improved the Home Map with persistent room nesting, layout reset confirmation, and clearer editing behavior.',
+    ],
+  },
+  {
     version: '1.2.0',
     date: '2026-08-22',
     items: [

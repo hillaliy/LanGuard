@@ -112,6 +112,7 @@ def retry_failed_notifications(limit=50, max_attempts=None):
     deliveries = NotificationDelivery.objects.filter(
         status=NotificationDelivery.Status.FAILED,
         attempts__lt=max_attempts,
+        event__isnull=False,
     ).select_related("event", "event__device")[:limit]
 
     retried = []

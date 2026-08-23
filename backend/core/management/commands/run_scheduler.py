@@ -5,6 +5,7 @@ import threading
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from core.maintenance import cleanup_all_activity
 from core.models import AppSettings
 from core.notifications import retry_failed_notifications
 from core.scan import scan
@@ -64,6 +65,24 @@ class Command(BaseCommand):
                     )
                 )
 
+        def scheduled_activity_cleanup():
+            retention_days = AppSettings.load().activity_cleanup_retention_days
+            LOGGER.info(
+                "Cleaning activity records older than %s days",
+                retention_days,
+            )
+            result = cleanup_all_activity(retention_days)
+            deleted = result["deleted"]
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "Cleaned activity records older than "
+                    f"{retention_days} days: "
+                    f"{deleted['events']} events, "
+                    f"{deleted['scan_runs']} scan runs, "
+                    f"{deleted['notifications']} notifications"
+                )
+            )
+
         def run_scheduled_scan():
             try:
                 scheduled_scan()
@@ -78,9 +97,21 @@ class Command(BaseCommand):
                 LOGGER.exception("Scheduled notification retry failed")
                 self.stderr.write(self.style.ERROR("Scheduled notification retry failed"))
 
+        def run_activity_cleanup():
+            try:
+                scheduled_activity_cleanup()
+            except Exception:
+                LOGGER.exception("Scheduled activity cleanup failed")
+                self.stderr.write(self.style.ERROR("Scheduled activity cleanup failed"))
+
         def retry_loop():
             while not stop_event.wait(retry_interval * 60):
                 run_notification_retry()
+
+        def activity_cleanup_loop():
+            run_activity_cleanup()
+            while not stop_event.wait(24 * 60 * 60):
+                run_activity_cleanup()
 
         def stop_scheduler(signum, frame):
             self.stdout.write("Stopping scheduler...")
@@ -91,6 +122,8 @@ class Command(BaseCommand):
 
         retry_thread = threading.Thread(target=retry_loop, daemon=True)
         retry_thread.start()
+        activity_cleanup_thread = threading.Thread(target=activity_cleanup_loop, daemon=True)
+        activity_cleanup_thread.start()
 
         if options["run_now"]:
             run_scheduled_scan()
@@ -104,6 +137,9 @@ class Command(BaseCommand):
             self.style.SUCCESS(
                 f"Scheduled notification retries every {retry_interval} minutes"
             )
+        )
+        self.stdout.write(
+            self.style.SUCCESS("Scheduled activity cleanup every 24 hours")
         )
 
         while not stop_event.wait(interval * 60):

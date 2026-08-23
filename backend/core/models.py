@@ -158,7 +158,9 @@ class NotificationDelivery(models.Model):
     event = models.ForeignKey(
         NetworkEvent,
         related_name="notifications",
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
     )
     channel = models.CharField(max_length=32, choices=Channel.choices)
     status = models.CharField(
@@ -197,6 +199,7 @@ class AppSettings(models.Model):
     notification_quiet_hours_enabled = models.BooleanField(default=False)
     notification_quiet_hours_start = models.CharField(max_length=5, default="22:00")
     notification_quiet_hours_end = models.CharField(max_length=5, default="07:00")
+    activity_cleanup_retention_days = models.PositiveIntegerField(default=90)
     home_map_layout = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -230,6 +233,7 @@ class AppSettings(models.Model):
             "notification_quiet_hours_enabled": False,
             "notification_quiet_hours_start": "22:00",
             "notification_quiet_hours_end": "07:00",
+            "activity_cleanup_retention_days": 90,
             "home_map_layout": {},
         }
         config, _ = cls.objects.get_or_create(singleton_key=1, defaults=defaults)
