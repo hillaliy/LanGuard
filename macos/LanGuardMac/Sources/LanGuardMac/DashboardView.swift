@@ -67,7 +67,12 @@ struct DashboardView: View {
             }
 
             GridRow {
-                RecentlyChangedCard(changes: visibleRecentChanges, maximumItems: 8, fixedHeight: 328)
+                RecentlyChangedCard(
+                    changes: visibleRecentChanges,
+                    maximumItems: 8,
+                    fixedHeight: 328,
+                    onSelectChange: openChangedDevice
+                )
                     .padding(.top, 12)
                     .gridCellColumns(2)
 
@@ -123,7 +128,12 @@ struct DashboardView: View {
 
     private var compactLowerContent: some View {
         HStack(alignment: .top, spacing: 14) {
-            RecentlyChangedCard(changes: visibleRecentChanges, maximumItems: 8, fixedHeight: 292)
+            RecentlyChangedCard(
+                changes: visibleRecentChanges,
+                maximumItems: 8,
+                fixedHeight: 292,
+                onSelectChange: openChangedDevice
+            )
             WatchListCard(devices: appModel.devices, fixedHeight: 292) { device in
                 editingDevice = device
             }
@@ -134,6 +144,13 @@ struct DashboardView: View {
         guard !appModel.devices.isEmpty else { return [] }
         let deviceIDs = Set(appModel.devices.map(\.id))
         return appModel.recentChanges.filter { deviceIDs.contains($0.deviceID) }
+    }
+
+    private func openChangedDevice(_ change: DeviceChange) {
+        guard let device = appModel.devices.first(where: { $0.id == change.deviceID }) else {
+            return
+        }
+        editingDevice = device
     }
 
     @ViewBuilder
@@ -713,6 +730,7 @@ private struct RecentlyChangedCard: View {
     let changes: [DeviceChange]
     let maximumItems: Int
     var fixedHeight: CGFloat?
+    var onSelectChange: (DeviceChange) -> Void = { _ in }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -744,23 +762,29 @@ private struct RecentlyChangedCard: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         ForEach(displayChanges) { change in
-                            HStack(spacing: 12) {
-                                Image(systemName: iconName(for: change.kind))
-                                    .foregroundStyle(.blue)
-                                    .frame(width: 24)
+                            Button {
+                                onSelectChange(change)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: iconName(for: change.kind))
+                                        .foregroundStyle(.blue)
+                                        .frame(width: 24)
 
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(change.deviceName)
-                                        .font(.headline)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                    Text("\(change.kind.title) • \(change.ipAddress)")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(change.deviceName)
+                                            .font(.headline)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                        Text("\(change.kind.title) • \(change.ipAddress)")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+
+                                    Spacer()
                                 }
-
-                                Spacer()
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
                             .padding(.vertical, 1)
                         }
                     }

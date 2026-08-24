@@ -4,6 +4,16 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.3.2',
+    date: '2026-08-24',
+    items: [
+      'Added access to edit devices directly from the Recently Changed list in Docker and macOS.',
+      'Improved activity log scrolling so events, scan history, and notifications can load beyond 500 records.',
+      'Clarified cleanup actions and kept Home Map room backgrounds consistent in dark mode.',
+      'Updated the README preview image with the sidebar layout and fictional demo data.',
+    ],
+  },
+  {
     version: '1.3.1',
     date: '2026-08-23',
     items: [
