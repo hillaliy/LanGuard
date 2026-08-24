@@ -3,7 +3,7 @@ djangorestframework==3.18.0
 django-cors-headers==4.9.0
 drf-spectacular==0.30.0
 granian==2.8.1
-python-dotenv==1.2.2
+python-dotenv==1.2.3
 requests==2.34.2
 scapy==2.7.0
 whitenoise==6.12.0
