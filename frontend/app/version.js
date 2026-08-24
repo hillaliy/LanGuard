@@ -11,6 +11,7 @@ export const CHANGELOG_ENTRIES = [
       'Improved activity log scrolling so events, scan history, and notifications can load beyond 500 records.',
       'Clarified cleanup actions and kept Home Map room backgrounds consistent in dark mode.',
       'Updated the README preview image with the sidebar layout and fictional demo data.',
+      'Updated backend and frontend dependencies, including Granian, Mantine, and Next.js.',
     ],
   },
   {
