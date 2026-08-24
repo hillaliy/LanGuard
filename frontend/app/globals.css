@@ -970,7 +970,6 @@ textarea {
 }
 
 .home-map-room.attention {
-  background: color-mix(in srgb, #fff4e6 8%, var(--muted-panel-bg));
   border-color: color-mix(in srgb, #fd7e14 36%, color-mix(in srgb, var(--field-text) 42%, var(--border-color)));
 }
 

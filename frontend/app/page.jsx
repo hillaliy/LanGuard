@@ -14,6 +14,7 @@ import {
   Group,
   Image,
   LoadingOverlay,
+  Loader,
   Modal,
   NumberInput,
   Paper,
@@ -1872,6 +1873,10 @@ function LatestScanCard({ scanStatus, scanVisibility, timeZone, onOpenDetails })
 
 function DashboardInsightCards({ events = [], devices = [], onSelectDevice, timeZone }) {
   const recentEvents = events;
+  const deviceById = useMemo(
+    () => new Map(devices.map((device) => [String(device.id), device])),
+    [devices]
+  );
   const attentionDevices = devices
     .filter((device) => !device.known || ['high', 'medium'].includes(device.risk_level))
     .sort((first, second) => {
@@ -1892,7 +1897,13 @@ function DashboardInsightCards({ events = [], devices = [], onSelectDevice, time
         />
         <Stack className="dashboard-insight-list" gap="sm">
           {recentEvents.length ? recentEvents.map((event) => (
-            <DashboardEventRow key={event.id} event={event} timeZone={timeZone} />
+            <DashboardEventRow
+              key={event.id}
+              event={event}
+              timeZone={timeZone}
+              device={eventDeviceForRow(event, deviceById, devices)}
+              onSelectDevice={onSelectDevice}
+            />
           )) : (
             <DashboardEmptyState label="No recent changes" />
           )}
@@ -1921,6 +1932,31 @@ function DashboardInsightCards({ events = [], devices = [], onSelectDevice, time
   );
 }
 
+function eventDeviceId(event) {
+  const eventDevice = event?.device;
+  if (eventDevice && typeof eventDevice === 'object') {
+    return eventDevice.id;
+  }
+  return eventDevice;
+}
+
+function eventDeviceForRow(event, deviceById, devices) {
+  const id = eventDeviceId(event);
+  if (id !== null && id !== undefined && deviceById.has(String(id))) {
+    return deviceById.get(String(id));
+  }
+
+  const metadata = event?.metadata || {};
+  const eventMac = normalizeMacText(metadata.mac);
+  const eventIp = String(metadata.ip || '').trim();
+  return devices.find((device) => {
+    if (eventMac && normalizeMacText(device.mac) === eventMac) {
+      return true;
+    }
+    return eventIp && String(device.ip || '').trim() === eventIp;
+  }) || null;
+}
+
 function DashboardInsightHeader({ icon, title, count, color }) {
   return (
     <Group justify="space-between" align="center" mb="md" wrap="nowrap">
@@ -1935,9 +1971,30 @@ function DashboardInsightHeader({ icon, title, count, color }) {
   );
 }
 
-function DashboardEventRow({ event, timeZone }) {
-  return (
-    <div className="dashboard-insight-row">
+function DashboardEventRow({ event, timeZone, device, onSelectDevice }) {
+  async function handleSelectEventDevice() {
+    if (device) {
+      onSelectDevice(device);
+      return;
+    }
+
+    const id = eventDeviceId(event);
+    if (id === null || id === undefined) {
+      return;
+    }
+
+    try {
+      const payload = await apiRequest(`device/?id=${id}`);
+      if (payload.data) {
+        onSelectDevice(payload.data);
+      }
+    } catch (err) {
+      showErrorNotification('Could not open device', err.message);
+    }
+  }
+
+  const content = (
+    <>
       <span className="dashboard-insight-row-icon blue">
         <IconHistory size={20} />
       </span>
@@ -1951,6 +2008,24 @@ function DashboardEventRow({ event, timeZone }) {
             .join(' - ')}
         </Text>
       </Box>
+    </>
+  );
+
+  if (device || eventDeviceId(event) !== null && eventDeviceId(event) !== undefined) {
+    return (
+      <UnstyledButton
+        className="dashboard-insight-row dashboard-insight-button"
+        aria-label={`Open ${event.message || 'changed device'}`}
+        onClick={handleSelectEventDevice}
+      >
+        {content}
+      </UnstyledButton>
+    );
+  }
+
+  return (
+    <div className="dashboard-insight-row">
+      {content}
     </div>
   );
 }
@@ -3145,6 +3220,22 @@ function SettingsPage({ onSaved }) {
           <Group justify="flex-end">
             <Button
               color="red"
+              leftSection={<IconTrash size={18} />}
+              loading={Boolean(cleaningActivity)}
+              onClick={async () => {
+                const cleaned = await cleanupActivity(true);
+                if (cleaned) {
+                  cleanupConfirm.close();
+                }
+              }}
+            >
+              Clean all
+            </Button>
+            <Button variant="default" onClick={cleanupConfirm.close}>
+              Cancel
+            </Button>
+            <Button
+              color="red"
               variant="light"
               leftSection={<IconTrash size={18} />}
               loading={Boolean(cleaningActivity)}
@@ -3157,22 +3248,6 @@ function SettingsPage({ onSaved }) {
             >
               Clean
             </Button>
-            <Button variant="default" onClick={cleanupConfirm.close}>
-              Cancel
-            </Button>
-            <Button
-              color="red"
-              leftSection={<IconTrash size={18} />}
-              loading={Boolean(cleaningActivity)}
-              onClick={async () => {
-                const cleaned = await cleanupActivity(true);
-                if (cleaned) {
-                  cleanupConfirm.close();
-                }
-              }}
-            >
-              Clean all
-            </Button>
           </Group>
         </Stack>
       </Modal>
@@ -3180,24 +3255,61 @@ function SettingsPage({ onSaved }) {
   );
 }
 
-function ActivityTablePanel({ children }) {
+function ActivityTablePanel({ children, hasMore = false, loadingMore = false, onLoadMore }) {
+  const viewportRef = useRef(null);
+  const loadRequestedRef = useRef(false);
+
+  useEffect(() => {
+    if (!loadingMore) {
+      loadRequestedRef.current = false;
+    }
+  }, [loadingMore]);
+
+  function handleScrollPositionChange() {
+    const viewport = viewportRef.current;
+    if (!viewport || !hasMore || loadingMore || loadRequestedRef.current || !onLoadMore) {
+      return;
+    }
+
+    const remaining = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+    if (remaining < 140) {
+      loadRequestedRef.current = true;
+      onLoadMore();
+    }
+  }
+
   return (
     <Paper className="content-panel activity-table-panel" radius="md">
       <ScrollArea
+        viewportRef={viewportRef}
         h="min(640px, calc(100vh - 250px))"
         offsetScrollbars
         scrollbarSize={10}
         type="always"
+        onScrollPositionChange={handleScrollPositionChange}
       >
         <Box className="activity-table-scroll">
           {children}
+          {hasMore && (
+            <Group justify="center" p="md">
+              <Loader size="sm" />
+            </Group>
+          )}
         </Box>
       </ScrollArea>
     </Paper>
   );
 }
 
-function EventsPage({ events, eventType, setEventType, timeZone, pagination }) {
+function EventsPage({
+  events,
+  eventType,
+  setEventType,
+  timeZone,
+  pagination,
+  loadingMore,
+  onLoadMore,
+}) {
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
@@ -3223,7 +3335,11 @@ function EventsPage({ events, eventType, setEventType, timeZone, pagination }) {
         </Group>
       </Group>
 
-      <ActivityTablePanel>
+      <ActivityTablePanel
+        hasMore={hasNextActivityPage(pagination)}
+        loadingMore={loadingMore}
+        onLoadMore={onLoadMore}
+      >
         <Table verticalSpacing="sm">
           <Table.Thead>
             <Table.Tr>
@@ -3257,7 +3373,7 @@ function EventsPage({ events, eventType, setEventType, timeZone, pagination }) {
   );
 }
 
-function ScanHistoryPage({ scanRuns, timeZone, pagination }) {
+function ScanHistoryPage({ scanRuns, timeZone, pagination, loadingMore, onLoadMore }) {
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
@@ -3273,7 +3389,11 @@ function ScanHistoryPage({ scanRuns, timeZone, pagination }) {
         <Badge variant="light">{activityRecordLabel(pagination, scanRuns.length)}</Badge>
       </Group>
 
-      <ActivityTablePanel>
+      <ActivityTablePanel
+        hasMore={hasNextActivityPage(pagination)}
+        loadingMore={loadingMore}
+        onLoadMore={onLoadMore}
+      >
         <Table verticalSpacing="sm">
           <Table.Thead>
             <Table.Tr>
@@ -3305,7 +3425,13 @@ function ScanHistoryPage({ scanRuns, timeZone, pagination }) {
   );
 }
 
-function NotificationsPage({ notifications: deliveries, timeZone, pagination }) {
+function NotificationsPage({
+  notifications: deliveries,
+  timeZone,
+  pagination,
+  loadingMore,
+  onLoadMore,
+}) {
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
@@ -3321,7 +3447,11 @@ function NotificationsPage({ notifications: deliveries, timeZone, pagination }) 
         <Badge variant="light">{activityRecordLabel(pagination, deliveries.length)}</Badge>
       </Group>
 
-      <ActivityTablePanel>
+      <ActivityTablePanel
+        hasMore={hasNextActivityPage(pagination)}
+        loadingMore={loadingMore}
+        onLoadMore={onLoadMore}
+      >
         <Table verticalSpacing="sm">
           <Table.Thead>
             <Table.Tr>
@@ -3361,6 +3491,24 @@ function activityRecordLabel(pagination, loadedCount) {
   return `${loadedCount} records`;
 }
 
+function hasNextActivityPage(pagination) {
+  return pagination?.next_offset !== null && pagination?.next_offset !== undefined;
+}
+
+function appendUniqueById(current, incoming) {
+  const seen = new Set(current.map((item) => item.id));
+  return [
+    ...current,
+    ...incoming.filter((item) => {
+      if (seen.has(item.id)) {
+        return false;
+      }
+      seen.add(item.id);
+      return true;
+    }),
+  ];
+}
+
 function Dashboard({ user, onLogout, onUserUpdated }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -3385,6 +3533,11 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [eventPagination, setEventPagination] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [notificationPagination, setNotificationPagination] = useState(null);
+  const [activityLoadingMore, setActivityLoadingMore] = useState({
+    events: false,
+    scanRuns: false,
+    notifications: false,
+  });
   const [appSettings, setAppSettings] = useState(null);
   const [dashboardTimeZone, setDashboardTimeZone] = useState();
   const [search, setSearch] = useState('');
@@ -3538,16 +3691,17 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     }
   }
 
-  async function loadEventsData({ notifyOnError = false } = {}) {
+  async function loadEventsData({ notifyOnError = false, offset = 0, append = false } = {}) {
     try {
       const payload = await apiRequest('events/', {
         params: {
           event_type: eventType || undefined,
           limit: activityPageLimit,
-          offset: 0,
+          offset,
         },
       });
-      setEvents(payload.data || []);
+      const nextEvents = payload.data || [];
+      setEvents((current) => (append ? appendUniqueById(current, nextEvents) : nextEvents));
       setEventPagination(payload.pagination || null);
     } catch (err) {
       if (notifyOnError) {
@@ -3556,15 +3710,16 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     }
   }
 
-  async function loadScanRunsData({ notifyOnError = false } = {}) {
+  async function loadScanRunsData({ notifyOnError = false, offset = 0, append = false } = {}) {
     try {
       const payload = await apiRequest('scan/runs/', {
         params: {
           limit: activityPageLimit,
-          offset: 0,
+          offset,
         },
       });
-      setScanRuns(payload.data || []);
+      const nextRuns = payload.data || [];
+      setScanRuns((current) => (append ? appendUniqueById(current, nextRuns) : nextRuns));
       setScanRunPagination(payload.pagination || null);
     } catch (err) {
       if (notifyOnError) {
@@ -3573,20 +3728,71 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     }
   }
 
-  async function loadNotificationsData({ notifyOnError = false } = {}) {
+  async function loadNotificationsData({ notifyOnError = false, offset = 0, append = false } = {}) {
     try {
       const payload = await apiRequest('notifications/', {
         params: {
           limit: activityPageLimit,
-          offset: 0,
+          offset,
         },
       });
-      setNotifications(payload.data || []);
+      const nextNotifications = payload.data || [];
+      setNotifications((current) => (
+        append ? appendUniqueById(current, nextNotifications) : nextNotifications
+      ));
       setNotificationPagination(payload.pagination || null);
     } catch (err) {
       if (notifyOnError) {
         showErrorNotification('Notifications refresh failed', err.message);
       }
+    }
+  }
+
+  async function loadMoreEventsData() {
+    if (!hasNextActivityPage(eventPagination) || activityLoadingMore.events) {
+      return;
+    }
+    setActivityLoadingMore((current) => ({ ...current, events: true }));
+    try {
+      await loadEventsData({
+        notifyOnError: true,
+        offset: eventPagination.next_offset,
+        append: true,
+      });
+    } finally {
+      setActivityLoadingMore((current) => ({ ...current, events: false }));
+    }
+  }
+
+  async function loadMoreScanRunsData() {
+    if (!hasNextActivityPage(scanRunPagination) || activityLoadingMore.scanRuns) {
+      return;
+    }
+    setActivityLoadingMore((current) => ({ ...current, scanRuns: true }));
+    try {
+      await loadScanRunsData({
+        notifyOnError: true,
+        offset: scanRunPagination.next_offset,
+        append: true,
+      });
+    } finally {
+      setActivityLoadingMore((current) => ({ ...current, scanRuns: false }));
+    }
+  }
+
+  async function loadMoreNotificationsData() {
+    if (!hasNextActivityPage(notificationPagination) || activityLoadingMore.notifications) {
+      return;
+    }
+    setActivityLoadingMore((current) => ({ ...current, notifications: true }));
+    try {
+      await loadNotificationsData({
+        notifyOnError: true,
+        offset: notificationPagination.next_offset,
+        append: true,
+      });
+    } finally {
+      setActivityLoadingMore((current) => ({ ...current, notifications: false }));
     }
   }
 
@@ -3905,18 +4111,24 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
               setEventType={setEventType}
               timeZone={displayTimeZone}
               pagination={eventPagination}
+              loadingMore={activityLoadingMore.events}
+              onLoadMore={loadMoreEventsData}
             />
           ) : mainView === 'history' ? (
             <ScanHistoryPage
               scanRuns={scanRuns}
               timeZone={displayTimeZone}
               pagination={scanRunPagination}
+              loadingMore={activityLoadingMore.scanRuns}
+              onLoadMore={loadMoreScanRunsData}
             />
           ) : mainView === 'notifications' ? (
             <NotificationsPage
               notifications={notifications}
               timeZone={displayTimeZone}
               pagination={notificationPagination}
+              loadingMore={activityLoadingMore.notifications}
+              onLoadMore={loadMoreNotificationsData}
             />
           ) : (
             <>
