@@ -155,6 +155,33 @@ func deviceMergerPreservesCustomIcon() {
 }
 
 @Test
+func deviceMergerPreservesCommentsAndCurrentAttentionAcknowledgement() {
+    var existing = NetworkDevice(
+        id: "90:dd:5d:b7:bd:01",
+        name: "Managed server",
+        ipAddress: "192.168.0.51",
+        macAddress: "90:dd:5d:b7:bd:01",
+        comments: "Expected remote access",
+        risk: .high,
+        isKnown: true,
+        openPorts: [3389]
+    )
+    existing.setAttentionAcknowledged(true)
+    let discovered = NetworkDevice(
+        id: existing.id,
+        name: "Unknown Device BD01",
+        ipAddress: existing.ipAddress,
+        macAddress: existing.macAddress,
+        openPorts: [3389]
+    )
+
+    let result = DeviceMerger.merge(existing: [existing], discovered: [discovered])
+
+    #expect(result.devices.first?.comments == "Expected remote access")
+    #expect(result.devices.first?.isAttentionAcknowledged == true)
+}
+
+@Test
 func deviceMergerPreservesManualRole() {
     let existing = NetworkDevice(
         id: "90:dd:5d:b7:bd:01",

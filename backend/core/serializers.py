@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from django.contrib.auth.models import User
@@ -138,7 +141,11 @@ def device_risk(device):
         score += 3
         reasons.append("New unknown device")
 
-    open_ports = list(device.ports.filter(open=True).values_list("port", "protocol"))
+    open_ports = list(
+        device.ports.filter(open=True)
+        .order_by("port", "protocol")
+        .values_list("port", "protocol")
+    )
     risky_ports = [
         f"{protocol}/{port} ({RISKY_PORTS[port]})"
         for port, protocol in open_ports
@@ -177,7 +184,45 @@ def device_risk(device):
     }
 
 
+def device_risk_signature(device, risk_data=None):
+    current_risk = risk_data or device_risk(device)
+    payload = json.dumps(
+        {
+            "known": device.known,
+            "role": (device.role or "").strip().lower(),
+            "has_vendor": bool((device.vendor or "").strip()),
+            "status": device.status,
+            "missed_scans": device.missed_scans,
+            "open_ports": list(
+                device.ports.filter(open=True)
+                .order_by("port", "protocol")
+                .values_list("port", "protocol")
+            ),
+            "risk": current_risk,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def device_attention_acknowledged(device, risk_data=None):
+    if not device.known or not device.attention_acknowledged_signature:
+        return False
+    current_risk = risk_data or device_risk(device)
+    return device.attention_acknowledged_signature == device_risk_signature(device, current_risk)
+
+
+def device_needs_attention(device, risk_data=None):
+    current_risk = risk_data or device_risk(device)
+    requires_attention = not device.known or current_risk["level"] in {"medium", "high"}
+    return requires_attention and not device_attention_acknowledged(device, current_risk)
+
+
 class DeviceSerializer(serializers.ModelSerializer):
+    attention_acknowledged_signature = serializers.HiddenField(
+        default=serializers.CreateOnlyDefault("")
+    )
     firstseen = UTCDateTimeField(read_only=True)
     lastseen = UTCDateTimeField(read_only=True)
     last_status_check = UTCDateTimeField(read_only=True)
@@ -186,6 +231,9 @@ class DeviceSerializer(serializers.ModelSerializer):
     risk_level = serializers.SerializerMethodField()
     risk_score = serializers.SerializerMethodField()
     risk_reasons = serializers.SerializerMethodField()
+    attention_acknowledged = serializers.SerializerMethodField()
+    needs_attention = serializers.SerializerMethodField()
+    acknowledge_attention = serializers.BooleanField(write_only=True, required=False)
     status_display = serializers.CharField(
         source="get_status_display",
         read_only=True,
@@ -219,6 +267,35 @@ class DeviceSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_risk_reasons(self, obj):
         return self.get_device_risk(obj)["reasons"]
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_attention_acknowledged(self, obj):
+        return device_attention_acknowledged(obj, self.get_device_risk(obj))
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_needs_attention(self, obj):
+        return device_needs_attention(obj, self.get_device_risk(obj))
+
+    def validate(self, attrs):
+        known = attrs.get("known", self.instance.known if self.instance else False)
+        if attrs.get("acknowledge_attention") and not known:
+            raise serializers.ValidationError(
+                {"acknowledge_attention": "Only known devices can be acknowledged."}
+            )
+        return attrs
+
+    def update(self, instance, validated_data):
+        acknowledge_attention = validated_data.pop("acknowledge_attention", None)
+        instance = super().update(instance, validated_data)
+        if not instance.known:
+            instance.attention_acknowledged_signature = ""
+            instance.save(update_fields=["attention_acknowledged_signature"])
+        elif acknowledge_attention is not None:
+            instance.attention_acknowledged_signature = (
+                device_risk_signature(instance) if acknowledge_attention else ""
+            )
+            instance.save(update_fields=["attention_acknowledged_signature"])
+        return instance
 
 
 class ScanRunSerializer(serializers.ModelSerializer):

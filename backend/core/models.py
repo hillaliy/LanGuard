@@ -24,6 +24,8 @@ class Device(models.Model):
     ip = models.GenericIPAddressField()
     mac = models.CharField(max_length=17, unique=True)
     vendor = models.CharField(max_length=255, blank=True, default="")
+    comments = models.TextField(blank=True, default="")
+    attention_acknowledged_signature = models.CharField(max_length=64, blank=True, default="")
     role = models.CharField(max_length=32, blank=True, default="device")
     room = models.CharField(max_length=100, blank=True, default="")
     online = models.BooleanField(default=True)

@@ -28,6 +28,7 @@ import {
   Table,
   Text,
   TextInput,
+  Textarea,
   Title,
   Tooltip,
   UnstyledButton,
@@ -1878,7 +1879,7 @@ function DashboardInsightCards({ events = [], devices = [], onSelectDevice, time
     [devices]
   );
   const attentionDevices = devices
-    .filter((device) => !device.known || ['high', 'medium'].includes(device.risk_level))
+    .filter((device) => device.needs_attention ?? (!device.known || ['high', 'medium'].includes(device.risk_level)))
     .sort((first, second) => {
       const riskWeight = { high: 0, medium: 1, low: 2 };
       const firstWeight = first.known ? riskWeight[first.risk_level] ?? 2 : -1;
@@ -2216,6 +2217,8 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
   const [role, setRole] = useState('device');
   const [room, setRoom] = useState('');
   const [known, setKnown] = useState(false);
+  const [comments, setComments] = useState('');
+  const [attentionAcknowledged, setAttentionAcknowledged] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirmOpened, deleteConfirm] = useDisclosure(false);
@@ -2229,6 +2232,8 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
       setRole(device.role || 'device');
       setRoom(device.room || '');
       setKnown(Boolean(device.known));
+      setComments(device.comments || '');
+      setAttentionAcknowledged(Boolean(device.attention_acknowledged));
       setError('');
     }
   }, [device]);
@@ -2250,6 +2255,8 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
           room,
           hostname,
           known,
+          comments,
+          acknowledge_attention: known && attentionAcknowledged,
         },
       });
       await onSaved();
@@ -2350,11 +2357,34 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
           <DeviceIconPicker label="Secondary icon" value={secondaryIcon} onChange={setSecondaryIcon} />
         </SimpleGrid>
 
+        <Textarea
+          label="Comments"
+          placeholder="Add notes about this device"
+          value={comments}
+          onChange={(event) => setComments(event.currentTarget.value)}
+          autosize
+          minRows={2}
+          maxRows={5}
+        />
+
         <Group>
           <Switch
             label="Known device"
             checked={known}
-            onChange={(event) => setKnown(event.currentTarget.checked)}
+            onChange={(event) => {
+              const nextKnown = event.currentTarget.checked;
+              setKnown(nextKnown);
+              if (!nextKnown) {
+                setAttentionAcknowledged(false);
+              }
+            }}
+          />
+          <Switch
+            label="This device does not need attention"
+            description="Acknowledges the current risk. Risk changes will require attention again."
+            checked={attentionAcknowledged}
+            disabled={!known || (!device?.needs_attention && !device?.attention_acknowledged)}
+            onChange={(event) => setAttentionAcknowledged(event.currentTarget.checked)}
           />
           <Group gap="xs">
             <span className={`status-dot ${currentStatus.dot}`} />

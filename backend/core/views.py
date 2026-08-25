@@ -37,7 +37,9 @@ from .serializers import (
     ScanRunSerializer,
     UserManagementSerializer,
     UserSerializer,
+    device_attention_acknowledged,
     device_risk,
+    device_risk_signature,
 )
 from .models import (
     AppSettings,
@@ -263,6 +265,7 @@ def fetch_latest_version():
 
 
 def inventory_device_payload(device):
+    risk_data = device_risk(device)
     return {
         "name": device.name,
         "ip": device.ip,
@@ -273,7 +276,9 @@ def inventory_device_payload(device):
         "secondary_icon": export_inventory_icon(getattr(device, "secondary_icon", "")),
         "role": getattr(device, "role", "") or ("gateway" if device.is_gateway else "device"),
         "room": getattr(device, "room", ""),
-        "risk": device_risk(device)["level"],
+        "comments": device.comments,
+        "risk": risk_data["level"],
+        "attention_acknowledged": device_attention_acknowledged(device, risk_data),
         "known": device.known,
         "is_gateway": device.is_gateway,
         "status": device.status,
@@ -408,6 +413,14 @@ def import_inventory_devices(payload):
 
         name = str(item.get("name") or "Device").strip()[:100] or "Device"
         hostname = str(item.get("hostname") or item.get("hostName") or "").strip()[:255]
+        comments_present = "comments" in item
+        comments = str(item.get("comments") or "").strip()
+        attention_acknowledged_present = (
+            "attention_acknowledged" in item or "attentionAcknowledged" in item
+        )
+        attention_acknowledged = parse_inventory_bool(
+            item.get("attention_acknowledged", item.get("attentionAcknowledged", False))
+        )
         is_gateway = parse_inventory_bool(item.get("is_gateway", item.get("isGateway", False)))
         role = import_inventory_role(item)
         room = import_inventory_room(item)
@@ -450,6 +463,8 @@ def import_inventory_devices(payload):
             defaults["role"] = role or ("gateway" if is_gateway else "device")
         if room is not None:
             defaults["room"] = room
+        if comments_present:
+            defaults["comments"] = comments
 
         device, was_created = Device.objects.get_or_create(
             mac=mac,
@@ -475,6 +490,7 @@ def import_inventory_devices(payload):
                     "hostname",
                     *(['role'] if role is not None else []),
                     *(['room'] if room is not None else []),
+                    *(["comments"] if comments_present else []),
                     "known",
                     "is_gateway",
                     "online",
@@ -496,6 +512,14 @@ def import_inventory_devices(payload):
                     "lastseen": last_seen,
                 },
             )
+
+        if attention_acknowledged_present:
+            device.attention_acknowledged_signature = (
+                device_risk_signature(device)
+                if attention_acknowledged and device.known
+                else ""
+            )
+            device.save(update_fields=["attention_acknowledged_signature"])
 
     return {
         "created": created,
