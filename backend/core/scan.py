@@ -6,6 +6,7 @@ import re
 import socket
 import struct
 import time
+import warnings
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -13,6 +14,7 @@ from django.utils import timezone
 import requests
 import scapy.all as scapy
 from scapy.data import ManufDA
+from urllib3.exceptions import InsecureRequestWarning
 
 from .models import Device, DevicePort, NetworkEvent, ScanRun
 from .notifications import notify_event
@@ -36,6 +38,14 @@ MDNS_SERVICE_TYPES = (
     "_esphomelib._tcp.local",
     "_workstation._tcp.local",
     "_ssh._tcp.local",
+)
+WEB_INTERFACE_PORTS = (
+    (443, "https"),
+    (80, "http"),
+    (8443, "https"),
+    (8080, "http"),
+    (8000, "http"),
+    (8888, "http"),
 )
 DEVICE_GUESS_RULES = [
     {
@@ -264,10 +274,10 @@ def dns_encode_name(name):
     return bytes(encoded)
 
 
-def dns_query_packet(name, query_type=12, query_id=None):
+def dns_query_packet(name, query_type=12, query_id=None, query_class=1):
     query_id = random.randint(1, 65535) if query_id is None else query_id
     header = struct.pack("!HHHHHH", query_id, 0, 1, 0, 0, 0)
-    question = dns_encode_name(name) + struct.pack("!HH", query_type, 1)
+    question = dns_encode_name(name) + struct.pack("!HH", query_type, query_class)
     return header + question
 
 
@@ -404,6 +414,29 @@ def udp_responses(packet, address, port, timeout, max_responses=12):
     return responses
 
 
+def mdns_legacy_responses(packets, timeout, max_responses=48):
+    """Send one-shot mDNS queries from an ephemeral port and collect unicast replies."""
+    responses = []
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
+        sock.bind(("", 0))
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, struct.pack("B", 255))
+        for packet in packets:
+            sock.sendto(packet, ("224.0.0.251", 5353))
+
+        deadline = time.monotonic() + timeout
+        while len(responses) < max_responses:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            sock.settimeout(max(0.05, remaining))
+            try:
+                response, source = sock.recvfrom(9000)
+            except socket.timeout:
+                break
+            responses.append((response, source[0]))
+    return responses
+
+
 def mdns_multicast_responses(packets, timeout, max_responses=48):
     responses = []
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP) as sock:
@@ -437,19 +470,56 @@ def mdns_reverse_hostname(ip):
     name = reverse_dns_name(ip)
     if not name:
         return ""
-    packet = dns_query_packet(name, query_type=12, query_id=0)
+    packet = dns_query_packet(name, query_type=12)
     responses = []
-    for address in ("224.0.0.251", ip):
-        try:
-            responses.append(udp_exchange(packet, address, 5353, 0.7))
-        except OSError as exc:
-            LOGGER.debug("mDNS reverse lookup failed for %s via %s: %s", ip, address, exc)
-    for response in responses:
+    try:
+        responses.extend(mdns_legacy_responses([packet], 0.8, max_responses=8))
+    except OSError as exc:
+        LOGGER.debug("mDNS legacy reverse lookup failed for %s: %s", ip, exc)
+    try:
+        responses.append((udp_exchange(packet, ip, 5353, 0.7), ip))
+    except OSError as exc:
+        LOGGER.debug("mDNS direct reverse lookup failed for %s: %s", ip, exc)
+    for response, _ in responses:
         for ptr_name in dns_ptr_names(response, expected_owner=name):
-            cleaned = clean_hostname(ptr_name)
+            cleaned = clean_hostname(ptr_name, ip_address=ip)
             if cleaned:
                 return cleaned
     return ""
+
+
+def mdns_query_responses(service_types):
+    responses = []
+    legacy_packets = [
+        dns_query_packet(service_type, query_type=12)
+        for service_type in service_types
+    ]
+    try:
+        responses.extend(
+            mdns_legacy_responses(
+                legacy_packets,
+                MDNS_SERVICE_TIMEOUT_SECONDS,
+                max_responses=96,
+            )
+        )
+    except OSError as exc:
+        LOGGER.debug("mDNS one-shot service lookup failed: %s", exc)
+
+    multicast_packets = [
+        dns_query_packet(service_type, query_type=12, query_id=0)
+        for service_type in service_types
+    ]
+    try:
+        responses.extend(
+            mdns_multicast_responses(
+                multicast_packets,
+                MDNS_SERVICE_TIMEOUT_SECONDS,
+                max_responses=96,
+            )
+        )
+    except OSError as exc:
+        LOGGER.debug("mDNS multicast service lookup failed: %s", exc)
+    return responses
 
 
 def mdns_service_hostname(ip):
@@ -463,63 +533,44 @@ def mdns_service_hostname_map():
 
     hostnames_by_ip = {}
     responses = []
+    service_types = set(MDNS_SERVICE_TYPES)
     for attempt in range(MDNS_SERVICE_RETRY_COUNT):
-        packets = [
-            dns_query_packet(service_type, query_type=12, query_id=0)
-            for service_type in MDNS_SERVICE_TYPES
-        ]
-        try:
-            responses.extend(
-                mdns_multicast_responses(
-                    packets,
-                    MDNS_SERVICE_TIMEOUT_SECONDS,
-                    max_responses=48,
-                )
-            )
-        except OSError as exc:
-            LOGGER.debug("mDNS multicast service lookup failed: %s", exc)
-            for packet in packets:
-                try:
-                    responses.extend(
-                        udp_responses(
-                            packet,
-                            "224.0.0.251",
-                            5353,
-                            MDNS_SERVICE_TIMEOUT_SECONDS,
-                            max_responses=48,
-                        )
-                    )
-                except OSError as fallback_exc:
-                    LOGGER.debug("mDNS unicast service lookup failed: %s", fallback_exc)
+        attempt_responses = mdns_query_responses(sorted(service_types))
+        responses.extend(attempt_responses)
+        for response, _ in attempt_responses:
+            service_types.update(mdns_service_types_from_response(response))
         if attempt + 1 < MDNS_SERVICE_RETRY_COUNT:
             time.sleep(MDNS_SERVICE_RETRY_DELAY_SECONDS)
 
+    hostnames_by_ip.update(mdns_service_hostnames_from_responses(responses))
     for response, source_ip in responses:
-        for ip_address, hostname in mdns_service_hostnames_from_response(response).items():
-            hostnames_by_ip[ip_address] = hostname
         if source_ip not in hostnames_by_ip:
             hostname = mdns_service_hostname_from_response(response)
             if hostname:
                 hostnames_by_ip[source_ip] = hostname
-    MDNS_SERVICE_HOSTNAME_CACHE["expires_at"] = now + MDNS_SERVICE_CACHE_TTL_SECONDS
+    MDNS_SERVICE_HOSTNAME_CACHE["expires_at"] = time.monotonic() + MDNS_SERVICE_CACHE_TTL_SECONDS
     MDNS_SERVICE_HOSTNAME_CACHE["hostnames"] = dict(hostnames_by_ip)
     return hostnames_by_ip
 
 
 def mdns_service_hostnames_from_response(response):
+    return mdns_service_hostnames_from_responses([(response, "")])
+
+
+def mdns_service_hostnames_from_responses(responses):
     address_records = []
     service_names_by_target = {}
-    packet_records = dns_records(response)
-    for record in packet_records:
-        if record["type"] == 1 and record["rdlength"] == 4:
-            rdata = response[record["rdata_offset"] : record["rdata_offset"] + 4]
-            ip_address = ".".join(str(part) for part in rdata)
-            address_records.append((record["name"], ip_address))
-        elif record["type"] == 33:
-            target = dns_srv_target_name(response, record["rdata_offset"], record["rdlength"])
-            service_hostname = service_instance_hostname(record["name"])
-            if target and service_hostname:
-                service_names_by_target[target.strip().lower().rstrip(".")] = service_hostname
+    for response, _ in responses:
+        for record in dns_records(response):
+            if record["type"] == 1 and record["rdlength"] == 4:
+                rdata = response[record["rdata_offset"] : record["rdata_offset"] + 4]
+                ip_address = ".".join(str(part) for part in rdata)
+                address_records.append((record["name"], ip_address))
+            elif record["type"] == 33:
+                target = dns_srv_target_name(response, record["rdata_offset"], record["rdlength"])
+                service_hostname = service_instance_hostname(record["name"])
+                if target and service_hostname:
+                    service_names_by_target[target.strip().lower().rstrip(".")] = service_hostname
 
     hostnames_by_ip = {}
     for host, ip_address in address_records:
@@ -527,6 +578,18 @@ def mdns_service_hostnames_from_response(response):
         if hostname and hostname != ip_address:
             hostnames_by_ip[ip_address] = hostname
     return hostnames_by_ip
+
+
+def mdns_service_types_from_response(response):
+    service_types = set()
+    for record in dns_records(response):
+        if record["type"] != 12:
+            continue
+        service_name, _ = dns_read_name(response, record["rdata_offset"])
+        normalized = service_name.strip().lower().rstrip(".")
+        if re.fullmatch(r"_[^.]+\._(?:tcp|udp)\.local", normalized):
+            service_types.add(normalized)
+    return service_types
 
 
 def mdns_service_hostname_from_response(response):
@@ -552,19 +615,8 @@ def dns_srv_target_name(packet, offset, length):
 
 def service_instance_hostname(name):
     cleaned_name = (name or "").strip().rstrip(".")
-    lowered = cleaned_name.lower()
-    service_suffixes = (
-        "._hap._tcp.local",
-        "._http._tcp.local",
-        "._arduino._tcp.local",
-        "._esphomelib._tcp.local",
-        "._workstation._tcp.local",
-        "._ssh._tcp.local",
-    )
-    for suffix in service_suffixes:
-        if lowered.endswith(suffix):
-            return clean_hostname(cleaned_name[: -len(suffix)])
-    return ""
+    match = re.match(r"^(.+)\._[^.]+\._(?:tcp|udp)\.local$", cleaned_name, re.IGNORECASE)
+    return clean_hostname(match.group(1)) if match else ""
 
 
 def llmnr_reverse_hostname(ip):
@@ -690,20 +742,65 @@ def hostname_from_device_description(body, ip=""):
     return ""
 
 
-def get_hostname(ip):
-    lookup_steps = (
-        reverse_dns_hostname,
-        mdns_reverse_hostname,
-        mdns_service_hostname,
-        llmnr_reverse_hostname,
-        ssdp_hostname,
-        netbios_hostname,
-    )
+def web_interface_candidates(ip, open_ports):
+    try:
+        parsed_ip = ipaddress.ip_address(ip)
+    except ValueError:
+        return []
+    if not (parsed_ip.is_private or parsed_ip.is_link_local):
+        return []
+
+    host = f"[{parsed_ip}]" if parsed_ip.version == 6 else str(parsed_ip)
+    available_ports = {int(port) for port in open_ports}
+    candidates = []
+    for port, scheme in WEB_INTERFACE_PORTS:
+        if port not in available_ports:
+            continue
+        default_port = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+        suffix = "" if default_port else f":{port}"
+        candidates.append(f"{scheme}://{host}{suffix}")
+    return candidates
+
+
+def detect_web_interface(ip, open_ports, timeout=1.2):
+    for url in web_interface_candidates(ip, open_ports):
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", InsecureRequestWarning)
+                response = requests.get(
+                    url,
+                    timeout=timeout,
+                    headers={"User-Agent": "LanGuard/1.0"},
+                    allow_redirects=False,
+                    stream=True,
+                    verify=False,
+                )
+        except requests.RequestException as exc:
+            LOGGER.debug("Web interface probe failed for %s: %s", url, exc)
+            continue
+        response.close()
+        return url
+    return ""
+
+
+def get_hostname(ip, hostname_hints=None):
+    lookup_steps = [reverse_dns_hostname, mdns_reverse_hostname]
+    if hostname_hints is None:
+        lookup_steps.extend((mdns_service_hostname, llmnr_reverse_hostname, ssdp_hostname))
+    else:
+        lookup_steps.extend((lambda address: hostname_hints.get(address, ""), llmnr_reverse_hostname))
+    lookup_steps.append(netbios_hostname)
     for lookup in lookup_steps:
         hostname = lookup(ip)
         if hostname:
             return hostname
     return ""
+
+
+def discover_hostname_hints():
+    hints = ssdp_hostname_map()
+    hints.update(mdns_service_hostname_map())
+    return hints
 
 
 def reverse_dns_hostname(ip):
@@ -715,9 +812,28 @@ def reverse_dns_hostname(ip):
         return ""
 
 
-def clean_hostname(hostname):
+def clean_hostname(hostname, ip_address=""):
     hostname = (hostname or "").strip().rstrip(".")
-    if not hostname:
+    lowered = hostname.lower()
+    invalid_values = {"", "?", "in", "internet", "ptr", "a", "aaaa"}
+    invalid_fragments = (
+        "connection timed out",
+        "no servers could be reached",
+        "communications error",
+        "operation timed out",
+        "timed out",
+        "nxdomain",
+        "server can't find",
+        "not found",
+        "in-addr.arpa",
+    )
+    if (
+        lowered in invalid_values
+        or hostname == ip_address
+        or hostname.startswith(";")
+        or hostname.isdigit()
+        or any(fragment in lowered for fragment in invalid_fragments)
+    ):
         return ""
     return hostname.split(".")[0].replace("-", " ").strip()
 
@@ -1220,6 +1336,7 @@ def scan(ip_range, scan_run=None):
         answered_list = discover_devices(ip_range)
         scan_started_at = timezone.now()
         oui = scapy.MANUFDB
+        hostname_hints = discover_hostname_hints()
 
         for element in answered_list:
             stats = sync_discovered_device(
@@ -1228,6 +1345,7 @@ def scan(ip_range, scan_run=None):
                 scan_run=scan_run,
                 scan_started_at=scan_started_at,
                 gateway_ip=gateway_ip,
+                hostname_hints=hostname_hints,
             )
             new_devices += stats["new_devices"]
             ports_opened += stats["ports_opened"]
@@ -1266,13 +1384,20 @@ def scan(ip_range, scan_run=None):
     return scan_run
 
 
-def sync_discovered_device(element, oui=None, scan_run=None, scan_started_at=None, gateway_ip=""):
+def sync_discovered_device(
+    element,
+    oui=None,
+    scan_run=None,
+    scan_started_at=None,
+    gateway_ip="",
+    hostname_hints=None,
+):
     scan_started_at = scan_started_at or timezone.now()
     ip = element[1].psrc
     mac = element[1].hwsrc.lower()
     vendor = ManufDA.lookup(oui, mac) if oui else None
     vendor_name = manuf_vendor(mac) or (vendor[1] if vendor else "")
-    hostname = get_hostname(ip=ip)
+    hostname = get_hostname(ip=ip, hostname_hints=hostname_hints)
     ports_opened = 0
     ports_closed = 0
     new_devices = 0

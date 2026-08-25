@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-1.4.0-2496ed?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.5.0-2496ed?style=for-the-badge">
   <a href="https://github.com/hillaliy/LanGuard/pkgs/container/languard-backend">
     <img alt="Docker pulls" src="https://ghcr-badge.elias.eu.org/shield/hillaliy/LanGuard/languard-backend">
   </a>
@@ -34,6 +34,7 @@ LanGuard is a self-hosted LAN visibility tool for home networks. It finds device
 - Device inventory with IP, MAC, vendor, hostname, icon, known/new state, and last seen time
 - Home Map view for arranging rooms and device icons into a simple floor-plan style layout
 - Open port tracking and port change events
+- Optional external links for device web interfaces, with local HTTP/HTTPS detection
 - Scan history, event history, and notification history
 - Scheduled scans that wait for the configured interval after each scan completes
 - Device inventory export/import for moving names, icons, rooms, roles, vendors, IPs, MAC addresses, and open ports between installs
@@ -60,7 +61,7 @@ services:
     restart: unless-stopped
 
   scanner:
-    image: ghcr.io/hillaliy/languard-backend:latest
+    image: ghcr.io/hillaliy/languard-scheduler:latest
     container_name: languard-scanner
     privileged: true
     network_mode: host
@@ -72,8 +73,6 @@ services:
       - languard_database:/data
       - languard_static:/static
     restart: unless-stopped
-    depends_on:
-      - backend
 
   frontend:
     image: ghcr.io/hillaliy/languard-frontend:latest
@@ -92,6 +91,15 @@ volumes:
   languard_database:
   languard_static:
 ```
+
+The scanner uses its own `languard-scheduler` image and has no runtime dependency
+on the web backend, so container update tools can update either service independently.
+Both images are built from the same LanGuard source release.
+
+> [!IMPORTANT]
+> When upgrading from version 1.4.0 or earlier, change the scanner service image
+> from `ghcr.io/hillaliy/languard-backend` to
+> `ghcr.io/hillaliy/languard-scheduler`, then pull and recreate the stack.
 
 Change these before deploying:
 
@@ -121,7 +129,7 @@ The scanner waits for the configured scan interval after a scan completes before
 If you override `DISCORD_ICON_URL`, use a versioned URL when replacing the icon so Discord mobile clients do not reuse an old cached image, for example:
 
 ```env
-DISCORD_ICON_URL=https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png?v=1.4.0
+DISCORD_ICON_URL=https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png?v=1.5.0
 ```
 
 Portainer will create the stack network automatically.

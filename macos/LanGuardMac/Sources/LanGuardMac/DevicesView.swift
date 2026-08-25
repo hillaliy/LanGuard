@@ -867,6 +867,9 @@ struct DeviceDetailView: View {
     @State private var role: DeviceRole?
     @State private var room: String?
     @State private var comments: String
+    @State private var externalURL: String
+    @State private var detectedWebURL: URL?
+    @State private var isDetectingWebURL = false
     @State private var attentionAcknowledged: Bool
     @State private var iconName: String
     @State private var secondaryIconName: String
@@ -887,6 +890,8 @@ struct DeviceDetailView: View {
         _role = State(initialValue: device.role)
         _room = State(initialValue: device.room)
         _comments = State(initialValue: device.comments)
+        _externalURL = State(initialValue: device.externalURL ?? "")
+        _detectedWebURL = State(initialValue: nil)
         _attentionAcknowledged = State(initialValue: device.isAttentionAcknowledged)
         _iconName = State(initialValue: device.displayIconName)
         _secondaryIconName = State(initialValue: device.secondaryIconName ?? "")
@@ -925,6 +930,32 @@ struct DeviceDetailView: View {
                     LabeledContent("Comments") {
                         TextEditor(text: $comments)
                             .frame(minHeight: 54)
+                    }
+                    TextField("External link", text: $externalURL)
+                    if !externalURL.isEmpty && ExternalLinkValidator.url(externalURL) == nil {
+                        Text("Enter a valid HTTP or HTTPS URL.")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                    if isDetectingWebURL {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text("Checking for a web interface...")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let webURL = effectiveWebURL {
+                        HStack {
+                            Link(destination: webURL) {
+                                Label("Open link", systemImage: "arrow.up.right.square")
+                            }
+                            if ExternalLinkValidator.url(externalURL) == nil, detectedWebURL != nil {
+                                Button("Use detected link") {
+                                    externalURL = webURL.absoluteString
+                                }
+                            }
+                        }
                     }
                     Toggle("This device does not need attention", isOn: $attentionAcknowledged)
                         .disabled(!canAcknowledgeAttention)
@@ -974,6 +1005,7 @@ struct DeviceDetailView: View {
                     updatedDevice.iconName = iconName
                     updatedDevice.secondaryIconName = sanitizedSecondaryIconName
                     updatedDevice.comments = comments.trimmingCharacters(in: .whitespacesAndNewlines)
+                    updatedDevice.externalURL = ExternalLinkValidator.normalizedString(externalURL)
                     updatedDevice.risk = DeviceRiskScorer.risk(
                         for: updatedDevice.openPorts,
                         isKnown: updatedDevice.isKnown,
@@ -983,11 +1015,14 @@ struct DeviceDetailView: View {
                     onSave(updatedDevice)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(trimmedName.isEmpty)
+                .disabled(trimmedName.isEmpty || !externalURLIsValid)
             }
         }
         .padding(24)
         .frame(width: 560, height: 700)
+        .task(id: originalDevice.id) {
+            await detectWebInterfaceIfNeeded()
+        }
         .alert("Delete \(originalDevice.name)?", isPresented: $isShowingDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Delete Device", role: .destructive) {
@@ -1000,6 +1035,31 @@ struct DeviceDetailView: View {
 
     private var trimmedName: String {
         name.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var externalURLIsValid: Bool {
+        externalURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || ExternalLinkValidator.url(externalURL) != nil
+    }
+
+    private var effectiveWebURL: URL? {
+        ExternalLinkValidator.url(externalURL) ?? detectedWebURL
+    }
+
+    private func detectWebInterfaceIfNeeded() async {
+        guard ExternalLinkValidator.url(externalURL) == nil,
+              !WebInterfaceDetector.candidateURLs(
+                ipAddress: originalDevice.ipAddress,
+                openPorts: originalDevice.openPorts
+              ).isEmpty else {
+            return
+        }
+        isDetectingWebURL = true
+        detectedWebURL = await WebInterfaceDetector.detect(
+            ipAddress: originalDevice.ipAddress,
+            openPorts: originalDevice.openPorts
+        )
+        isDetectingWebURL = false
     }
 
     private var sanitizedSecondaryIconName: String? {

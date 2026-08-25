@@ -4,7 +4,29 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.5.0',
+    date: '2026-08-25',
+    items: [
+      'Added a separate scheduled-scanner image; Docker upgrades must use ghcr.io/hillaliy/languard-scheduler for the scanner service.',
+      'Improved hostname discovery in Docker and macOS with broader DNS-SD and mDNS correlation.',
+      'Added optional external device links in Docker and macOS with verified local web-interface suggestions.',
+      'Added access to device details directly from rows on the Events page.',
+      'Kept acknowledged device risks dismissed across routine scan metadata updates.',
+      'Sorted Docker role choices alphabetically by their displayed labels.',
+    ],
+  },
+  {
     version: '1.4.0',
+    date: '2026-08-25',
+    items: [
+      'Added device comments in Docker and macOS.',
+      'Added an option for known devices to acknowledge the current risk and remove them from Needs Attention.',
+      'Automatically invalidated risk acknowledgements when ports or other risk-related device details change.',
+      'Added comments and risk acknowledgement compatibility to inventory export and import between Docker and macOS.',
+    ],
+  },
+  {
+    version: '1.3.2',
     date: '2026-08-24',
     items: [
       'Added access to edit devices directly from the Recently Changed list in Docker and macOS.',

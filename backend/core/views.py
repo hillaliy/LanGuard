@@ -2,6 +2,7 @@ import ipaddress
 import json
 import urllib.error
 import urllib.request
+from urllib.parse import urlparse
 from datetime import datetime, timezone as datetime_timezone
 
 from drf_spectacular.utils import OpenApiTypes, extend_schema, inline_serializer
@@ -56,7 +57,7 @@ from .api import (
     parse_datetime_param,
     parse_int_param,
 )
-from .scan import scan, validate_ip_range
+from .scan import detect_web_interface, scan, validate_ip_range
 
 LOGGER = logging.getLogger(__name__)
 
@@ -277,6 +278,7 @@ def inventory_device_payload(device):
         "role": getattr(device, "role", "") or ("gateway" if device.is_gateway else "device"),
         "room": getattr(device, "room", ""),
         "comments": device.comments,
+        "external_url": device.external_url,
         "risk": risk_data["level"],
         "attention_acknowledged": device_attention_acknowledged(device, risk_data),
         "known": device.known,
@@ -415,6 +417,12 @@ def import_inventory_devices(payload):
         hostname = str(item.get("hostname") or item.get("hostName") or "").strip()[:255]
         comments_present = "comments" in item
         comments = str(item.get("comments") or "").strip()
+        external_url_present = "external_url" in item or "externalUrl" in item
+        external_url = str(item.get("external_url") or item.get("externalUrl") or "").strip()
+        if external_url:
+            parsed_external_url = urlparse(external_url)
+            if parsed_external_url.scheme not in {"http", "https"} or not parsed_external_url.netloc:
+                external_url = ""
         attention_acknowledged_present = (
             "attention_acknowledged" in item or "attentionAcknowledged" in item
         )
@@ -465,6 +473,8 @@ def import_inventory_devices(payload):
             defaults["room"] = room
         if comments_present:
             defaults["comments"] = comments
+        if external_url_present:
+            defaults["external_url"] = external_url[:2048]
 
         device, was_created = Device.objects.get_or_create(
             mac=mac,
@@ -491,6 +501,7 @@ def import_inventory_devices(payload):
                     *(['role'] if role is not None else []),
                     *(['room'] if room is not None else []),
                     *(["comments"] if comments_present else []),
+                    *(["external_url"] if external_url_present else []),
                     "known",
                     "is_gateway",
                     "online",
@@ -1088,6 +1099,27 @@ def scan_now(request):
             "data": ScanRunSerializer(scan_run).data,
         },
         status=status.HTTP_202_ACCEPTED,
+    )
+
+
+@extend_schema(
+    responses=inline_serializer(
+        name="DeviceWebInterfaceResponse",
+        fields={"url": serializers.URLField(allow_blank=True)},
+    )
+)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def device_web_interface(request):
+    id_ = request.query_params.get("id")
+    if not id_:
+        raise ValidationError({"id": "Device id is required."})
+
+    target = get_object_or_404(Device.objects.prefetch_related("ports"), pk=id_)
+    open_ports = list(target.ports.filter(open=True).values_list("port", flat=True))
+    return Response(
+        {"url": detect_web_interface(target.ip, open_ports)},
+        status=status.HTTP_200_OK,
     )
 
 

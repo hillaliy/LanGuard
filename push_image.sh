@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REGISTRY="${GHCR_REGISTRY:-ghcr.io}"
 OWNER="${GHCR_OWNER:-hillaliy}"
 BACKEND_IMAGE="${BACKEND_IMAGE:-${REGISTRY}/${OWNER}/languard-backend}"
+SCHEDULER_IMAGE="${SCHEDULER_IMAGE:-${REGISTRY}/${OWNER}/languard-scheduler}"
 FRONTEND_IMAGE="${FRONTEND_IMAGE:-${REGISTRY}/${OWNER}/languard-frontend}"
 PUSH_LATEST="${PUSH_LATEST:-true}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
@@ -19,10 +20,12 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   echo "Defaults:"
   echo "  version: frontend/package.json version"
   echo "  backend: ${BACKEND_IMAGE}"
+  echo "  scheduler: ${SCHEDULER_IMAGE}"
   echo "  frontend: ${FRONTEND_IMAGE}"
   echo
   echo "Environment overrides:"
-  echo "  GHCR_REGISTRY, GHCR_OWNER, BACKEND_IMAGE, FRONTEND_IMAGE, PUSH_LATEST=false"
+  echo "  GHCR_REGISTRY, GHCR_OWNER, BACKEND_IMAGE, SCHEDULER_IMAGE, FRONTEND_IMAGE"
+  echo "  PUSH_LATEST=false"
   echo "  PLATFORMS=linux/amd64,linux/arm64"
   echo "  LOCAL_ARCH_ONLY=true to publish only this Mac's CPU architecture"
   echo "  USE_REGISTRY_CACHE=false to disable buildx registry cache"
@@ -55,15 +58,18 @@ if [[ -z "${VERSION}" ]]; then
 fi
 
 BACKEND_TAGS=(-t "${BACKEND_IMAGE}:${VERSION}")
+SCHEDULER_TAGS=(-t "${SCHEDULER_IMAGE}:${VERSION}")
 FRONTEND_TAGS=(-t "${FRONTEND_IMAGE}:${VERSION}")
 
 if [[ "${PUSH_LATEST}" == "true" ]]; then
   BACKEND_TAGS+=(-t "${BACKEND_IMAGE}:latest")
+  SCHEDULER_TAGS+=(-t "${SCHEDULER_IMAGE}:latest")
   FRONTEND_TAGS+=(-t "${FRONTEND_IMAGE}:latest")
 fi
 
 echo "Building and pushing LanGuard ${VERSION}"
 echo "Backend image:  ${BACKEND_IMAGE}:${VERSION}"
+echo "Scheduler image: ${SCHEDULER_IMAGE}:${VERSION}"
 echo "Frontend image: ${FRONTEND_IMAGE}:${VERSION}"
 echo "Platforms:      ${PLATFORMS}"
 if [[ "${LOCAL_ARCH_ONLY}" == "true" ]]; then
@@ -77,11 +83,17 @@ else
 fi
 
 BACKEND_CACHE_ARGS=()
+SCHEDULER_CACHE_ARGS=()
 FRONTEND_CACHE_ARGS=()
 if [[ "${USE_REGISTRY_CACHE}" == "true" ]]; then
   BACKEND_CACHE_ARGS=(
     --cache-from "type=registry,ref=${BACKEND_IMAGE}:buildcache"
     --cache-to "type=registry,ref=${BACKEND_IMAGE}:buildcache,mode=max"
+  )
+  SCHEDULER_CACHE_ARGS=(
+    --cache-from "type=registry,ref=${SCHEDULER_IMAGE}:buildcache"
+    --cache-from "type=registry,ref=${BACKEND_IMAGE}:buildcache"
+    --cache-to "type=registry,ref=${SCHEDULER_IMAGE}:buildcache,mode=max"
   )
   FRONTEND_CACHE_ARGS=(
     --cache-from "type=registry,ref=${FRONTEND_IMAGE}:buildcache"
@@ -93,9 +105,21 @@ echo "Building and pushing backend image..."
 docker buildx build \
   --platform "${PLATFORMS}" \
   --build-arg "APP_VERSION=${VERSION}" \
+  --build-arg "APP_COMPONENT=backend" \
   -f "${ROOT_DIR}/Dockerfile" \
   "${BACKEND_CACHE_ARGS[@]}" \
   "${BACKEND_TAGS[@]}" \
+  --push \
+  "${ROOT_DIR}"
+
+echo "Building and pushing scheduler image..."
+docker buildx build \
+  --platform "${PLATFORMS}" \
+  --build-arg "APP_VERSION=${VERSION}" \
+  --build-arg "APP_COMPONENT=scheduler" \
+  -f "${ROOT_DIR}/Dockerfile" \
+  "${SCHEDULER_CACHE_ARGS[@]}" \
+  "${SCHEDULER_TAGS[@]}" \
   --push \
   "${ROOT_DIR}"
 

@@ -601,6 +601,14 @@ struct MDNSServiceMetadataDiscovery: NetworkMetadataDiscovering {
         DNSPTRPacketParser.hostnamesByIPv4Address(from: response)
     }
 
+    static func hostnamesByIP(from responses: [Data]) -> [String: String] {
+        DNSPTRPacketParser.hostnamesByIPv4Address(from: responses)
+    }
+
+    static func serviceTypes(from response: Data) -> Set<String> {
+        DNSPTRPacketParser.serviceTypes(from: response)
+    }
+
     static func serviceHostname(from response: Data) -> String? {
         DNSPTRPacketParser.serviceHostname(from: response)
     }
@@ -614,13 +622,12 @@ private struct MDNSServiceSocketClient: Sendable {
 
     func discoverHostnames() async -> [String: String] {
         await Task.detached(priority: .utility) {
-            var hostnamesByIP: [String: String] = [:]
             let socketFD = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
-            guard socketFD >= 0 else { return hostnamesByIP }
+            guard socketFD >= 0 else { return [:] }
             defer { close(socketFD) }
 
             guard configureMDNSReceiveSocket(socketFD) else {
-                return hostnamesByIP
+                return [:]
             }
 
             var receiveTimeout = timeval(
@@ -637,11 +644,16 @@ private struct MDNSServiceSocketClient: Sendable {
             destination.sin_family = sa_family_t(AF_INET)
             destination.sin_port = UInt16(5353).bigEndian
             guard inet_pton(AF_INET, "224.0.0.251", &destination.sin_addr) == 1 else {
-                return hostnamesByIP
+                return [:]
             }
 
+            var discoveredServiceTypes = Set(serviceTypes.map {
+                $0.trimmingCharacters(in: CharacterSet(charactersIn: ".")).lowercased()
+            })
+            var responses: [(data: Data, sourceIP: String?)] = []
+
             for attempt in 0..<retryCount {
-                for serviceType in serviceTypes {
+                for serviceType in discoveredServiceTypes.sorted() {
                     let query = DNSPTRPacketParser.query(name: serviceType, transactionID: 0)
                     _ = withUnsafePointer(to: &destination) { pointer in
                         pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
@@ -659,32 +671,34 @@ private struct MDNSServiceSocketClient: Sendable {
                     }
                 }
 
+                while true {
+                    var buffer = [UInt8](repeating: 0, count: 9000)
+                    var source = sockaddr_storage()
+                    var sourceLength = socklen_t(MemoryLayout<sockaddr_storage>.size)
+                    let count = withUnsafeMutablePointer(to: &source) { pointer in
+                        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                            recvfrom(socketFD, &buffer, buffer.count, 0, sockaddrPointer, &sourceLength)
+                        }
+                    }
+                    guard count > 0 else { break }
+
+                    let response = Data(buffer.prefix(count))
+                    responses.append((data: response, sourceIP: ipAddress(from: source)))
+                    discoveredServiceTypes.formUnion(DNSPTRPacketParser.serviceTypes(from: response))
+                }
+
                 if attempt + 1 < retryCount {
                     usleep(useconds_t(max(0, retryDelay) * 1_000_000))
                 }
             }
 
-            while true {
-                var buffer = [UInt8](repeating: 0, count: 9000)
-                var source = sockaddr_storage()
-                var sourceLength = socklen_t(MemoryLayout<sockaddr_storage>.size)
-                let count = withUnsafeMutablePointer(to: &source) { pointer in
-                    pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
-                        recvfrom(socketFD, &buffer, buffer.count, 0, sockaddrPointer, &sourceLength)
-                    }
-                }
-                guard count > 0 else { break }
-
-                let response = Data(buffer.prefix(count))
-                for (ipAddress, hostname) in DNSPTRPacketParser.hostnamesByIPv4Address(
-                    from: response
-                ) {
-                    hostnamesByIP[ipAddress] = hostname
-                }
-
-                if let sourceIP = ipAddress(from: source),
+            var hostnamesByIP = DNSPTRPacketParser.hostnamesByIPv4Address(
+                from: responses.map(\.data)
+            )
+            for response in responses {
+                if let sourceIP = response.sourceIP,
                    hostnamesByIP[sourceIP] == nil,
-                   let hostname = DNSPTRPacketParser.serviceHostname(from: response) {
+                   let hostname = DNSPTRPacketParser.serviceHostname(from: response.data) {
                     hostnamesByIP[sourceIP] = hostname
                 }
             }
@@ -1151,21 +1165,46 @@ enum DNSPTRPacketParser {
     }
 
     static func hostnamesByIPv4Address(from response: Data) -> [String: String] {
+        hostnamesByIPv4Address(from: [response])
+    }
+
+    static func hostnamesByIPv4Address(from responses: [Data]) -> [String: String] {
+        var addressRecords: [(host: String, ipAddress: String)] = []
+        var serviceNamesByTarget: [String: String] = [:]
+
+        for response in responses {
+            let records = hostnameMappingRecords(from: response)
+            addressRecords.append(contentsOf: records.addressRecords)
+            serviceNamesByTarget.merge(records.serviceNamesByTarget) { _, new in new }
+        }
+
+        return buildHostnamesByIP(
+            addressRecords: addressRecords,
+            serviceNamesByTarget: serviceNamesByTarget
+        )
+    }
+
+    private static func hostnameMappingRecords(
+        from response: Data
+    ) -> (
+        addressRecords: [(host: String, ipAddress: String)],
+        serviceNamesByTarget: [String: String]
+    ) {
         let bytes = Array(response)
-        guard bytes.count >= 12 else { return [:] }
+        guard bytes.count >= 12 else { return ([], [:]) }
 
         let questionCount = Int(readUInt16(bytes, at: 4) ?? 0)
         let answerCount = Int(readUInt16(bytes, at: 6) ?? 0)
         let authorityCount = Int(readUInt16(bytes, at: 8) ?? 0)
         let additionalCount = Int(readUInt16(bytes, at: 10) ?? 0)
         let recordCount = answerCount + authorityCount + additionalCount
-        guard recordCount > 0 else { return [:] }
+        guard recordCount > 0 else { return ([], [:]) }
 
         var offset = 12
         for _ in 0..<questionCount {
             guard skipName(bytes, offset: &offset),
                   offset + 4 <= bytes.count else {
-                return [:]
+                return ([], [:])
             }
             offset += 4
         }
@@ -1174,18 +1213,12 @@ enum DNSPTRPacketParser {
         var serviceNamesByTarget: [String: String] = [:]
         for _ in 0..<recordCount {
             guard let recordName = readName(bytes, offset: offset) else {
-                return buildHostnamesByIP(
-                    addressRecords: addressRecords,
-                    serviceNamesByTarget: serviceNamesByTarget
-                )
+                return (addressRecords, serviceNamesByTarget)
             }
             offset = recordName.nextOffset
             guard let recordType = readUInt16(bytes, at: offset),
                   offset + 10 <= bytes.count else {
-                return buildHostnamesByIP(
-                    addressRecords: addressRecords,
-                    serviceNamesByTarget: serviceNamesByTarget
-                )
+                return (addressRecords, serviceNamesByTarget)
             }
 
             offset += 2
@@ -1193,20 +1226,14 @@ enum DNSPTRPacketParser {
             offset += 2
             offset += 4
             guard let recordLength = readUInt16(bytes, at: offset) else {
-                return buildHostnamesByIP(
-                    addressRecords: addressRecords,
-                    serviceNamesByTarget: serviceNamesByTarget
-                )
+                return (addressRecords, serviceNamesByTarget)
             }
             offset += 2
 
             let dataOffset = offset
             let dataEnd = dataOffset + Int(recordLength)
             guard dataEnd <= bytes.count else {
-                return buildHostnamesByIP(
-                    addressRecords: addressRecords,
-                    serviceNamesByTarget: serviceNamesByTarget
-                )
+                return (addressRecords, serviceNamesByTarget)
             }
 
             if recordType == 0x0001, recordLength == 4 {
@@ -1221,10 +1248,43 @@ enum DNSPTRPacketParser {
             offset = dataEnd
         }
 
-        return buildHostnamesByIP(
-            addressRecords: addressRecords,
-            serviceNamesByTarget: serviceNamesByTarget
-        )
+        return (addressRecords, serviceNamesByTarget)
+    }
+
+    static func serviceTypes(from response: Data) -> Set<String> {
+        let bytes = Array(response)
+        guard bytes.count >= 12 else { return [] }
+
+        let questionCount = Int(readUInt16(bytes, at: 4) ?? 0)
+        let recordCount = Int(readUInt16(bytes, at: 6) ?? 0)
+            + Int(readUInt16(bytes, at: 8) ?? 0)
+            + Int(readUInt16(bytes, at: 10) ?? 0)
+        var offset = 12
+        for _ in 0..<questionCount {
+            guard skipName(bytes, offset: &offset), offset + 4 <= bytes.count else { return [] }
+            offset += 4
+        }
+
+        var serviceTypes: Set<String> = []
+        for _ in 0..<recordCount {
+            guard let recordName = readName(bytes, offset: offset) else { break }
+            offset = recordName.nextOffset
+            guard let recordType = readUInt16(bytes, at: offset), offset + 10 <= bytes.count else { break }
+            offset += 8
+            guard let recordLength = readUInt16(bytes, at: offset) else { break }
+            offset += 2
+
+            let dataOffset = offset
+            let dataEnd = dataOffset + Int(recordLength)
+            guard dataEnd <= bytes.count else { break }
+            if recordType == 0x000c,
+               let target = readName(bytes, offset: dataOffset)?.name,
+               let serviceType = normalizedServiceType(from: target) {
+                serviceTypes.insert(serviceType)
+            }
+            offset = dataEnd
+        }
+        return serviceTypes
     }
 
     static func serviceHostname(from response: Data) -> String? {
@@ -1299,22 +1359,30 @@ enum DNSPTRPacketParser {
     }
 
     private static func serviceInstanceHostname(from name: String) -> String? {
-        let lowered = name.lowercased()
-        let serviceSuffixes = [
-            "._hap._tcp.local",
-            "._http._tcp.local",
-            "._arduino._tcp.local",
-            "._esphomelib._tcp.local",
-            "._workstation._tcp.local",
-            "._ssh._tcp.local",
-        ]
+        let labels = name.trimmingCharacters(in: CharacterSet(charactersIn: ".")).split(separator: ".")
+        guard labels.count >= 4 else { return nil }
 
-        for suffix in serviceSuffixes where lowered.hasSuffix(suffix) {
-            let instanceName = String(name.dropLast(suffix.count))
-            return HostnameResolver.clean(instanceName)
+        for index in 1..<(labels.count - 2) {
+            guard labels[index].hasPrefix("_"),
+                  labels[index + 1].lowercased() == "_tcp" || labels[index + 1].lowercased() == "_udp",
+                  labels[index + 2].lowercased() == "local",
+                  index + 3 == labels.count else {
+                continue
+            }
+            return HostnameResolver.clean(labels[..<index].joined(separator: "."))
         }
-
         return nil
+    }
+
+    private static func normalizedServiceType(from name: String) -> String? {
+        let labels = name.trimmingCharacters(in: CharacterSet(charactersIn: ".")).split(separator: ".")
+        guard labels.count == 3,
+              labels[0].hasPrefix("_"),
+              labels[1].lowercased() == "_tcp" || labels[1].lowercased() == "_udp",
+              labels[2].lowercased() == "local" else {
+            return nil
+        }
+        return labels.map { $0.lowercased() }.joined(separator: ".")
     }
 
     private static func buildHostnamesByIP(

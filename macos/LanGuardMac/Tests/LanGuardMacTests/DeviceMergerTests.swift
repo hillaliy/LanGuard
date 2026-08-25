@@ -162,6 +162,7 @@ func deviceMergerPreservesCommentsAndCurrentAttentionAcknowledgement() {
         ipAddress: "192.168.0.51",
         macAddress: "90:dd:5d:b7:bd:01",
         comments: "Expected remote access",
+        externalURL: "https://192.168.0.51",
         risk: .high,
         isKnown: true,
         openPorts: [3389]
@@ -178,6 +179,7 @@ func deviceMergerPreservesCommentsAndCurrentAttentionAcknowledgement() {
     let result = DeviceMerger.merge(existing: [existing], discovered: [discovered])
 
     #expect(result.devices.first?.comments == "Expected remote access")
+    #expect(result.devices.first?.externalURL == "https://192.168.0.51")
     #expect(result.devices.first?.isAttentionAcknowledged == true)
 }
 

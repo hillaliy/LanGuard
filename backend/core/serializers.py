@@ -190,15 +190,12 @@ def device_risk_signature(device, risk_data=None):
         {
             "known": device.known,
             "role": (device.role or "").strip().lower(),
-            "has_vendor": bool((device.vendor or "").strip()),
-            "status": device.status,
-            "missed_scans": device.missed_scans,
             "open_ports": list(
                 device.ports.filter(open=True)
                 .order_by("port", "protocol")
                 .values_list("port", "protocol")
             ),
-            "risk": current_risk,
+            "risk_level": current_risk["level"],
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -246,6 +243,17 @@ class DeviceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Device
         fields = "__all__"
+
+    def validate_external_url(self, value):
+        value = (value or "").strip()
+        if not value:
+            return ""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise serializers.ValidationError("Enter a valid HTTP or HTTPS URL.")
+        return value
 
     @extend_schema_field(DevicePortSerializer(many=True))
     def get_open_ports(self, obj):

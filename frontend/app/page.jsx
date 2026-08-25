@@ -111,6 +111,19 @@ function formatRoleLabel(value) {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function validExternalUrl(value) {
+  const candidate = String(value || '').trim();
+  if (!candidate) {
+    return true;
+  }
+  try {
+    const url = new URL(candidate);
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function normalizeMacText(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -209,7 +222,9 @@ const deviceRoleOptions = [
   'watch',
   'unknown',
   'other',
-];
+].sort((left, right) =>
+  formatRoleLabel(left).localeCompare(formatRoleLabel(right))
+);
 
 const inventoryViewOptions = [
   { value: 'table', label: 'List' },
@@ -2218,6 +2233,9 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
   const [room, setRoom] = useState('');
   const [known, setKnown] = useState(false);
   const [comments, setComments] = useState('');
+  const [externalUrl, setExternalUrl] = useState('');
+  const [detectedWebUrl, setDetectedWebUrl] = useState('');
+  const [detectingWebUrl, setDetectingWebUrl] = useState(false);
   const [attentionAcknowledged, setAttentionAcknowledged] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -2233,8 +2251,35 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
       setRoom(device.room || '');
       setKnown(Boolean(device.known));
       setComments(device.comments || '');
+      setExternalUrl(device.external_url || '');
+      setDetectedWebUrl('');
       setAttentionAcknowledged(Boolean(device.attention_acknowledged));
       setError('');
+
+      const webPorts = new Set([80, 443, 8000, 8080, 8443, 8888]);
+      const hasWebPort = (device.open_ports || []).some((item) =>
+        webPorts.has(Number(item?.port ?? item))
+      );
+      if (!device.external_url && hasWebPort) {
+        let active = true;
+        setDetectingWebUrl(true);
+        apiRequest(`device/web-interface/?id=${device.id}`)
+          .then((payload) => {
+            if (active) {
+              setDetectedWebUrl(payload?.url || '');
+            }
+          })
+          .catch(() => {})
+          .finally(() => {
+            if (active) {
+              setDetectingWebUrl(false);
+            }
+          });
+        return () => {
+          active = false;
+        };
+      }
+      setDetectingWebUrl(false);
     }
   }, [device]);
 
@@ -2244,6 +2289,13 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
     }
     setSaving(true);
     setError('');
+    if (!validExternalUrl(externalUrl)) {
+      const message = 'Enter a valid HTTP or HTTPS URL.';
+      setError(message);
+      showErrorNotification('Could not save device', message);
+      setSaving(false);
+      return;
+    }
     try {
       await apiRequest(`device/?id=${device.id}`, {
         method: 'PUT',
@@ -2256,6 +2308,7 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
           hostname,
           known,
           comments,
+          external_url: externalUrl.trim(),
           acknowledge_attention: known && attentionAcknowledged,
         },
       });
@@ -2366,6 +2419,41 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
           minRows={2}
           maxRows={5}
         />
+
+        <Stack gap="xs">
+          <TextInput
+            label="External link"
+            placeholder="https://192.168.0.20"
+            value={externalUrl}
+            error={!validExternalUrl(externalUrl) ? 'Enter a valid HTTP or HTTPS URL.' : null}
+            onChange={(event) => setExternalUrl(event.currentTarget.value)}
+          />
+          {detectingWebUrl && (
+            <Group gap="xs">
+              <Loader size="xs" />
+              <Text size="sm" c="dimmed">Checking for a web interface...</Text>
+            </Group>
+          )}
+          {(externalUrl.trim() || detectedWebUrl) && validExternalUrl(externalUrl.trim() || detectedWebUrl) && (
+            <Group gap="xs">
+              <Button
+                component="a"
+                href={externalUrl.trim() || detectedWebUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="light"
+                leftSection={<IconArrowUpRight size={17} />}
+              >
+                Open link
+              </Button>
+              {!externalUrl.trim() && detectedWebUrl && (
+                <Button variant="default" onClick={() => setExternalUrl(detectedWebUrl)}>
+                  Use detected link
+                </Button>
+              )}
+            </Group>
+          )}
+        </Stack>
 
         <Group>
           <Switch
@@ -3339,7 +3427,24 @@ function EventsPage({
   pagination,
   loadingMore,
   onLoadMore,
+  onSelectDevice,
 }) {
+  async function handleSelectEventDevice(event) {
+    const id = eventDeviceId(event);
+    if (id === null || id === undefined) {
+      return;
+    }
+
+    try {
+      const payload = await apiRequest(`device/?id=${id}`);
+      if (payload.data) {
+        onSelectDevice(payload.data);
+      }
+    } catch (err) {
+      showErrorNotification('Could not open device', err.message);
+    }
+  }
+
   return (
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
@@ -3380,22 +3485,38 @@ function EventsPage({
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {events.map((event) => (
-              <Table.Tr key={event.id}>
-                <Table.Td>
-                  <Badge variant="light">
-                    {event.event_type_display || event.event_type}
-                  </Badge>
-                </Table.Td>
-                <Table.Td>{event.message}</Table.Td>
-                <Table.Td>{formatDate(event.created_at, timeZone)}</Table.Td>
-                <Table.Td>
-                  <Badge color={event.notified ? 'teal' : 'gray'} variant="light">
-                    {event.notified ? 'Handled' : 'Pending'}
-                  </Badge>
-                </Table.Td>
-              </Table.Tr>
-            ))}
+            {events.map((event) => {
+              const hasDevice = eventDeviceId(event) !== null && eventDeviceId(event) !== undefined;
+              return (
+                <Table.Tr
+                  key={event.id}
+                  className={hasDevice ? 'activity-clickable-row' : undefined}
+                  tabIndex={hasDevice ? 0 : undefined}
+                  role={hasDevice ? 'button' : undefined}
+                  aria-label={hasDevice ? `Open device for ${event.message || 'event'}` : undefined}
+                  onClick={hasDevice ? () => handleSelectEventDevice(event) : undefined}
+                  onKeyDown={hasDevice ? (keyboardEvent) => {
+                    if (keyboardEvent.key === 'Enter' || keyboardEvent.key === ' ') {
+                      keyboardEvent.preventDefault();
+                      handleSelectEventDevice(event);
+                    }
+                  } : undefined}
+                >
+                  <Table.Td>
+                    <Badge variant="light">
+                      {event.event_type_display || event.event_type}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>{event.message}</Table.Td>
+                  <Table.Td>{formatDate(event.created_at, timeZone)}</Table.Td>
+                  <Table.Td>
+                    <Badge color={event.notified ? 'teal' : 'gray'} variant="light">
+                      {event.notified ? 'Handled' : 'Pending'}
+                    </Badge>
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
           </Table.Tbody>
         </Table>
       </ActivityTablePanel>
@@ -4143,6 +4264,10 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
               pagination={eventPagination}
               loadingMore={activityLoadingMore.events}
               onLoadMore={loadMoreEventsData}
+              onSelectDevice={(device) => {
+                setActiveDevice(device);
+                modal.open();
+              }}
             />
           ) : mainView === 'history' ? (
             <ScanHistoryPage
