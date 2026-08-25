@@ -40,6 +40,8 @@ struct DeviceInventoryItem: Codable {
     var mac: String
     var vendor: String?
     var hostname: String?
+    var comments: String?
+    var attentionAcknowledged: Bool?
     var icon: String?
     var secondaryIcon: String?
     var role: String?
@@ -58,6 +60,8 @@ struct DeviceInventoryItem: Codable {
         self.mac = device.macAddress
         self.vendor = device.vendor
         self.hostname = device.hostname
+        self.comments = device.comments
+        self.attentionAcknowledged = device.isAttentionAcknowledged
         self.icon = device.iconName
         self.secondaryIcon = device.secondaryIconName
         self.role = device.effectiveRole.rawValue
@@ -100,18 +104,20 @@ struct DeviceInventoryItem: Codable {
         let importedName = displayName.isEmpty ? fallbackName : displayName
         let importedVendor = normalizedText(vendor) ?? existing?.vendor
         let importedHostname = normalizedText(hostname) ?? existing?.hostname
+        let importedComments = comments ?? existing?.comments ?? ""
         let importedIcon = normalizedText(icon) ?? existing?.iconName
         let importedSecondaryIcon = normalizedText(secondaryIcon) ?? existing?.secondaryIconName
         let importedRole = normalizedRole ?? existing?.role
         let importedRoom = normalizedText(room) ?? existing?.room
 
-        return NetworkDevice(
+        var mergedDevice = NetworkDevice(
             id: normalizedMAC,
             name: importedName,
             ipAddress: normalizedIP,
             macAddress: normalizedMAC,
             vendor: importedVendor,
             hostname: importedHostname,
+            comments: importedComments,
             iconName: importedIcon,
             secondaryIconName: importedSecondaryIcon,
             status: deviceStatus,
@@ -124,6 +130,9 @@ struct DeviceInventoryItem: Codable {
             firstSeen: min(existingFirstSeen, importedFirstSeen),
             lastSeen: max(importedLastSeen, existing?.lastSeen ?? importedLastSeen)
         )
+        let shouldAcknowledge = attentionAcknowledged ?? existing?.isAttentionAcknowledged ?? false
+        mergedDevice.setAttentionAcknowledged(shouldAcknowledge)
+        return mergedDevice
     }
 
     private var normalizedPorts: [Int] {
@@ -154,6 +163,8 @@ struct DeviceInventoryItem: Codable {
         case mac
         case vendor
         case hostname
+        case comments
+        case attentionAcknowledged = "attention_acknowledged"
         case icon
         case secondaryIcon = "secondary_icon"
         case role

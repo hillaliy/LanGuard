@@ -866,6 +866,8 @@ struct DeviceDetailView: View {
     @State private var isKnown: Bool
     @State private var role: DeviceRole?
     @State private var room: String?
+    @State private var comments: String
+    @State private var attentionAcknowledged: Bool
     @State private var iconName: String
     @State private var secondaryIconName: String
     @State private var isShowingDeleteConfirmation = false
@@ -884,6 +886,8 @@ struct DeviceDetailView: View {
         _isKnown = State(initialValue: device.isKnown)
         _role = State(initialValue: device.role)
         _room = State(initialValue: device.room)
+        _comments = State(initialValue: device.comments)
+        _attentionAcknowledged = State(initialValue: device.isAttentionAcknowledged)
         _iconName = State(initialValue: device.displayIconName)
         _secondaryIconName = State(initialValue: device.secondaryIconName ?? "")
     }
@@ -918,6 +922,15 @@ struct DeviceDetailView: View {
                     .pickerStyle(.menu)
                     IconPicker("Primary icon", selection: $iconName)
                     IconPicker("Second icon", selection: $secondaryIconName, includesNone: true)
+                    LabeledContent("Comments") {
+                        TextEditor(text: $comments)
+                            .frame(minHeight: 54)
+                    }
+                    Toggle("This device does not need attention", isOn: $attentionAcknowledged)
+                        .disabled(!canAcknowledgeAttention)
+                    Text("Acknowledges the current risk. Risk changes will require attention again.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("Network") {
@@ -960,11 +973,13 @@ struct DeviceDetailView: View {
                     updatedDevice.room = room
                     updatedDevice.iconName = iconName
                     updatedDevice.secondaryIconName = sanitizedSecondaryIconName
+                    updatedDevice.comments = comments.trimmingCharacters(in: .whitespacesAndNewlines)
                     updatedDevice.risk = DeviceRiskScorer.risk(
                         for: updatedDevice.openPorts,
                         isKnown: updatedDevice.isKnown,
                         role: updatedDevice.role ?? .device
                     )
+                    updatedDevice.setAttentionAcknowledged(isKnown && attentionAcknowledged)
                     onSave(updatedDevice)
                 }
                 .buttonStyle(.borderedProminent)
@@ -972,7 +987,7 @@ struct DeviceDetailView: View {
             }
         }
         .padding(24)
-        .frame(width: 560, height: 620)
+        .frame(width: 560, height: 700)
         .alert("Delete \(originalDevice.name)?", isPresented: $isShowingDeleteConfirmation) {
             Button("Cancel", role: .cancel) {}
             Button("Delete Device", role: .destructive) {
@@ -990,6 +1005,10 @@ struct DeviceDetailView: View {
     private var sanitizedSecondaryIconName: String? {
         let trimmed = secondaryIconName.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty || trimmed == iconName ? nil : trimmed
+    }
+
+    private var canAcknowledgeAttention: Bool {
+        isKnown && (originalDevice.needsAttention || originalDevice.isAttentionAcknowledged)
     }
 
     private func portSummary(for ports: [Int]) -> String {

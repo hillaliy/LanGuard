@@ -2190,6 +2190,82 @@ class ScanApiTests(TestCase):
             any("Risky open ports" in reason for reason in device["risk_reasons"])
         )
 
+    def test_known_device_can_acknowledge_current_risk_and_save_comments(self):
+        self.device.known = True
+        self.device.vendor = "Linux"
+        self.device.save(update_fields=["known", "vendor"])
+        DevicePort.objects.create(device=self.device, port=3389, protocol="tcp", open=True)
+
+        before = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
+        self.assertTrue(before["needs_attention"])
+        self.assertFalse(before["attention_acknowledged"])
+
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {
+                "comments": "Remote desktop is intentionally exposed on the LAN.",
+                "acknowledge_attention": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        after = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
+        self.assertEqual(
+            after["comments"],
+            "Remote desktop is intentionally exposed on the LAN.",
+        )
+        self.assertTrue(after["attention_acknowledged"])
+        self.assertFalse(after["needs_attention"])
+        self.assertNotIn("attention_acknowledged_signature", after)
+
+    def test_risk_change_invalidates_attention_acknowledgement(self):
+        self.device.known = True
+        self.device.vendor = "Linux"
+        self.device.save(update_fields=["known", "vendor"])
+        DevicePort.objects.create(device=self.device, port=3389, protocol="tcp", open=True)
+        self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"acknowledge_attention": True},
+            format="json",
+        )
+
+        DevicePort.objects.create(device=self.device, port=5900, protocol="tcp", open=True)
+
+        device = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
+        self.assertFalse(device["attention_acknowledged"])
+        self.assertTrue(device["needs_attention"])
+
+    def test_port_change_invalidates_acknowledgement_when_risk_level_is_unchanged(self):
+        self.device.known = True
+        self.device.vendor = "Example vendor"
+        self.device.save(update_fields=["known", "vendor"])
+        for port in [1000, 1001, 1002, 1003]:
+            DevicePort.objects.create(device=self.device, port=port, protocol="tcp", open=True)
+        self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"acknowledge_attention": True},
+            format="json",
+        )
+
+        self.device.ports.get(port=1003).delete()
+        DevicePort.objects.create(device=self.device, port=1004, protocol="tcp", open=True)
+
+        device = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
+        self.assertEqual(device["risk_level"], "medium")
+        self.assertFalse(device["attention_acknowledged"])
+        self.assertTrue(device["needs_attention"])
+
+    def test_unknown_device_cannot_acknowledge_attention(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"acknowledge_attention": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("acknowledge_attention", response.data["info"])
+
     def test_device_endpoint_rejects_too_large_page_size(self):
         response = self.client.get("/api/v1/device/", {"limit": 101})
 
@@ -2206,7 +2282,15 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_device_inventory_export_returns_shared_format(self):
+        self.device.known = True
+        self.device.comments = "Demo note"
+        self.device.save(update_fields=["known", "comments"])
         DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
+        self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"acknowledge_attention": True},
+            format="json",
+        )
 
         response = self.client.get("/api/v1/devices/export/")
 
@@ -2216,6 +2300,8 @@ class ScanApiTests(TestCase):
         self.assertEqual(exported_device["name"], "Laptop")
         self.assertEqual(exported_device["mac"], "aa:aa:aa:aa:aa:aa")
         self.assertEqual(exported_device["open_ports"], [80])
+        self.assertEqual(exported_device["comments"], "Demo note")
+        self.assertTrue(exported_device["attention_acknowledged"])
         self.assertTrue(exported_device["first_seen"].endswith("Z"))
 
     def test_device_inventory_import_updates_existing_device_by_mac(self):
@@ -2257,6 +2343,35 @@ class ScanApiTests(TestCase):
             list(self.device.ports.filter(open=True).values_list("port", flat=True)),
             [80, 443],
         )
+
+    def test_device_inventory_import_restores_comments_and_acknowledges_current_risk(self):
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Remote workstation",
+                        "ip": "192.168.1.20",
+                        "mac": "aa:aa:aa:aa:aa:aa",
+                        "vendor": "Example vendor",
+                        "known": True,
+                        "comments": "Remote Desktop is expected.",
+                        "attention_acknowledged": True,
+                        "open_ports": [3389],
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.comments, "Remote Desktop is expected.")
+        imported = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
+        self.assertTrue(imported["attention_acknowledged"])
+        self.assertFalse(imported["needs_attention"])
 
     def test_device_inventory_import_updates_existing_device_room(self):
         response = self.client.post(

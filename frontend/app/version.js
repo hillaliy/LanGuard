@@ -4,7 +4,7 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
-    version: '1.3.2',
+    version: '1.4.0',
     date: '2026-08-24',
     items: [
       'Added access to edit devices directly from the Recently Changed list in Docker and macOS.',

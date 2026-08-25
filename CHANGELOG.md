@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.4.0 - 2026-08-25
+
+- Added device comments in Docker and macOS.
+- Added an option for known devices to acknowledge the current risk and remove them from Needs Attention.
+- Automatically invalidated risk acknowledgements when ports or other risk-related device details change.
+- Added comments and risk acknowledgement compatibility to inventory export and import between Docker and macOS.
+
+## 1.3.2 - 2026-08-24
+
+- Added direct device editing from the Recently Changed list in Docker and macOS.
+- Improved Events, Scan history, and Notifications scrolling beyond 500 records.
+- Clarified cleanup actions and fixed Home Map room backgrounds in dark mode.
+- Updated Granian to 2.8.2, Mantine to 9.5.2, and Next.js to 16.3.2.
+
 ## 1.3.1 - 2026-08-23
 
 - Reduced SQLite database lock errors in Docker by enabling a longer busy timeout and WAL mode.

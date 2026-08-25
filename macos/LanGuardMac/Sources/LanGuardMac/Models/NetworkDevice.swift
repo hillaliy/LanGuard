@@ -7,6 +7,8 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
     var macAddress: String
     var vendor: String?
     var hostname: String?
+    var comments: String
+    var attentionAcknowledgedRiskSignature: String?
     var iconName: String?
     var secondaryIconName: String?
     var status: DeviceStatus
@@ -27,6 +29,8 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         macAddress: String,
         vendor: String? = nil,
         hostname: String? = nil,
+        comments: String = "",
+        attentionAcknowledgedRiskSignature: String? = nil,
         iconName: String? = nil,
         secondaryIconName: String? = nil,
         status: DeviceStatus = .unknown,
@@ -46,6 +50,8 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         self.macAddress = macAddress
         self.vendor = vendor
         self.hostname = HostnameResolver.clean(hostname, ipAddress: ipAddress)
+        self.comments = comments
+        self.attentionAcknowledgedRiskSignature = attentionAcknowledgedRiskSignature
         self.iconName = iconName
         self.secondaryIconName = secondaryIconName
         self.status = status
@@ -67,6 +73,8 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         case macAddress
         case vendor
         case hostname
+        case comments
+        case attentionAcknowledgedRiskSignature
         case iconName
         case secondaryIconName
         case status
@@ -90,6 +98,11 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         vendor = try container.decodeIfPresent(String.self, forKey: .vendor)
         let decodedHostname = try container.decodeIfPresent(String.self, forKey: .hostname)
         hostname = HostnameResolver.clean(decodedHostname, ipAddress: ipAddress)
+        comments = try container.decodeIfPresent(String.self, forKey: .comments) ?? ""
+        attentionAcknowledgedRiskSignature = try container.decodeIfPresent(
+            String.self,
+            forKey: .attentionAcknowledgedRiskSignature
+        )
         iconName = try container.decodeIfPresent(String.self, forKey: .iconName)
         secondaryIconName = try container.decodeIfPresent(String.self, forKey: .secondaryIconName)
         status = try container.decodeIfPresent(DeviceStatus.self, forKey: .status) ?? .unknown
@@ -106,6 +119,27 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
 }
 
 extension NetworkDevice {
+    var riskFingerprint: String {
+        [
+            isKnown ? "known" : "unknown",
+            effectiveRole.rawValue,
+            risk.rawValue,
+            openPorts.sorted().map(String.init).joined(separator: ","),
+        ].joined(separator: "|")
+    }
+
+    var isAttentionAcknowledged: Bool {
+        isKnown && attentionAcknowledgedRiskSignature == riskFingerprint
+    }
+
+    var needsAttention: Bool {
+        (!isKnown || risk == .medium || risk == .high) && !isAttentionAcknowledged
+    }
+
+    mutating func setAttentionAcknowledged(_ acknowledged: Bool) {
+        attentionAcknowledgedRiskSignature = acknowledged && isKnown ? riskFingerprint : nil
+    }
+
     static func discovered(
         hostname: String?,
         ipAddress: String,

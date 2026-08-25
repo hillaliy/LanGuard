@@ -104,6 +104,52 @@ func deviceInventoryExportUsesEffectiveRole() throws {
 }
 
 @Test
+func deviceInventoryRoundTripPreservesCommentsAndAttentionAcknowledgement() throws {
+    var device = NetworkDevice(
+        id: "aa:bb:cc:dd:ee:ff",
+        name: "Lab server",
+        ipAddress: "192.168.1.20",
+        macAddress: "aa:bb:cc:dd:ee:ff",
+        comments: "Remote access is expected on this trusted device.",
+        risk: .high,
+        role: .server,
+        isKnown: true,
+        openPorts: [3389]
+    )
+    device.setAttentionAcknowledged(true)
+
+    let encoded = try JSONEncoder().encode(DeviceInventoryDocument(devices: [device]))
+    let decoded = try JSONDecoder().decode(DeviceInventoryDocument.self, from: encoded)
+    let imported = decoded.devices.first?.merged(into: nil)
+
+    #expect(imported?.comments == "Remote access is expected on this trusted device.")
+    #expect(imported?.isAttentionAcknowledged == true)
+    #expect(imported?.needsAttention == false)
+}
+
+@Test
+func deviceAttentionAcknowledgementIsInvalidatedByRiskChanges() {
+    var device = NetworkDevice(
+        id: "aa:bb:cc:dd:ee:ff",
+        name: "Lab server",
+        ipAddress: "192.168.1.20",
+        macAddress: "aa:bb:cc:dd:ee:ff",
+        risk: .high,
+        isKnown: true,
+        openPorts: [3389]
+    )
+
+    #expect(device.needsAttention)
+    device.setAttentionAcknowledged(true)
+    #expect(device.isAttentionAcknowledged)
+    #expect(!device.needsAttention)
+
+    device.openPorts.append(5900)
+    #expect(!device.isAttentionAcknowledged)
+    #expect(device.needsAttention)
+}
+
+@Test
 func vendorResolverFindsKnownOUI() {
     #expect(MACVendorResolver.vendor(for: "90:dd:5d:b7:bd:01") == "Apple, Inc.")
     #expect(MACVendorResolver.vendor(for: "90:ee:c7:f8:d4:e1") == "Samsung Electronics Co., Ltd.")

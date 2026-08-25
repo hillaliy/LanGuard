@@ -714,7 +714,7 @@ private struct WatchListCard: View {
 
     private var attentionDevices: [NetworkDevice] {
         devices
-            .filter { !$0.isKnown || $0.risk == .high }
+            .filter(\.needsAttention)
             .sorted { left, right in
                 if left.risk != right.risk {
                     return left.risk.sortRank > right.risk.sortRank
