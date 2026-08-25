@@ -8,6 +8,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
     var vendor: String?
     var hostname: String?
     var comments: String
+    var externalURL: String?
     var attentionAcknowledgedRiskSignature: String?
     var iconName: String?
     var secondaryIconName: String?
@@ -30,6 +31,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         vendor: String? = nil,
         hostname: String? = nil,
         comments: String = "",
+        externalURL: String? = nil,
         attentionAcknowledgedRiskSignature: String? = nil,
         iconName: String? = nil,
         secondaryIconName: String? = nil,
@@ -51,6 +53,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         self.vendor = vendor
         self.hostname = HostnameResolver.clean(hostname, ipAddress: ipAddress)
         self.comments = comments
+        self.externalURL = ExternalLinkValidator.normalizedString(externalURL)
         self.attentionAcknowledgedRiskSignature = attentionAcknowledgedRiskSignature
         self.iconName = iconName
         self.secondaryIconName = secondaryIconName
@@ -74,6 +77,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         case vendor
         case hostname
         case comments
+        case externalURL
         case attentionAcknowledgedRiskSignature
         case iconName
         case secondaryIconName
@@ -99,6 +103,9 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         let decodedHostname = try container.decodeIfPresent(String.self, forKey: .hostname)
         hostname = HostnameResolver.clean(decodedHostname, ipAddress: ipAddress)
         comments = try container.decodeIfPresent(String.self, forKey: .comments) ?? ""
+        externalURL = ExternalLinkValidator.normalizedString(
+            try container.decodeIfPresent(String.self, forKey: .externalURL)
+        )
         attentionAcknowledgedRiskSignature = try container.decodeIfPresent(
             String.self,
             forKey: .attentionAcknowledgedRiskSignature

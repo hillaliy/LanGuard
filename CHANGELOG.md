@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.5.0 - 2026-08-25
+
+- Added access to device details directly from rows on the Events page.
+- Fixed acknowledged device risks returning to Needs Attention after routine scan metadata updates.
+- **Breaking change:** Docker deployments must change the scanner service image from `ghcr.io/hillaliy/languard-backend` to `ghcr.io/hillaliy/languard-scheduler`.
+- Added a separate scheduled-scanner Docker image to prevent container updaters from confusing it with the backend service.
+- Improved Docker hostname discovery with one-shot mDNS queries and scan-wide metadata batching.
+- Improved Docker and macOS hostname discovery with dynamic DNS-SD service browsing and cross-packet record correlation.
+- Added optional external device links in Docker and macOS with verified local web-interface suggestions.
+- Sorted Docker role choices alphabetically by their displayed labels.
+
 ## 1.4.0 - 2026-08-25
 
 - Added device comments in Docker and macOS.

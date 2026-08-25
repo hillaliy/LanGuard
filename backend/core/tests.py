@@ -29,6 +29,7 @@ from .scan import (
     clean_hostname,
     default_gateway_from_proc_route,
     discover_devices,
+    detect_web_interface,
     dns_encode_name,
     dns_ptr_names,
     guess_device_identity,
@@ -40,8 +41,12 @@ from .scan import (
     mdns_service_hostname,
     mdns_service_hostname_map,
     MDNS_SERVICE_HOSTNAME_CACHE,
+    mdns_query_responses,
+    mdns_reverse_hostname,
     mdns_service_hostname_from_response,
     mdns_service_hostnames_from_response,
+    mdns_service_hostnames_from_responses,
+    mdns_service_types_from_response,
     mdns_multicast_responses,
     manuf_vendor,
     normalize_scan_ports,
@@ -50,6 +55,7 @@ from .scan import (
     sync_discovered_device,
     sync_device_ports,
     validate_ip_range,
+    web_interface_candidates,
 )
 
 
@@ -95,6 +101,11 @@ class HostnameResolutionTests(SimpleTestCase):
 
     def test_clean_hostname_returns_blank_when_unavailable(self):
         self.assertEqual(clean_hostname(""), "")
+
+    def test_clean_hostname_rejects_dns_errors_and_numeric_values(self):
+        self.assertEqual(clean_hostname("0"), "")
+        self.assertEqual(clean_hostname(";; connection timed out; no servers could be reached"), "")
+        self.assertEqual(clean_hostname("192.168.1.10", ip_address="192.168.1.10"), "")
 
     @patch("core.scan.netbios_hostname", return_value="")
     @patch("core.scan.ssdp_hostname", return_value="")
@@ -162,6 +173,16 @@ class HostnameResolutionTests(SimpleTestCase):
     def test_get_hostname_uses_ssdp_fallback(self, *_):
         self.assertEqual(get_hostname("192.168.1.1"), "Archer BE550")
 
+    @patch("core.scan.netbios_hostname", return_value="")
+    @patch("core.scan.llmnr_reverse_hostname", return_value="")
+    @patch("core.scan.mdns_reverse_hostname", return_value="")
+    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    def test_get_hostname_uses_preloaded_network_hint(self, *_):
+        self.assertEqual(
+            get_hostname("192.168.1.42", hostname_hints={"192.168.1.42": "HAA 123456"}),
+            "HAA 123456",
+        )
+
     def test_dns_ptr_names_returns_matching_owner(self):
         packet = (
             b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
@@ -189,6 +210,30 @@ class HostnameResolutionTests(SimpleTestCase):
             dns_ptr_names(packet, expected_owner="21.1.168.192.in-addr.arpa"),
             [],
         )
+
+    @patch("core.scan.udp_exchange", side_effect=OSError("timeout"))
+    @patch("core.scan.mdns_legacy_responses")
+    def test_mdns_reverse_hostname_checks_all_one_shot_responses(self, legacy_responses, _):
+        unrelated = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("22.1.168.192.in-addr.arpa")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("Other.local")).to_bytes(2, "big")
+            + dns_encode_name("Other.local")
+        )
+        matching = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("21.1.168.192.in-addr.arpa")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("HAA-123456.local")).to_bytes(2, "big")
+            + dns_encode_name("HAA-123456.local")
+        )
+        legacy_responses.return_value = [
+            (unrelated, "192.168.1.22"),
+            (matching, "192.168.1.21"),
+        ]
+
+        self.assertEqual(mdns_reverse_hostname("192.168.1.21"), "HAA 123456")
 
     @patch("core.scan.udp_exchange")
     def test_llmnr_reverse_hostname_uses_matching_ptr(self, udp_exchange):
@@ -241,7 +286,52 @@ class HostnameResolutionTests(SimpleTestCase):
 
         self.assertEqual(mdns_service_hostname_from_response(packet), "HAA 123456")
 
-    @patch("core.scan.mdns_multicast_responses")
+    def test_mdns_service_hostname_extracts_generic_dns_sd_instance(self):
+        packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("_printer._tcp.local")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("Office-Printer._printer._tcp.local")).to_bytes(2, "big")
+            + dns_encode_name("Office-Printer._printer._tcp.local")
+        )
+
+        self.assertEqual(mdns_service_hostname_from_response(packet), "Office Printer")
+
+    def test_mdns_service_types_extracts_advertised_service(self):
+        packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("_services._dns-sd._udp.local")
+            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
+            + len(dns_encode_name("_matter._tcp.local")).to_bytes(2, "big")
+            + dns_encode_name("_matter._tcp.local")
+        )
+
+        self.assertEqual(mdns_service_types_from_response(packet), {"_matter._tcp.local"})
+
+    def test_mdns_service_hostnames_correlates_records_across_packets(self):
+        srv_packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("Kitchen-Sensor._matter._tcp.local")
+            + b"\x00\x21\x00\x01\x00\x00\x00\x78"
+            + (6 + len(dns_encode_name("sensor-123.local"))).to_bytes(2, "big")
+            + b"\x00\x00\x00\x00\x00\x50"
+            + dns_encode_name("sensor-123.local")
+        )
+        address_packet = (
+            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
+            + dns_encode_name("sensor-123.local")
+            + b"\x00\x01\x00\x01\x00\x00\x00\x78\x00\x04"
+            + bytes([192, 168, 1, 60])
+        )
+
+        self.assertEqual(
+            mdns_service_hostnames_from_responses(
+                [(srv_packet, "192.168.1.60"), (address_packet, "192.168.1.60")]
+            ),
+            {"192.168.1.60": "Kitchen Sensor"},
+        )
+
+    @patch("core.scan.mdns_query_responses")
     def test_mdns_service_hostname_uses_source_ip_for_ptr_only_response(self, mdns_responses):
         packet = (
             b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
@@ -255,7 +345,7 @@ class HostnameResolutionTests(SimpleTestCase):
         self.assertEqual(mdns_service_hostname("192.168.1.42"), "HAA 123456")
 
     @patch("core.scan.time.sleep")
-    @patch("core.scan.mdns_multicast_responses")
+    @patch("core.scan.mdns_query_responses")
     def test_mdns_service_hostname_retries_and_caches_service_map(self, mdns_responses, sleep):
         packet = (
             b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
@@ -271,26 +361,18 @@ class HostnameResolutionTests(SimpleTestCase):
         self.assertEqual(mdns_responses.call_count, 3)
         self.assertEqual(sleep.call_count, 2)
 
-    @patch("core.scan.time.sleep")
-    @patch("core.scan.udp_responses")
     @patch("core.scan.mdns_multicast_responses", side_effect=OSError("bind failed"))
-    def test_mdns_service_hostname_falls_back_when_multicast_bind_fails(
+    @patch("core.scan.mdns_legacy_responses", return_value=[(b"response", "192.168.1.56")])
+    def test_mdns_query_uses_one_shot_responses_when_multicast_bind_fails(
         self,
-        _mdns_responses,
-        udp_responses,
-        _sleep,
+        legacy_responses,
+        _multicast_responses,
     ):
-        packet = (
-            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
-            + dns_encode_name("_hap._tcp.local")
-            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
-            + len(dns_encode_name("HAA-FALLBACK._hap._tcp.local")).to_bytes(2, "big")
-            + dns_encode_name("HAA-FALLBACK._hap._tcp.local")
+        self.assertEqual(
+            mdns_query_responses(["_hap._tcp.local"]),
+            [(b"response", "192.168.1.56")],
         )
-        udp_responses.side_effect = [[(packet, "192.168.1.56")]] + [[]] * 20
-
-        self.assertEqual(mdns_service_hostname("192.168.1.56"), "HAA FALLBACK")
-        self.assertEqual(udp_responses.call_count, 21)
+        legacy_responses.assert_called_once()
 
     @patch("core.scan.requests.get")
     def test_ssdp_hostname_from_response_fetches_device_description(self, get):
@@ -313,6 +395,24 @@ class HostnameResolutionTests(SimpleTestCase):
 
         self.assertEqual(ssdp_hostname_from_response(response, "192.168.1.1"), "")
         get.assert_not_called()
+
+    def test_web_interface_candidates_use_only_open_web_ports(self):
+        self.assertEqual(
+            web_interface_candidates("192.168.1.20", [22, 80, 8443]),
+            ["http://192.168.1.20", "https://192.168.1.20:8443"],
+        )
+        self.assertEqual(web_interface_candidates("8.8.8.8", [80, 443]), [])
+
+    @patch("core.scan.requests.get")
+    def test_detect_web_interface_tries_candidates_until_one_responds(self, get):
+        response = Mock()
+        get.side_effect = [requests.ConnectionError("closed"), response]
+
+        detected = detect_web_interface("192.168.1.20", [80, 443])
+
+        self.assertEqual(detected, "http://192.168.1.20")
+        self.assertEqual(get.call_count, 2)
+        response.close.assert_called_once()
 
     def test_manuf_parser_preserves_original_vendor_name(self):
         entry = ManufVendorDB.parse_line(
@@ -2219,6 +2319,40 @@ class ScanApiTests(TestCase):
         self.assertFalse(after["needs_attention"])
         self.assertNotIn("attention_acknowledged_signature", after)
 
+    def test_device_can_save_external_link(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"external_url": "https://192.168.1.10:8443"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.external_url, "https://192.168.1.10:8443")
+
+    def test_device_rejects_non_http_external_link(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"external_url": "javascript:alert(1)"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("external_url", response.data["info"])
+
+    @patch("core.views.detect_web_interface", return_value="http://192.168.1.10")
+    def test_device_web_interface_endpoint_probes_saved_device(self, detect):
+        DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
+
+        response = self.client.get(
+            "/api/v1/device/web-interface/",
+            {"id": self.device.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["url"], "http://192.168.1.10")
+        detect.assert_called_once_with("192.168.1.20", [80])
+
     def test_risk_change_invalidates_attention_acknowledgement(self):
         self.device.known = True
         self.device.vendor = "Linux"
@@ -2256,6 +2390,30 @@ class ScanApiTests(TestCase):
         self.assertFalse(device["attention_acknowledged"])
         self.assertTrue(device["needs_attention"])
 
+    def test_scan_metadata_changes_do_not_invalidate_attention_acknowledgement(self):
+        self.device.known = True
+        self.device.vendor = "Original vendor"
+        self.device.save(update_fields=["known", "vendor"])
+        DevicePort.objects.create(device=self.device, port=8080, protocol="tcp", open=True)
+        self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"acknowledge_attention": True},
+            format="json",
+        )
+
+        self.device.vendor = "Updated vendor"
+        self.device.hostname = "matter-hub.local"
+        self.device.status = Device.Status.RECENTLY_SEEN
+        self.device.missed_scans = 1
+        self.device.save(
+            update_fields=["vendor", "hostname", "status", "missed_scans"]
+        )
+
+        device = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
+        self.assertEqual(device["risk_level"], "medium")
+        self.assertTrue(device["attention_acknowledged"])
+        self.assertFalse(device["needs_attention"])
+
     def test_unknown_device_cannot_acknowledge_attention(self):
         response = self.client.put(
             f"/api/v1/device/?id={self.device.id}",
@@ -2284,7 +2442,8 @@ class ScanApiTests(TestCase):
     def test_device_inventory_export_returns_shared_format(self):
         self.device.known = True
         self.device.comments = "Demo note"
-        self.device.save(update_fields=["known", "comments"])
+        self.device.external_url = "https://192.168.1.10"
+        self.device.save(update_fields=["known", "comments", "external_url"])
         DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
         self.client.put(
             f"/api/v1/device/?id={self.device.id}",
@@ -2301,6 +2460,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(exported_device["mac"], "aa:aa:aa:aa:aa:aa")
         self.assertEqual(exported_device["open_ports"], [80])
         self.assertEqual(exported_device["comments"], "Demo note")
+        self.assertEqual(exported_device["external_url"], "https://192.168.1.10")
         self.assertTrue(exported_device["attention_acknowledged"])
         self.assertTrue(exported_device["first_seen"].endswith("Z"))
 
@@ -2358,6 +2518,7 @@ class ScanApiTests(TestCase):
                         "vendor": "Example vendor",
                         "known": True,
                         "comments": "Remote Desktop is expected.",
+                        "external_url": "http://192.168.1.20:8080",
                         "attention_acknowledged": True,
                         "open_ports": [3389],
                     }
@@ -2369,6 +2530,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.device.refresh_from_db()
         self.assertEqual(self.device.comments, "Remote Desktop is expected.")
+        self.assertEqual(self.device.external_url, "http://192.168.1.20:8080")
         imported = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
         self.assertTrue(imported["attention_acknowledged"])
         self.assertFalse(imported["needs_attention"])

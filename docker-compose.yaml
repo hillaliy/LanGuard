@@ -15,7 +15,7 @@ services:
     restart: unless-stopped
 
   scanner:
-    image: ghcr.io/hillaliy/languard-backend:latest
+    image: ghcr.io/hillaliy/languard-scheduler:latest
     container_name: languard-scanner
     privileged: true
     network_mode: host
@@ -29,8 +29,6 @@ services:
       - languard_database:/data
       - languard_static:/static
     restart: unless-stopped
-    depends_on:
-      - backend
 
   frontend:
     image: ghcr.io/hillaliy/languard-frontend:latest

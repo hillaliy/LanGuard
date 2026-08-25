@@ -305,6 +305,16 @@ textarea {
   box-shadow: 0 1px 0 var(--border-color);
 }
 
+.activity-clickable-row {
+  cursor: pointer;
+}
+
+.activity-clickable-row:hover,
+.activity-clickable-row:focus-visible {
+  background: var(--mantine-color-blue-light);
+  outline: none;
+}
+
 .settings-page {
   position: relative;
 }

@@ -41,6 +41,7 @@ struct DeviceInventoryItem: Codable {
     var vendor: String?
     var hostname: String?
     var comments: String?
+    var externalURL: String?
     var attentionAcknowledged: Bool?
     var icon: String?
     var secondaryIcon: String?
@@ -61,6 +62,7 @@ struct DeviceInventoryItem: Codable {
         self.vendor = device.vendor
         self.hostname = device.hostname
         self.comments = device.comments
+        self.externalURL = device.externalURL
         self.attentionAcknowledged = device.isAttentionAcknowledged
         self.icon = device.iconName
         self.secondaryIcon = device.secondaryIconName
@@ -105,6 +107,7 @@ struct DeviceInventoryItem: Codable {
         let importedVendor = normalizedText(vendor) ?? existing?.vendor
         let importedHostname = normalizedText(hostname) ?? existing?.hostname
         let importedComments = comments ?? existing?.comments ?? ""
+        let importedExternalURL = ExternalLinkValidator.normalizedString(externalURL) ?? existing?.externalURL
         let importedIcon = normalizedText(icon) ?? existing?.iconName
         let importedSecondaryIcon = normalizedText(secondaryIcon) ?? existing?.secondaryIconName
         let importedRole = normalizedRole ?? existing?.role
@@ -118,6 +121,7 @@ struct DeviceInventoryItem: Codable {
             vendor: importedVendor,
             hostname: importedHostname,
             comments: importedComments,
+            externalURL: importedExternalURL,
             iconName: importedIcon,
             secondaryIconName: importedSecondaryIcon,
             status: deviceStatus,
@@ -164,6 +168,7 @@ struct DeviceInventoryItem: Codable {
         case vendor
         case hostname
         case comments
+        case externalURL = "external_url"
         case attentionAcknowledged = "attention_acknowledged"
         case icon
         case secondaryIcon = "secondary_icon"

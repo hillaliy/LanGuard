@@ -1,6 +1,6 @@
 FROM python:3.14-slim
 
-ARG APP_VERSION=1.4.0
+ARG APP_VERSION=1.5.0
 
 ENV ENVIRONMENT=production \
     APP_VERSION=${APP_VERSION} \
@@ -20,6 +20,9 @@ COPY ./backend /app
 COPY ./macos/LanGuardMac/Resources/manuf /app/core/resources/manuf
 
 WORKDIR /app
+
+ARG APP_COMPONENT=backend
+ENV APP_COMPONENT=${APP_COMPONENT}
 
 COPY ./entrypoint.sh /
 ENTRYPOINT [ "sh", "/entrypoint.sh" ]

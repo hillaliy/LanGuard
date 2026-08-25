@@ -2,6 +2,50 @@ import Foundation
 import Testing
 @testable import LanGuardMac
 
+private func dnsUInt16(_ value: UInt16) -> Data {
+    Data([UInt8((value >> 8) & 0xff), UInt8(value & 0xff)])
+}
+
+private func dnsUInt32(_ value: UInt32) -> Data {
+    Data([
+        UInt8((value >> 24) & 0xff),
+        UInt8((value >> 16) & 0xff),
+        UInt8((value >> 8) & 0xff),
+        UInt8(value & 0xff),
+    ])
+}
+
+private func dnsName(_ name: String) -> Data {
+    var data = Data()
+    for label in name.split(separator: ".") {
+        let bytes = Array(label.utf8)
+        data.append(UInt8(bytes.count))
+        data.append(contentsOf: bytes)
+    }
+    data.append(0)
+    return data
+}
+
+private func dnsResponse(records: [(name: String, type: UInt16, payload: Data)]) -> Data {
+    var response = Data()
+    response.append(dnsUInt16(0))
+    response.append(dnsUInt16(0x8400))
+    response.append(dnsUInt16(0))
+    response.append(dnsUInt16(UInt16(records.count)))
+    response.append(dnsUInt16(0))
+    response.append(dnsUInt16(0))
+
+    for record in records {
+        response.append(dnsName(record.name))
+        response.append(dnsUInt16(record.type))
+        response.append(dnsUInt16(0x0001))
+        response.append(dnsUInt32(120))
+        response.append(dnsUInt16(UInt16(record.payload.count)))
+        response.append(record.payload)
+    }
+    return response
+}
+
 @Test
 func arpParserParsesKnownHostLine() {
     let line = "router.local (192.168.0.1) at 1:2:3:a:b:c on en0 ifscope [ethernet]"
@@ -111,6 +155,7 @@ func deviceInventoryRoundTripPreservesCommentsAndAttentionAcknowledgement() thro
         ipAddress: "192.168.1.20",
         macAddress: "aa:bb:cc:dd:ee:ff",
         comments: "Remote access is expected on this trusted device.",
+        externalURL: "https://192.168.1.20:8443",
         risk: .high,
         role: .server,
         isKnown: true,
@@ -123,8 +168,28 @@ func deviceInventoryRoundTripPreservesCommentsAndAttentionAcknowledgement() thro
     let imported = decoded.devices.first?.merged(into: nil)
 
     #expect(imported?.comments == "Remote access is expected on this trusted device.")
+    #expect(imported?.externalURL == "https://192.168.1.20:8443")
     #expect(imported?.isAttentionAcknowledged == true)
     #expect(imported?.needsAttention == false)
+}
+
+@Test
+func externalLinkValidatorAcceptsOnlyHTTPLinks() {
+    #expect(ExternalLinkValidator.normalizedString(" https://192.168.1.20:8443 ") == "https://192.168.1.20:8443")
+    #expect(ExternalLinkValidator.normalizedString("http://router.local") == "http://router.local")
+    #expect(ExternalLinkValidator.normalizedString("javascript:alert(1)") == nil)
+    #expect(ExternalLinkValidator.normalizedString("") == nil)
+}
+
+@Test
+func webInterfaceDetectorBuildsCandidatesFromOpenPorts() {
+    #expect(WebInterfaceDetector.candidateURLs(
+        ipAddress: "192.168.1.20",
+        openPorts: [22, 80, 8443]
+    ).map(\.absoluteString) == [
+        "http://192.168.1.20",
+        "https://192.168.1.20:8443",
+    ])
 }
 
 @Test
@@ -484,6 +549,61 @@ func mdnsServiceMetadataExtractsHomeKitInstanceFromPTROnlyResponse() {
     response[ptrLengthStart + 1] = UInt8(ptrLength & 0xff)
 
     #expect(MDNSServiceMetadataDiscovery.serviceHostname(from: response) == "HAA 123456")
+}
+
+@Test
+func mdnsServiceMetadataExtractsGenericServiceInstance() {
+    let response = dnsResponse(records: [
+        (
+            name: "_printer._tcp.local",
+            type: 0x000c,
+            payload: dnsName("Office-Printer._printer._tcp.local")
+        ),
+    ])
+
+    #expect(MDNSServiceMetadataDiscovery.serviceHostname(from: response) == "Office Printer")
+}
+
+@Test
+func mdnsServiceMetadataDiscoversAdvertisedServiceTypes() {
+    let response = dnsResponse(records: [
+        (
+            name: "_services._dns-sd._udp.local",
+            type: 0x000c,
+            payload: dnsName("_matter._tcp.local")
+        ),
+    ])
+
+    #expect(MDNSServiceMetadataDiscovery.serviceTypes(from: response) == ["_matter._tcp.local"])
+}
+
+@Test
+func mdnsServiceMetadataCorrelatesRecordsAcrossResponses() {
+    var srvPayload = Data()
+    srvPayload.append(dnsUInt16(0))
+    srvPayload.append(dnsUInt16(0))
+    srvPayload.append(dnsUInt16(5556))
+    srvPayload.append(dnsName("esp32-switch.local"))
+
+    let serviceResponse = dnsResponse(records: [
+        (
+            name: "HAA-654321._hap._tcp.local",
+            type: 0x0021,
+            payload: srvPayload
+        ),
+    ])
+    let addressResponse = dnsResponse(records: [
+        (
+            name: "esp32-switch.local",
+            type: 0x0001,
+            payload: Data([192, 168, 0, 43])
+        ),
+    ])
+
+    let hostnames = MDNSServiceMetadataDiscovery.hostnamesByIP(
+        from: [serviceResponse, addressResponse]
+    )
+    #expect(hostnames["192.168.0.43"] == "HAA 654321")
 }
 
 @Test
