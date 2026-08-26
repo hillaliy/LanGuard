@@ -4,6 +4,17 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.6.0',
+    date: '2026-08-26',
+    items: [
+      'Added per-channel test actions for configured Discord and Telegram notifications.',
+      'Added First Seen filtering and sorting to the Docker and macOS device lists.',
+      'Improved server-unavailable messages without exposing internal API or server details.',
+      'Fixed unnecessary page-level horizontal scrolling in the Docker interface.',
+      'Fixed clipped port-overflow indicators and improved device-list port spacing.',
+    ],
+  },
+  {
     version: '1.5.0',
     date: '2026-08-25',
     items: [

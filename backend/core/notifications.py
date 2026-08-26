@@ -12,6 +12,10 @@ from .models import AppSettings, NetworkEvent, NotificationDelivery
 
 LOGGER = logging.getLogger(__name__)
 DISCORD_ALERT_COLOR = 0xE03131
+DISCORD_TEST_COLOR = 0x228BE6
+TEST_NOTIFICATION_MESSAGE = (
+    "This is a test notification from LanGuard. Your notification channel is working."
+)
 
 
 def configured_channels(app_config=None):
@@ -185,6 +189,28 @@ def send_telegram(event, app_config):
     response.raise_for_status()
 
 
+def send_discord_test(webhook):
+    response = requests.post(
+        webhook,
+        json=format_discord_test_payload(),
+        timeout=settings.NOTIFICATION_TIMEOUT,
+    )
+    response.raise_for_status()
+
+
+def send_telegram_test(token, user_id):
+    response = requests.post(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        json={
+            "chat_id": user_id,
+            "text": f"LanGuard: Test notification\n{TEST_NOTIFICATION_MESSAGE}",
+            "disable_web_page_preview": True,
+        },
+        timeout=settings.NOTIFICATION_TIMEOUT,
+    )
+    response.raise_for_status()
+
+
 def format_event_message(event):
     device = event.device
     lines = [
@@ -197,6 +223,25 @@ def format_event_message(event):
     if device.vendor:
         lines.append(f"Vendor: {device.vendor}")
     return "\n".join(lines)
+
+
+def format_discord_test_payload():
+    icon_url = settings.DISCORD_ICON_URL
+    embed = {
+        "title": "LanGuard: Test notification",
+        "description": TEST_NOTIFICATION_MESSAGE,
+        "color": DISCORD_TEST_COLOR,
+        "timestamp": utc_isoformat(timezone.now()),
+        "footer": {"text": "LanGuard"},
+    }
+    if icon_url:
+        embed["author"] = {"name": "LanGuard", "icon_url": icon_url}
+        embed["thumbnail"] = {"url": icon_url}
+
+    payload = {"username": "LanGuard", "embeds": [embed]}
+    if icon_url:
+        payload["avatar_url"] = icon_url
+    return payload
 
 
 def format_discord_payload(event):

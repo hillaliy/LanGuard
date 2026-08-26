@@ -21,7 +21,13 @@ from .models import (
     NotificationDelivery,
     ScanRun,
 )
-from .notifications import format_discord_payload, notify_event, retry_failed_notifications
+from .notifications import (
+    format_discord_payload,
+    notify_event,
+    retry_failed_notifications,
+    send_discord_test,
+    send_telegram_test,
+)
 from .views import parse_inventory_datetime
 from .scan import (
     clear_stale_gateways,
@@ -1221,6 +1227,41 @@ class NotificationTests(TestCase):
         self.assertEqual(embed["thumbnail"]["url"], "https://example.com/languard.png?v=1.1.4")
 
     @override_settings(
+        DISCORD_ICON_URL="https://example.com/languard.png",
+        NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
+    def test_discord_test_uses_dedicated_payload(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+
+        send_discord_test("https://discord.example/webhook")
+
+        post.assert_called_once()
+        self.assertEqual(post.call_args.args[0], "https://discord.example/webhook")
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["username"], "LanGuard")
+        self.assertEqual(payload["embeds"][0]["title"], "LanGuard: Test notification")
+        self.assertIn("channel is working", payload["embeds"][0]["description"])
+
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
+    def test_telegram_test_uses_supplied_credentials(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+
+        send_telegram_test("bot-token", "123456")
+
+        post.assert_called_once()
+        self.assertEqual(
+            post.call_args.args[0],
+            "https://api.telegram.org/botbot-token/sendMessage",
+        )
+        self.assertEqual(post.call_args.kwargs["json"]["chat_id"], "123456")
+        self.assertIn(
+            "Test notification",
+            post.call_args.kwargs["json"]["text"],
+        )
+
+    @override_settings(
         NOTIFICATIONS_ENABLED=True,
         DISCORD_WEBHOOK="https://discord.example/webhook",
         TELEGRAM_TOKEN="",
@@ -1667,6 +1708,91 @@ class ScanApiTests(TestCase):
         response = regular_client.get("/api/v1/settings/")
 
         self.assertEqual(response.status_code, 403)
+
+    def test_notification_test_endpoint_requires_admin_user(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "discord",
+                "discord_webhook": "https://discord.example/webhook",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    @patch("core.views.send_discord_test")
+    def test_notification_test_endpoint_sends_discord_without_history(self, send_test):
+        delivery_count = NotificationDelivery.objects.count()
+        event_count = NetworkEvent.objects.count()
+
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "discord",
+                "discord_webhook": "https://discord.example/webhook",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["channel"], "discord")
+        send_test.assert_called_once_with("https://discord.example/webhook")
+        self.assertEqual(NotificationDelivery.objects.count(), delivery_count)
+        self.assertEqual(NetworkEvent.objects.count(), event_count)
+
+    @patch("core.views.send_telegram_test")
+    def test_notification_test_endpoint_sends_telegram(self, send_test):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "telegram",
+                "telegram_token": "bot-token",
+                "telegram_user_id": "123456",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        send_test.assert_called_once_with("bot-token", "123456")
+
+    def test_notification_test_endpoint_rejects_incomplete_credentials(self):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {"channel": "telegram", "telegram_token": "bot-token"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("telegram", response.data)
+
+    @patch("core.views.send_discord_test")
+    def test_notification_test_endpoint_sanitizes_upstream_error(self, send_test):
+        upstream_response = Mock(status_code=401)
+        send_test.side_effect = requests.HTTPError(
+            "https://discord.example/secret-webhook failed",
+            response=upstream_response,
+        )
+
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "discord",
+                "discord_webhook": "https://discord.example/secret-webhook",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(
+            response.data["detail"],
+            "Discord rejected the test notification. HTTP 401.",
+        )
+        self.assertNotIn("secret-webhook", response.data["detail"])
 
     def test_home_map_layout_endpoint_requires_authentication(self):
         client = APIClient()
@@ -2152,6 +2278,66 @@ class ScanApiTests(TestCase):
             [device["ip"] for device in response.data["data"]],
             ["192.168.1.2", "192.168.1.20", "192.168.1.100"],
         )
+
+    def test_device_endpoint_sorts_by_first_seen(self):
+        now = timezone.now()
+        self.device.firstseen = now - timedelta(days=10)
+        self.device.save(update_fields=["firstseen"])
+        older = Device.objects.create(
+            name="Older device",
+            ip="192.168.1.30",
+            mac="bb:bb:bb:bb:bb:bb",
+            firstseen=now - timedelta(days=30),
+        )
+        newer = Device.objects.create(
+            name="Newer device",
+            ip="192.168.1.40",
+            mac="cc:cc:cc:cc:cc:cc",
+            firstseen=now - timedelta(days=1),
+        )
+
+        response = self.client.get(
+            "/api/v1/device/",
+            {"ordering": "-firstseen"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [device["id"] for device in response.data["data"]],
+            [newer.id, self.device.id, older.id],
+        )
+
+    def test_device_endpoint_filters_by_first_seen_period(self):
+        now = timezone.now()
+        self.device.firstseen = now - timedelta(days=20)
+        self.device.save(update_fields=["firstseen"])
+        recent = Device.objects.create(
+            name="Recent device",
+            ip="192.168.1.30",
+            mac="bb:bb:bb:bb:bb:bb",
+            firstseen=now - timedelta(days=2),
+        )
+        Device.objects.create(
+            name="Old device",
+            ip="192.168.1.40",
+            mac="cc:cc:cc:cc:cc:cc",
+            firstseen=now - timedelta(days=40),
+        )
+
+        response = self.client.get("/api/v1/device/", {"first_seen": "7d"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["pagination"]["count"], 1)
+        self.assertEqual(response.data["data"][0]["id"], recent.id)
+
+    def test_device_endpoint_rejects_invalid_first_seen_period(self):
+        response = self.client.get(
+            "/api/v1/device/",
+            {"first_seen": "yesterday"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("first_seen", response.data)
 
     def test_device_endpoint_filters_by_display_status(self):
         Device.objects.create(

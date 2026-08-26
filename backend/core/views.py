@@ -3,7 +3,8 @@ import json
 import urllib.error
 import urllib.request
 from urllib.parse import urlparse
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime, timedelta, timezone as datetime_timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from drf_spectacular.utils import OpenApiTypes, extend_schema, inline_serializer
 from rest_framework import status, generics, permissions
@@ -25,6 +26,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
 
 import logging
+import requests
 
 from django.utils import timezone
 from .datetime_utils import utc_isoformat
@@ -35,6 +37,7 @@ from .serializers import (
     HomeMapLayoutSerializer,
     NetworkEventSerializer,
     NotificationDeliverySerializer,
+    NotificationTestSerializer,
     ScanRunSerializer,
     UserManagementSerializer,
     UserSerializer,
@@ -58,6 +61,7 @@ from .api import (
     parse_int_param,
 )
 from .scan import detect_web_interface, scan, validate_ip_range
+from .notifications import send_discord_test, send_telegram_test
 
 LOGGER = logging.getLogger(__name__)
 
@@ -148,9 +152,26 @@ def import_inventory_role(item):
 DEVICE_ORDERING_FIELDS = {
     "name": ("name", "ip", "id"),
     "-name": ("-name", "ip", "id"),
+    "firstseen": ("firstseen", "ip", "id"),
+    "-firstseen": ("-firstseen", "ip", "id"),
     "lastseen": ("lastseen", "ip", "id"),
     "-lastseen": ("-lastseen", "ip", "id"),
 }
+FIRST_SEEN_PERIODS = {"today", "7d", "30d"}
+
+
+def first_seen_threshold(period):
+    now = timezone.now()
+    if period == "today":
+        config = AppSettings.load()
+        try:
+            app_timezone = ZoneInfo(config.time_zone)
+        except ZoneInfoNotFoundError:
+            app_timezone = timezone.get_current_timezone()
+        local_now = timezone.localtime(now, app_timezone)
+        return local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    days = 7 if period == "7d" else 30
+    return now - timedelta(days=days)
 
 
 def ip_sort_key(device):
@@ -190,7 +211,14 @@ def paginated_device_payload(request, devices):
             },
         }
     if ordering:
-        raise ValidationError({"ordering": "Must be one of: name, -name, ip, -ip."})
+        raise ValidationError(
+            {
+                "ordering": (
+                    "Must be one of: name, -name, ip, -ip, firstseen, "
+                    "-firstseen, lastseen, -lastseen."
+                )
+            }
+        )
     return paginated_payload(
         request,
         devices,
@@ -639,6 +667,62 @@ def app_settings(request):
 
 
 @extend_schema(
+    request=NotificationTestSerializer,
+    responses=inline_serializer(
+        name="NotificationTestResponse",
+        fields={
+            "data": inline_serializer(
+                name="NotificationTestResponseData",
+                fields={
+                    "channel": serializers.CharField(),
+                    "message": serializers.CharField(),
+                },
+            )
+        },
+    ),
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def test_notification_channel(request):
+    serializer = NotificationTestSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    channel = data["channel"]
+
+    try:
+        if channel == NotificationDelivery.Channel.DISCORD:
+            send_discord_test(data["discord_webhook"].strip())
+        else:
+            send_telegram_test(
+                data["telegram_token"].strip(),
+                data["telegram_user_id"].strip(),
+            )
+    except requests.Timeout:
+        return Response(
+            {"detail": f"{channel.title()} did not respond before the timeout."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    except requests.RequestException as exc:
+        response_status = getattr(getattr(exc, "response", None), "status_code", None)
+        detail = f"{channel.title()} rejected the test notification."
+        if response_status:
+            detail = f"{detail} HTTP {response_status}."
+        return Response(
+            {"detail": detail},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+    return Response(
+        {
+            "data": {
+                "channel": channel,
+                "message": f"Test notification sent to {channel.title()}.",
+            }
+        }
+    )
+
+
+@extend_schema(
     methods=["GET"],
     responses=HomeMapLayoutSerializer,
 )
@@ -954,6 +1038,7 @@ def device(request):
             known = parse_bool_param(request.query_params, "known")
             search = request.query_params.get("search")
             open_port = request.query_params.get("open_port")
+            first_seen = request.query_params.get("first_seen")
 
             if device_status:
                 if device_status not in Device.Status.values:
@@ -978,6 +1063,14 @@ def device(request):
                     maximum=65535,
                 )
                 devices = devices.filter(ports__port=port, ports__open=True).distinct()
+            if first_seen:
+                if first_seen not in FIRST_SEEN_PERIODS:
+                    raise ValidationError(
+                        {"first_seen": "Must be one of: today, 7d, 30d."}
+                    )
+                devices = devices.filter(
+                    firstseen__gte=first_seen_threshold(first_seen)
+                )
 
             payload = paginated_device_payload(request, devices)
             return Response(

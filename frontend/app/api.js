@@ -1,4 +1,6 @@
 const CONFIGURED_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
+export const BACKEND_UNAVAILABLE_MESSAGE =
+  'LanGuard cannot reach the server right now. Wait a moment, then try again.';
 
 function getApiBase() {
   if (CONFIGURED_API_BASE) {
@@ -91,10 +93,6 @@ function buildUrl(path, params = {}) {
   return url;
 }
 
-function apiConnectionMessage(url) {
-  return `Backend server is not reachable at ${url.origin}. Check that Django is running, then refresh.`;
-}
-
 export async function apiRequest(path, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
@@ -116,7 +114,11 @@ export async function apiRequest(path, options = {}) {
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
   } catch (error) {
-    throw new Error(apiConnectionMessage(url));
+    throw new Error(BACKEND_UNAVAILABLE_MESSAGE);
+  }
+
+  if (response.status >= 500) {
+    throw new Error(BACKEND_UNAVAILABLE_MESSAGE);
   }
 
   let payload = null;
@@ -127,10 +129,11 @@ export async function apiRequest(path, options = {}) {
     } catch (error) {
       const contentType = response.headers.get('content-type') || '';
       if (contentType.includes('text/html') || text.trim().startsWith('<')) {
+        if (!response.ok) {
+          throw new Error(BACKEND_UNAVAILABLE_MESSAGE);
+        }
         throw new Error(
-          response.ok
-            ? `Backend returned an HTML page instead of API data from ${url.pathname}.`
-            : `Backend returned an HTML error page for ${url.pathname}. Check the Django server logs.`
+          `Backend returned an HTML page instead of API data from ${url.pathname}.`
         );
       }
       throw new Error(`Backend returned an unreadable API response from ${url.pathname}.`);
