@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.0 - 2026-08-26
+
+- Added per-channel test actions for configured Discord and Telegram notifications.
+- Added `First Seen` filtering and sorting to the Docker and macOS device lists.
+- Improved Docker server-unavailable messages without exposing internal API or server details.
+- Fixed unnecessary page-level horizontal scrolling in the Docker interface.
+- Fixed clipped port-overflow indicators and improved device-list port spacing.
+
 ## 1.5.0 - 2026-08-25
 
 - Added access to device details directly from rows on the Events page.

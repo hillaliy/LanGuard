@@ -74,6 +74,7 @@ import {
   IconRestore,
   IconRouter,
   IconSearch,
+  IconSend,
   IconServer,
   IconSettings,
   IconShieldCheck,
@@ -94,6 +95,7 @@ import {
 } from '@tabler/icons-react';
 import {
   apiRequest,
+  BACKEND_UNAVAILABLE_MESSAGE,
   clearStoredUser,
   getAdminUrl,
   getStoredUser,
@@ -196,6 +198,12 @@ const deviceStatusOptions = [
   { value: 'new', label: 'New devices' },
 ];
 
+const firstSeenPeriodOptions = [
+  { value: 'today', label: 'Today' },
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+];
+
 const deviceRoleOptions = [
   'device',
   'gateway',
@@ -270,8 +278,9 @@ function showSuccessNotification(title, message) {
 }
 
 function showErrorNotification(title, message) {
+  const backendUnavailable = message === BACKEND_UNAVAILABLE_MESSAGE;
   notifications.show({
-    title,
+    title: backendUnavailable ? 'Server unavailable' : title,
     message,
     color: 'red',
     icon: <IconAlertCircle size={18} />,
@@ -1302,6 +1311,16 @@ function sortableOrdering(field, currentOrdering) {
     return '';
   }
   return field;
+}
+
+function sortableOrderingDescendingFirst(field, currentOrdering) {
+  if (currentOrdering === `-${field}`) {
+    return field;
+  }
+  if (currentOrdering === field) {
+    return '';
+  }
+  return `-${field}`;
 }
 
 function SortableHeader({ field, label, ordering, onChange, className }) {
@@ -2887,6 +2906,7 @@ function SettingsPage({ onSaved }) {
   const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [testingChannel, setTestingChannel] = useState('');
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [cleanupDays, setCleanupDays] = useState(90);
@@ -2963,6 +2983,31 @@ function SettingsPage({ onSaved }) {
       showErrorNotification('Could not save settings', err.message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function testNotificationChannel(channel) {
+    setTestingChannel(channel);
+    setError('');
+    try {
+      const body =
+        channel === 'discord'
+          ? { channel, discord_webhook: discordWebhook.trim() }
+          : {
+              channel,
+              telegram_token: telegramToken.trim(),
+              telegram_user_id: telegramUserId.trim(),
+            };
+      const payload = await apiRequest('notifications/test/', { method: 'POST', body });
+      showSuccessNotification(
+        'Test notification sent',
+        payload?.data?.message || `Check your ${channel} channel.`
+      );
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('Test notification failed', err.message);
+    } finally {
+      setTestingChannel('');
     }
   }
 
@@ -3183,17 +3228,35 @@ function SettingsPage({ onSaved }) {
               {discordConfigured ? 'Configured' : 'Not configured'}
             </Badge>
           </Group>
-          <TextInput
-            label="Discord webhook"
-            description={
-              discordConfigured
-                ? 'Discord messages are configured with this webhook.'
-                : 'Paste a Discord channel webhook URL to enable Discord messages.'
-            }
-            placeholder="https://discord.com/api/webhooks/..."
-            value={discordWebhook}
-            onChange={(event) => setDiscordWebhook(event.currentTarget.value)}
-          />
+          <Group align="flex-end" wrap="nowrap">
+            <TextInput
+              style={{ flex: 1 }}
+              label="Discord webhook"
+              description={
+                discordConfigured
+                  ? 'Discord messages are configured with this webhook.'
+                  : 'Paste a Discord channel webhook URL to enable Discord messages.'
+              }
+              placeholder="https://discord.com/api/webhooks/..."
+              value={discordWebhook}
+              onChange={(event) => setDiscordWebhook(event.currentTarget.value)}
+            />
+            <Tooltip label="Send test notification">
+              <ActionIcon
+                size={36}
+                variant="light"
+                aria-label="Send Discord test notification"
+                loading={testingChannel === 'discord'}
+                disabled={
+                  !discordWebhook.trim() ||
+                  Boolean(testingChannel && testingChannel !== 'discord')
+                }
+                onClick={() => testNotificationChannel('discord')}
+              >
+                <IconSend size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
         </Stack>
 
         <Stack gap="sm">
@@ -3210,20 +3273,38 @@ function SettingsPage({ onSaved }) {
               {telegramConfigured ? 'Configured' : 'Not configured'}
             </Badge>
           </Group>
-          <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <Group align="flex-end" wrap="nowrap">
             <TextInput
+              style={{ flex: 1 }}
               label="Telegram bot token"
               placeholder="123456:bot-token"
               value={telegramToken}
               onChange={(event) => setTelegramToken(event.currentTarget.value)}
             />
             <TextInput
+              style={{ flex: 1 }}
               label="Telegram user ID"
               placeholder="123456789"
               value={telegramUserId}
               onChange={(event) => setTelegramUserId(event.currentTarget.value)}
             />
-          </SimpleGrid>
+            <Tooltip label="Send test notification">
+              <ActionIcon
+                size={36}
+                variant="light"
+                aria-label="Send Telegram test notification"
+                loading={testingChannel === 'telegram'}
+                disabled={
+                  !telegramToken.trim() ||
+                  !telegramUserId.trim() ||
+                  Boolean(testingChannel && testingChannel !== 'telegram')
+                }
+                onClick={() => testNotificationChannel('telegram')}
+              >
+                <IconSend size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
         </Stack>
 
         <Divider />
@@ -3693,6 +3774,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [dashboardTimeZone, setDashboardTimeZone] = useState();
   const [search, setSearch] = useState('');
   const [deviceStatus, setDeviceStatus] = useState('');
+  const [firstSeenPeriod, setFirstSeenPeriod] = useState('');
   const [inventoryView, setInventoryView] = useState('table');
   const [mainView, setMainView] = useState('dashboard');
   const [deviceOrdering, setDeviceOrdering] = useState('');
@@ -3711,6 +3793,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const tableStateRef = useRef({
     search: '',
     deviceStatus: '',
+    firstSeenPeriod: '',
     deviceLimit: 100,
     deviceOffset: 0,
     deviceOrdering: '',
@@ -3736,11 +3819,12 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     tableStateRef.current = {
       search,
       deviceStatus,
+      firstSeenPeriod,
       deviceLimit,
       deviceOffset,
       deviceOrdering,
     };
-  }, [search, deviceStatus, deviceOrdering]);
+  }, [search, deviceStatus, firstSeenPeriod, deviceOrdering]);
 
   async function loadData({ quiet = false, notifyOnError = false, notifyOnSuccess = false } = {}) {
     if (quiet) {
@@ -3759,6 +3843,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
             ? currentTableState.deviceStatus
             : undefined,
         known: currentTableState.deviceStatus === 'new' ? 'false' : undefined,
+        first_seen: currentTableState.firstSeenPeriod || undefined,
         limit: currentTableState.deviceLimit,
         offset: currentTableState.deviceOffset,
         ordering: currentTableState.deviceOrdering || undefined,
@@ -4013,7 +4098,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   useEffect(() => {
     const timer = window.setTimeout(() => loadData({ quiet: true }), 250);
     return () => window.clearTimeout(timer);
-  }, [search, deviceStatus, deviceOrdering]);
+  }, [search, deviceStatus, firstSeenPeriod, deviceOrdering]);
 
   async function runScan() {
     setRefreshing(true);
@@ -4333,6 +4418,15 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                     aria-label={selectedDeviceStatus?.label || 'Status'}
                     onChange={(value) => setDeviceStatus(value || '')}
                   />
+                  <Select
+                    w={150}
+                    placeholder="First seen"
+                    clearable
+                    data={firstSeenPeriodOptions}
+                    value={firstSeenPeriod}
+                    aria-label="Filter by first seen"
+                    onChange={(value) => setFirstSeenPeriod(value || '')}
+                  />
                   <TextInput
                     w={{ base: 180, sm: 260 }}
                     placeholder="Search"
@@ -4394,6 +4488,21 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           onClick={() => setDeviceOrdering(sortableOrdering('lastseen', deviceOrdering))}
                         >
                           Last seen
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant={
+                            deviceOrdering === 'firstseen' || deviceOrdering === '-firstseen'
+                              ? 'light'
+                              : 'subtle'
+                          }
+                          onClick={() =>
+                            setDeviceOrdering(
+                              sortableOrderingDescendingFirst('firstseen', deviceOrdering)
+                            )
+                          }
+                        >
+                          First seen
                         </Button>
                       </Group>
                       <Text size="sm" c="dimmed">

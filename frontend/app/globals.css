@@ -62,7 +62,6 @@ body {
 }
 
 body {
-  min-width: 100vw;
   background: var(--app-bg);
   color: var(--app-text);
 }
@@ -76,14 +75,12 @@ textarea {
 
 .shell {
   width: 100%;
-  min-width: 100vw;
   min-height: 100vh;
   background: var(--app-shell-bg);
 }
 
 .auth-shell {
   width: 100%;
-  min-width: 100vw;
   min-height: 100vh;
   display: grid;
   place-items: center;
@@ -609,7 +606,7 @@ textarea {
     minmax(120px, 0.8fr)
     minmax(90px, 0.7fr)
     minmax(100px, 0.75fr)
-    minmax(112px, 0.75fr)
+    minmax(146px, 0.9fr)
     minmax(82px, 0.6fr)
     minmax(170px, 1.15fr);
   min-width: 0;
@@ -740,11 +737,13 @@ textarea {
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
   justify-content: center;
-  min-width: 42px;
+  min-width: 44px;
+  padding-inline: 8px;
 }
 
 .port-overflow-badge {
-  min-width: 40px;
+  min-width: 36px;
+  padding-inline: 6px;
 }
 
 .device-mobile-row {

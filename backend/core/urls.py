@@ -21,6 +21,7 @@ from .views import (
     home_map_layout,
     import_devices,
     maintenance_cleanup,
+    test_notification_channel,
     users,
 )
 
@@ -33,6 +34,11 @@ urlpatterns = [
     path("logout/", UserLogoutView.as_view(), name="logout"),
     path("users/", users, name="users"),
     path("settings/", app_settings, name="app-settings"),
+    path(
+        "notifications/test/",
+        test_notification_channel,
+        name="test-notification-channel",
+    ),
     path("home-map-layout/", home_map_layout, name="home-map-layout"),
     path("maintenance/cleanup/", maintenance_cleanup, name="maintenance-cleanup"),
     path("device/", device, name="device"),

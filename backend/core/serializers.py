@@ -344,6 +344,45 @@ class NotificationDeliverySerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class NotificationTestSerializer(serializers.Serializer):
+    channel = serializers.ChoiceField(
+        choices=(
+            NotificationDelivery.Channel.DISCORD,
+            NotificationDelivery.Channel.TELEGRAM,
+        )
+    )
+    discord_webhook = serializers.URLField(required=False, allow_blank=True)
+    telegram_token = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=255,
+    )
+    telegram_user_id = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=64,
+    )
+
+    def validate(self, attrs):
+        channel = attrs["channel"]
+        if channel == NotificationDelivery.Channel.DISCORD:
+            if not attrs.get("discord_webhook", "").strip():
+                raise serializers.ValidationError(
+                    {"discord_webhook": "Enter a Discord webhook URL."}
+                )
+        elif not attrs.get("telegram_token", "").strip() or not attrs.get(
+            "telegram_user_id", ""
+        ).strip():
+            raise serializers.ValidationError(
+                {
+                    "telegram": (
+                        "Enter both a Telegram bot token and user ID."
+                    )
+                }
+            )
+        return attrs
+
+
 class AppSettingsSerializer(serializers.ModelSerializer):
     updated_at = UTCDateTimeField(read_only=True)
     discord_configured = serializers.SerializerMethodField()

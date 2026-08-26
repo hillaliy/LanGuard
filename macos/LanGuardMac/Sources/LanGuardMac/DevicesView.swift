@@ -11,6 +11,7 @@ struct DevicesView: View {
     @State private var editingDevice: NetworkDevice?
     @State private var searchText = ""
     @State private var statusFilter: DeviceStatus?
+    @State private var firstSeenFilter: FirstSeenFilter?
     @State private var knownFilter: KnownFilter = .all
     @State private var riskFilter: DeviceRisk?
     @State private var sortField: DeviceSortField = .name
@@ -94,6 +95,7 @@ struct DevicesView: View {
 
                     compactSortPicker
                     compactRoomPicker
+                    compactFirstSeenPicker
                     sortDirectionButton
                     clearFiltersButton
                 }
@@ -142,6 +144,7 @@ struct DevicesView: View {
     @ViewBuilder
     private var filterPickers: some View {
         statusPicker
+        firstSeenPicker
         knownPicker
         riskPicker
         rolePicker
@@ -169,6 +172,26 @@ struct DevicesView: View {
             }
         }
         .frame(width: 188)
+    }
+
+    private var firstSeenPicker: some View {
+        Picker("First Seen", selection: $firstSeenFilter) {
+            Text("Any Time").tag(FirstSeenFilter?.none)
+            ForEach(FirstSeenFilter.allCases) { period in
+                Text(period.title).tag(FirstSeenFilter?.some(period))
+            }
+        }
+        .frame(width: 150)
+    }
+
+    private var compactFirstSeenPicker: some View {
+        Picker("First Seen", selection: $firstSeenFilter) {
+            Text("Any Time").tag(FirstSeenFilter?.none)
+            ForEach(FirstSeenFilter.allCases) { period in
+                Text(period.title).tag(FirstSeenFilter?.some(period))
+            }
+        }
+        .frame(width: 160)
     }
 
     private var knownPicker: some View {
@@ -285,6 +308,7 @@ struct DevicesView: View {
             Button("Clear") {
                 searchText = ""
                 statusFilter = nil
+                firstSeenFilter = nil
                 knownFilter = .all
                 riskFilter = nil
                 roleFilter = nil
@@ -312,12 +336,17 @@ struct DevicesView: View {
 
     private var filteredAndSortedDevices: [NetworkDevice] {
         let normalizedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let firstSeenThreshold = firstSeenFilter?.threshold
         let filtered = appModel.devices.filter { device in
             if let statusFilter, device.status != statusFilter {
                 return false
             }
 
             if let riskFilter, device.risk != riskFilter {
+                return false
+            }
+
+            if let firstSeenThreshold, device.firstSeen < firstSeenThreshold {
                 return false
             }
 
@@ -355,13 +384,12 @@ struct DevicesView: View {
         }
 
         return filtered.sorted { left, right in
-            let result = compare(left, right)
-            return sortOrder == .forward ? result : !result
+            sortOrder == .forward ? compare(left, right) : compare(right, left)
         }
     }
 
     private var hasActiveFilters: Bool {
-        !searchText.isEmpty || statusFilter != nil || knownFilter != .all || riskFilter != nil || roleFilter != nil || roomFilter != nil || sortField != .name || sortOrder != .forward
+        !searchText.isEmpty || statusFilter != nil || firstSeenFilter != nil || knownFilter != .all || riskFilter != nil || roleFilter != nil || roomFilter != nil || sortField != .name || sortOrder != .forward
     }
 
     private func compare(_ left: NetworkDevice, _ right: NetworkDevice) -> Bool {
@@ -374,6 +402,8 @@ struct DevicesView: View {
             return left.risk.sortRank < right.risk.sortRank
         case .lastSeen:
             return left.lastSeen < right.lastSeen
+        case .firstSeen:
+            return left.firstSeen < right.firstSeen
         }
     }
 
@@ -450,11 +480,43 @@ private enum KnownFilter: String, CaseIterable, Identifiable {
     }
 }
 
+private enum FirstSeenFilter: String, CaseIterable, Identifiable {
+    case today
+    case last7Days
+    case last30Days
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .today:
+            "Today"
+        case .last7Days:
+            "Last 7 Days"
+        case .last30Days:
+            "Last 30 Days"
+        }
+    }
+
+    var threshold: Date {
+        let now = Date.now
+        switch self {
+        case .today:
+            return Calendar.current.startOfDay(for: now)
+        case .last7Days:
+            return now.addingTimeInterval(-7 * 24 * 60 * 60)
+        case .last30Days:
+            return now.addingTimeInterval(-30 * 24 * 60 * 60)
+        }
+    }
+}
+
 private enum DeviceSortField: String, CaseIterable, Identifiable {
     case name
     case ip
     case risk
     case lastSeen
+    case firstSeen
 
     var id: String { rawValue }
 
@@ -468,6 +530,8 @@ private enum DeviceSortField: String, CaseIterable, Identifiable {
             "Risk"
         case .lastSeen:
             "Last Seen"
+        case .firstSeen:
+            "First Seen"
         }
     }
 }
