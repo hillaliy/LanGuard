@@ -300,7 +300,9 @@ def inventory_device_payload(device):
         "ip": device.ip,
         "mac": device.mac,
         "vendor": device.vendor,
+        "vendor_source": device.vendor_source,
         "hostname": getattr(device, "hostname", ""),
+        "hostname_source": device.hostname_source,
         "icon": export_inventory_icon(device.icon),
         "secondary_icon": export_inventory_icon(getattr(device, "secondary_icon", "")),
         "role": getattr(device, "role", "") or ("gateway" if device.is_gateway else "device"),
@@ -443,6 +445,18 @@ def import_inventory_devices(payload):
 
         name = str(item.get("name") or "Device").strip()[:100] or "Device"
         hostname = str(item.get("hostname") or item.get("hostName") or "").strip()[:255]
+        hostname_source = str(
+            item.get("hostname_source") or item.get("hostnameSource") or ""
+        ).strip()
+        vendor_source = str(
+            item.get("vendor_source") or item.get("vendorSource") or ""
+        ).strip()
+        valid_identity_sources = set(Device.IdentitySource.values)
+        if hostname_source not in valid_identity_sources:
+            hostname_source = Device.IdentitySource.IMPORTED if hostname else ""
+        imported_vendor = str(item.get("vendor") or "").strip()[:255]
+        if vendor_source not in valid_identity_sources:
+            vendor_source = Device.IdentitySource.IMPORTED if imported_vendor else ""
         comments_present = "comments" in item
         comments = str(item.get("comments") or "").strip()
         external_url_present = "external_url" in item or "externalUrl" in item
@@ -482,13 +496,15 @@ def import_inventory_devices(payload):
         defaults = {
             "name": name,
             "ip": ip,
-            "vendor": str(item.get("vendor") or "").strip()[:255],
+            "vendor": imported_vendor,
+            "vendor_source": vendor_source,
             "icon": import_inventory_icon(item.get("icon") or item.get("iconName")),
             "secondary_icon": import_inventory_icon(
                 item.get("secondary_icon") or item.get("secondaryIcon") or item.get("secondaryIconName"),
                 "",
             ),
             "hostname": hostname,
+            "hostname_source": hostname_source,
             "known": parse_inventory_bool(item.get("known", item.get("isKnown", False))),
             "is_gateway": is_gateway,
             "online": device_status != Device.Status.OFFLINE,
@@ -523,9 +539,11 @@ def import_inventory_devices(payload):
                     "name",
                     "ip",
                     "vendor",
+                    "vendor_source",
                     "icon",
                     "secondary_icon",
                     "hostname",
+                    "hostname_source",
                     *(['role'] if role is not None else []),
                     *(['room'] if room is not None else []),
                     *(["comments"] if comments_present else []),

@@ -8,6 +8,7 @@ import {
   Badge,
   Box,
   Button,
+  Checkbox,
   Container,
   Divider,
   FileButton,
@@ -267,6 +268,17 @@ const timeZoneOptions =
   typeof Intl !== 'undefined' && typeof Intl.supportedValuesOf === 'function'
     ? Intl.supportedValuesOf('timeZone')
     : fallbackTimeZoneOptions;
+
+const quietHoursDayOptions = [
+  { value: 'mon', label: 'Mon' },
+  { value: 'tue', label: 'Tue' },
+  { value: 'wed', label: 'Wed' },
+  { value: 'thu', label: 'Thu' },
+  { value: 'fri', label: 'Fri' },
+  { value: 'sat', label: 'Sat' },
+  { value: 'sun', label: 'Sun' },
+];
+const allQuietHoursDays = quietHoursDayOptions.map(({ value }) => value);
 
 function showSuccessNotification(title, message) {
   notifications.show({
@@ -2173,6 +2185,38 @@ function DeviceField({ label, value, editable = false, required = false, onChang
   );
 }
 
+function IdentityConfidenceField({ device }) {
+  const confidence = String(device?.identity_confidence || 'low').toLowerCase();
+  const evidence = Array.isArray(device?.identity_evidence) ? device.identity_evidence : [];
+  const color = confidence === 'high' ? 'green' : confidence === 'medium' ? 'yellow' : 'gray';
+  const label = confidence.charAt(0).toUpperCase() + confidence.slice(1);
+
+  return (
+    <Box className="device-field identity-confidence-field">
+      <Group justify="space-between" gap="xs" wrap="nowrap">
+        <Text size="xs" c="dimmed">Identity confidence</Text>
+        <Badge color={color} variant="light">{label}</Badge>
+      </Group>
+      {evidence.length > 0 ? (
+        <Stack gap={2} mt={4}>
+          {evidence.map((item) => (
+            <Group key={item.field} justify="space-between" gap="xs" wrap="nowrap">
+              <Text size="xs" className="wrap-text">
+                {item.field === 'hostname' ? 'Hostname' : 'Vendor'}: {item.source_display || 'Unknown'}
+              </Text>
+              <Text size="xs" c="dimmed">
+                {String(item.confidence || 'low').replace(/^./, (letter) => letter.toUpperCase())}
+              </Text>
+            </Group>
+          ))}
+        </Stack>
+      ) : (
+        <Text size="xs" c="dimmed" mt={4}>No identity evidence collected yet.</Text>
+      )}
+    </Box>
+  );
+}
+
 function buildRoomOptions(devices = [], currentRoom = '') {
   return Array.from(
     new Set(
@@ -2428,6 +2472,8 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
           <DeviceIconPicker value={icon} onChange={setIcon} />
           <DeviceIconPicker label="Secondary icon" value={secondaryIcon} onChange={setSecondaryIcon} />
         </SimpleGrid>
+
+        <IdentityConfidenceField device={device} />
 
         <Textarea
           label="Comments"
@@ -2904,6 +2950,7 @@ function SettingsPage({ onSaved }) {
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
   const [quietHoursStart, setQuietHoursStart] = useState('22:00');
   const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
+  const [quietHoursDays, setQuietHoursDays] = useState(allQuietHoursDays);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testingChannel, setTestingChannel] = useState('');
@@ -2938,6 +2985,11 @@ function SettingsPage({ onSaved }) {
       setQuietHoursEnabled(Boolean(data.notification_quiet_hours_enabled));
       setQuietHoursStart(data.notification_quiet_hours_start || '22:00');
       setQuietHoursEnd(data.notification_quiet_hours_end || '07:00');
+      setQuietHoursDays(
+        Array.isArray(data.notification_quiet_hours_days)
+          ? data.notification_quiet_hours_days
+          : allQuietHoursDays
+      );
       setCleanupDays(Number(data.activity_cleanup_retention_days ?? 90));
     } catch (err) {
       setError(err.message);
@@ -2968,6 +3020,7 @@ function SettingsPage({ onSaved }) {
         notification_quiet_hours_enabled: quietHoursEnabled,
         notification_quiet_hours_start: quietHoursStart,
         notification_quiet_hours_end: quietHoursEnd,
+        notification_quiet_hours_days: quietHoursDays,
         activity_cleanup_retention_days: cleanupDays,
       };
       body.discord_webhook = discordWebhook;
@@ -3210,6 +3263,23 @@ function SettingsPage({ onSaved }) {
               disabled={!quietHoursEnabled}
             />
           </SimpleGrid>
+          <Checkbox.Group
+            label="Quiet days"
+            description="For overnight ranges, early morning hours belong to the previous day."
+            value={quietHoursDays}
+            onChange={setQuietHoursDays}
+          >
+            <Group mt="xs" gap="lg">
+              {quietHoursDayOptions.map((day) => (
+                <Checkbox
+                  key={day.value}
+                  value={day.value}
+                  label={day.label}
+                  disabled={!quietHoursEnabled}
+                />
+              ))}
+            </Group>
+          </Checkbox.Group>
         </Stack>
 
         <Divider />
@@ -3814,6 +3884,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     ? `New version v${latestVersion} is available`
     : 'Version history';
   const displayTimeZone = appSettings?.time_zone || dashboardTimeZone || undefined;
+  const showFirstSeen = deviceOrdering === 'firstseen' || deviceOrdering === '-firstseen';
 
   useEffect(() => {
     tableStateRef.current = {
@@ -4395,7 +4466,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
             timeZone={displayTimeZone}
           />
 
-          <Paper className="content-panel" radius="md">
+          <Paper className="content-panel devices-content-panel" radius="md">
             <Stack gap={0}>
               <Group className="devices-panel-header" justify="space-between" p="md">
                 <Group>
@@ -4566,9 +4637,14 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                             <RiskBadge device={device} compact />
                           </Box>
                           <Box className="device-list-last-seen">
-                            <Text size="xs" c="dimmed">Last seen</Text>
+                            <Text size="xs" c="dimmed">
+                              {showFirstSeen ? 'First seen' : 'Last seen'}
+                            </Text>
                             <Text className="device-list-last-seen-value">
-                              {formatDate(device.lastseen, displayTimeZone)}
+                              {formatDate(
+                                showFirstSeen ? device.firstseen : device.lastseen,
+                                displayTimeZone
+                              )}
                             </Text>
                           </Box>
                         </div>
@@ -4612,8 +4688,15 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                             <Text size="sm" className="mobile-mono-value">{device.ip}</Text>
                           </Box>
                           <Box>
-                            <Text size="xs" c="dimmed">Last seen</Text>
-                            <Text size="sm">{formatDate(device.lastseen, displayTimeZone)}</Text>
+                            <Text size="xs" c="dimmed">
+                              {showFirstSeen ? 'First seen' : 'Last seen'}
+                            </Text>
+                            <Text size="sm">
+                              {formatDate(
+                                showFirstSeen ? device.firstseen : device.lastseen,
+                                displayTimeZone
+                              )}
+                            </Text>
                           </Box>
                           <Box className="device-mobile-wide">
                             <Text size="xs" c="dimmed">Room</Text>

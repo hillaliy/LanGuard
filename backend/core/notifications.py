@@ -7,7 +7,12 @@ from django.conf import settings
 from django.utils import timezone
 
 from .datetime_utils import utc_isoformat
-from .models import AppSettings, NetworkEvent, NotificationDelivery
+from .models import (
+    AppSettings,
+    NetworkEvent,
+    NotificationDelivery,
+    QUIET_HOURS_DAY_KEYS,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -16,8 +21,6 @@ DISCORD_TEST_COLOR = 0x228BE6
 TEST_NOTIFICATION_MESSAGE = (
     "This is a test notification from LanGuard. Your notification channel is working."
 )
-
-
 def configured_channels(app_config=None):
     app_config = app_config or AppSettings.load()
     channels = []
@@ -60,9 +63,18 @@ def quiet_hours_active(app_config, now=None):
 
     if timezone.is_naive(now):
         now = timezone.make_aware(now, app_timezone)
-    local_time = timezone.localtime(now, app_timezone).time()
+    local_now = timezone.localtime(now, app_timezone)
+    local_time = local_now.time()
     start = time.fromisoformat(app_config.notification_quiet_hours_start)
     end = time.fromisoformat(app_config.notification_quiet_hours_end)
+    selected_days = app_config.notification_quiet_hours_days
+
+    quiet_period_weekday = local_now.weekday()
+    if start > end and local_time < end:
+        quiet_period_weekday = (quiet_period_weekday - 1) % 7
+    if QUIET_HOURS_DAY_KEYS[quiet_period_weekday] not in selected_days:
+        return False
+
     if start == end:
         return True
     if start < end:

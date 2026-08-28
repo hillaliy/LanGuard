@@ -364,6 +364,8 @@ final class AppModel {
     }
 
     private func notifyScanChanges(_ mergeResult: DeviceMergeResult) async {
+        guard !settings.quietHoursActive() else { return }
+
         if settings.newDeviceNotificationsEnabled {
             for device in mergeResult.newDevices where !device.isKnown {
                 await notifications.notifyNewDevice(device)
@@ -378,6 +380,8 @@ final class AppModel {
     }
 
     private func notifyNewDevices(_ devices: [NetworkDevice]) async {
+        guard !settings.quietHoursActive() else { return }
+
         for device in devices where !device.isKnown {
             await notifications.notifyNewDevice(device)
         }

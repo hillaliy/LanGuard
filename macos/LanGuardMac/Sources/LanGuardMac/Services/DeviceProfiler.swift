@@ -24,6 +24,13 @@ enum DeviceProfiler {
 
         var enriched = device
         enriched.vendor = vendor
+        if vendor == nil {
+            enriched.vendorSource = nil
+        } else if resolvedVendor != device.vendor {
+            enriched.vendorSource = .manuf
+        } else if resolvedVendor == nil {
+            enriched.vendorSource = .inferred
+        }
         enriched.iconName = iconName
         enriched.name = name
         return enriched

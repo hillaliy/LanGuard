@@ -2,11 +2,20 @@ import Foundation
 
 struct DeviceMetadata: Equatable, Sendable {
     var vendor: String?
+    var vendorSource: DeviceIdentitySource?
     var hostname: String?
+    var hostnameSource: DeviceIdentitySource?
 
-    init(vendor: String? = nil, hostname: String? = nil) {
+    init(
+        vendor: String? = nil,
+        vendorSource: DeviceIdentitySource? = nil,
+        hostname: String? = nil,
+        hostnameSource: DeviceIdentitySource? = nil
+    ) {
         self.vendor = vendor
+        self.vendorSource = vendor == nil ? nil : vendorSource
         self.hostname = HostnameResolver.clean(hostname)
+        self.hostnameSource = self.hostname == nil ? nil : hostnameSource
     }
 }
 
@@ -107,7 +116,9 @@ struct HTTPDeviceMetadataProbe: DeviceMetadataProbing {
 
         return DeviceMetadata(
             vendor: vendor,
-            hostname: hostname
+            vendorSource: vendor == nil ? nil : .http,
+            hostname: hostname,
+            hostnameSource: hostname == nil ? nil : .http
         )
     }
 

@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 import socket
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -24,10 +24,12 @@ from .models import (
 from .notifications import (
     format_discord_payload,
     notify_event,
+    quiet_hours_active,
     retry_failed_notifications,
     send_discord_test,
     send_telegram_test,
 )
+from .serializers import device_identity
 from .views import parse_inventory_datetime
 from .scan import (
     clear_stale_gateways,
@@ -130,6 +132,10 @@ class HostnameResolutionTests(SimpleTestCase):
     @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_mdns_fallback(self, *_):
         self.assertEqual(get_hostname("192.168.1.21"), "haa switch")
+        self.assertEqual(
+            get_hostname("192.168.1.21", include_source=True),
+            ("haa switch", Device.IdentitySource.MDNS),
+        )
 
     @patch("core.scan.netbios_hostname", return_value="")
     @patch("core.scan.ssdp_hostname", return_value="")
@@ -189,6 +195,17 @@ class HostnameResolutionTests(SimpleTestCase):
             "HAA 123456",
         )
 
+    def test_preloaded_hint_preserves_discovery_source(self):
+        self.assertEqual(
+            get_hostname(
+                "192.168.1.42",
+                hostname_hints={
+                    "192.168.1.42": ("HAA 123456", Device.IdentitySource.MDNS)
+                },
+                include_source=True,
+            ),
+            ("HAA 123456", Device.IdentitySource.MDNS),
+        )
     def test_dns_ptr_names_returns_matching_owner(self):
         packet = (
             b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
@@ -442,6 +459,42 @@ class HostnameResolutionTests(SimpleTestCase):
 
     def test_manuf_vendor_ignores_locally_administered_mac(self):
         self.assertEqual(manuf_vendor("f6:34:f0:00:c6:8d"), "")
+
+
+class DeviceIdentityConfidenceTests(TestCase):
+    def test_high_confidence_requires_strong_hostname_and_vendor_sources(self):
+        device = Device.objects.create(
+            name="Living room streamer",
+            ip="192.168.1.20",
+            mac="90:dd:5d:b7:bd:01",
+            hostname="living room streamer",
+            hostname_source=Device.IdentitySource.MDNS,
+            vendor="Apple, Inc.",
+            vendor_source=Device.IdentitySource.MANUF,
+        )
+
+        identity = device_identity(device)
+
+        self.assertEqual(identity["confidence"], "high")
+        self.assertEqual(identity["hostname_confidence"], "high")
+        self.assertEqual(identity["vendor_confidence"], "high")
+        self.assertEqual(
+            [item["source_display"] for item in identity["evidence"]],
+            ["mDNS", "Wireshark manuf"],
+        )
+
+    def test_unknown_legacy_sources_are_not_overstated(self):
+        device = Device.objects.create(
+            name="Imported device",
+            ip="192.168.1.21",
+            mac="90:dd:5d:b7:bd:02",
+            vendor="Example vendor",
+        )
+
+        identity = device_identity(device)
+
+        self.assertEqual(identity["confidence"], "low")
+        self.assertEqual(identity["vendor_confidence"], "low")
 
 
 class ApiDocsAccessTests(SimpleTestCase):
@@ -1176,6 +1229,38 @@ class NotificationTests(TestCase):
             message="Found new device Camera at 192.168.1.50",
         )
 
+    def test_quiet_hours_only_apply_on_selected_day(self):
+        config = AppSettings(
+            time_zone="UTC",
+            notification_quiet_hours_enabled=True,
+            notification_quiet_hours_start="09:00",
+            notification_quiet_hours_end="17:00",
+            notification_quiet_hours_days=["mon"],
+        )
+
+        monday = datetime(2026, 8, 24, 12, 0, tzinfo=datetime_timezone.utc)
+        tuesday = datetime(2026, 8, 25, 12, 0, tzinfo=datetime_timezone.utc)
+
+        self.assertTrue(quiet_hours_active(config, now=monday))
+        self.assertFalse(quiet_hours_active(config, now=tuesday))
+
+    def test_overnight_quiet_hours_use_the_starting_day(self):
+        config = AppSettings(
+            time_zone="UTC",
+            notification_quiet_hours_enabled=True,
+            notification_quiet_hours_start="22:00",
+            notification_quiet_hours_end="07:00",
+            notification_quiet_hours_days=["mon"],
+        )
+
+        monday_night = datetime(2026, 8, 24, 23, 0, tzinfo=datetime_timezone.utc)
+        tuesday_morning = datetime(2026, 8, 25, 2, 0, tzinfo=datetime_timezone.utc)
+        tuesday_night = datetime(2026, 8, 25, 23, 0, tzinfo=datetime_timezone.utc)
+
+        self.assertTrue(quiet_hours_active(config, now=monday_night))
+        self.assertTrue(quiet_hours_active(config, now=tuesday_morning))
+        self.assertFalse(quiet_hours_active(config, now=tuesday_night))
+
     @override_settings(
         NOTIFICATIONS_ENABLED=True,
         DISCORD_WEBHOOK="https://discord.example/webhook",
@@ -1847,6 +1932,7 @@ class ScanApiTests(TestCase):
                 "notification_quiet_hours_enabled": True,
                 "notification_quiet_hours_start": "23:00",
                 "notification_quiet_hours_end": "06:30",
+                "notification_quiet_hours_days": ["sun", "mon", "wed"],
                 "activity_cleanup_retention_days": 45,
                 "discord_webhook": "https://discord.example/webhook",
                 "telegram_token": "token",
@@ -1874,6 +1960,7 @@ class ScanApiTests(TestCase):
         self.assertTrue(config.notification_quiet_hours_enabled)
         self.assertEqual(config.notification_quiet_hours_start, "23:00")
         self.assertEqual(config.notification_quiet_hours_end, "06:30")
+        self.assertEqual(config.notification_quiet_hours_days, ["mon", "wed", "sun"])
         self.assertEqual(config.activity_cleanup_retention_days, 45)
         self.assertEqual(
             config.home_map_layout,
@@ -1898,6 +1985,10 @@ class ScanApiTests(TestCase):
         self.assertTrue(response.data["data"]["notification_quiet_hours_enabled"])
         self.assertEqual(response.data["data"]["notification_quiet_hours_start"], "23:00")
         self.assertEqual(response.data["data"]["notification_quiet_hours_end"], "06:30")
+        self.assertEqual(
+            response.data["data"]["notification_quiet_hours_days"],
+            ["mon", "wed", "sun"],
+        )
         self.assertEqual(response.data["data"]["activity_cleanup_retention_days"], 45)
         self.assertEqual(
             response.data["data"]["home_map_layout"],
@@ -1923,6 +2014,16 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("notification_quiet_hours_start", response.data)
+
+    def test_settings_endpoint_rejects_bad_quiet_hours_days(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"notification_quiet_hours_days": ["mon", "someday"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("notification_quiet_hours_days", response.data)
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
     def test_settings_endpoint_rejects_unsafe_scan_range(self):

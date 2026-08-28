@@ -3,7 +3,27 @@ from django.conf import settings
 from django.utils import timezone
 
 
+QUIET_HOURS_DAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+
+
+def default_quiet_hours_days():
+    return list(QUIET_HOURS_DAY_KEYS)
+
+
 class Device(models.Model):
+    class IdentitySource(models.TextChoices):
+        REVERSE_DNS = "reverse_dns", "Reverse DNS"
+        MDNS = "mdns", "mDNS"
+        LLMNR = "llmnr", "LLMNR"
+        NETBIOS = "netbios", "NetBIOS"
+        SSDP = "ssdp", "SSDP / UPnP"
+        SNMP = "snmp", "SNMP"
+        HTTP = "http", "Device web interface"
+        ARP = "arp", "ARP"
+        MANUF = "manuf", "Wireshark manuf"
+        INFERRED = "inferred", "Inferred"
+        IMPORTED = "imported", "Imported inventory"
+
     class Status(models.TextChoices):
         ONLINE = "online", "Online"
         RECENTLY_SEEN = "recently_seen", "Recently seen"
@@ -21,9 +41,21 @@ class Device(models.Model):
     secondary_icon = models.CharField(max_length=255, blank=True, default="")
     name = models.CharField(max_length=100, default="Device")
     hostname = models.CharField(max_length=255, blank=True, default="")
+    hostname_source = models.CharField(
+        max_length=32,
+        choices=IdentitySource.choices,
+        blank=True,
+        default="",
+    )
     ip = models.GenericIPAddressField()
     mac = models.CharField(max_length=17, unique=True)
     vendor = models.CharField(max_length=255, blank=True, default="")
+    vendor_source = models.CharField(
+        max_length=32,
+        choices=IdentitySource.choices,
+        blank=True,
+        default="",
+    )
     comments = models.TextField(blank=True, default="")
     external_url = models.URLField(max_length=2048, blank=True, default="")
     attention_acknowledged_signature = models.CharField(max_length=64, blank=True, default="")
@@ -216,6 +248,10 @@ class AppSettings(models.Model):
     notification_quiet_hours_enabled = models.BooleanField(default=False)
     notification_quiet_hours_start = models.CharField(max_length=5, default="22:00")
     notification_quiet_hours_end = models.CharField(max_length=5, default="07:00")
+    notification_quiet_hours_days = models.JSONField(
+        default=default_quiet_hours_days,
+        blank=True,
+    )
     activity_cleanup_retention_days = models.PositiveIntegerField(default=90)
     home_map_layout = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -250,6 +286,7 @@ class AppSettings(models.Model):
             "notification_quiet_hours_enabled": False,
             "notification_quiet_hours_start": "22:00",
             "notification_quiet_hours_end": "07:00",
+            "notification_quiet_hours_days": default_quiet_hours_days(),
             "activity_cleanup_retention_days": 90,
             "home_map_layout": {},
         }

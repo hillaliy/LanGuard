@@ -36,6 +36,7 @@ enum ARPTableParser {
 
         return ARPEntry(
             hostname: hostname,
+            hostnameSource: hostname == nil ? nil : .arp,
             ipAddress: ipAddress,
             macAddress: macAddress
         )

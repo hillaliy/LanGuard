@@ -39,7 +39,9 @@ struct DeviceInventoryItem: Codable {
     var ip: String
     var mac: String
     var vendor: String?
+    var vendorSource: String?
     var hostname: String?
+    var hostnameSource: String?
     var comments: String?
     var externalURL: String?
     var attentionAcknowledged: Bool?
@@ -60,7 +62,9 @@ struct DeviceInventoryItem: Codable {
         self.ip = device.ipAddress
         self.mac = device.macAddress
         self.vendor = device.vendor
+        self.vendorSource = device.vendorSource?.rawValue
         self.hostname = device.hostname
+        self.hostnameSource = device.hostnameSource?.rawValue
         self.comments = device.comments
         self.externalURL = device.externalURL
         self.attentionAcknowledged = device.isAttentionAcknowledged
@@ -106,6 +110,10 @@ struct DeviceInventoryItem: Codable {
         let importedName = displayName.isEmpty ? fallbackName : displayName
         let importedVendor = normalizedText(vendor) ?? existing?.vendor
         let importedHostname = normalizedText(hostname) ?? existing?.hostname
+        let importedVendorSource = DeviceIdentitySource(rawValue: vendorSource ?? "")
+            ?? (importedVendor == nil ? nil : existing?.vendorSource ?? .imported)
+        let importedHostnameSource = DeviceIdentitySource(rawValue: hostnameSource ?? "")
+            ?? (importedHostname == nil ? nil : existing?.hostnameSource ?? .imported)
         let importedComments = comments ?? existing?.comments ?? ""
         let importedExternalURL = ExternalLinkValidator.normalizedString(externalURL) ?? existing?.externalURL
         let importedIcon = normalizedText(icon) ?? existing?.iconName
@@ -119,7 +127,9 @@ struct DeviceInventoryItem: Codable {
             ipAddress: normalizedIP,
             macAddress: normalizedMAC,
             vendor: importedVendor,
+            vendorSource: importedVendorSource,
             hostname: importedHostname,
+            hostnameSource: importedHostnameSource,
             comments: importedComments,
             externalURL: importedExternalURL,
             iconName: importedIcon,
@@ -166,7 +176,9 @@ struct DeviceInventoryItem: Codable {
         case ip
         case mac
         case vendor
+        case vendorSource = "vendor_source"
         case hostname
+        case hostnameSource = "hostname_source"
         case comments
         case externalURL = "external_url"
         case attentionAcknowledged = "attention_acknowledged"
