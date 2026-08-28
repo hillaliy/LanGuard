@@ -59,6 +59,7 @@ struct LocalNetworkScanner: NetworkScanning {
                     var resolvedEntry = entry
                     if resolvedEntry.hostname?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
                         resolvedEntry.hostname = HostnameResolver.resolve(ipAddress: entry.ipAddress)
+                        resolvedEntry.hostnameSource = resolvedEntry.hostname == nil ? nil : .reverseDNS
                     }
                     return resolvedEntry
                 }
@@ -74,6 +75,7 @@ struct LocalNetworkScanner: NetworkScanning {
         let devices = entries.map { entry in
             NetworkDevice.discovered(
                 hostname: entry.hostname,
+                hostnameSource: entry.hostnameSource,
                 ipAddress: entry.ipAddress,
                 macAddress: entry.macAddress,
                 gatewayAddress: gatewayAddress,
@@ -87,10 +89,18 @@ struct LocalNetworkScanner: NetworkScanning {
                     var scannedDevice = device
                     let networkMetadata = discoveredMetadata[device.ipAddress]
                     scannedDevice.vendor = networkMetadata?.vendor ?? scannedDevice.vendor
+                    scannedDevice.vendorSource = networkMetadata?.vendor == nil
+                        ? scannedDevice.vendorSource
+                        : networkMetadata?.vendorSource
+                    let shouldUseNetworkHostname = HostnameResolver.clean(scannedDevice.hostname) == nil
+                        && HostnameResolver.clean(networkMetadata?.hostname) != nil
                     scannedDevice.hostname = preferredHostname(
                         current: scannedDevice.hostname,
                         candidate: networkMetadata?.hostname
                     )
+                    if shouldUseNetworkHostname {
+                        scannedDevice.hostnameSource = networkMetadata?.hostnameSource
+                    }
                     scannedDevice.openPorts = await portScanner.scanOpenPorts(
                         host: device.ipAddress,
                         ports: settings.tcpPorts
@@ -100,10 +110,18 @@ struct LocalNetworkScanner: NetworkScanning {
                         openPorts: scannedDevice.openPorts
                     )
                     scannedDevice.vendor = metadata.vendor ?? scannedDevice.vendor
+                    if metadata.vendor != nil {
+                        scannedDevice.vendorSource = metadata.vendorSource
+                    }
+                    let shouldUseHTTPHostname = HostnameResolver.clean(scannedDevice.hostname) == nil
+                        && HostnameResolver.clean(metadata.hostname) != nil
                     scannedDevice.hostname = preferredHostname(
                         current: scannedDevice.hostname,
                         candidate: metadata.hostname
                     )
+                    if shouldUseHTTPHostname {
+                        scannedDevice.hostnameSource = metadata.hostnameSource
+                    }
                     scannedDevice.risk = DeviceRiskScorer.risk(
                         for: scannedDevice.openPorts,
                         isKnown: scannedDevice.isKnown,

@@ -54,9 +54,43 @@ func arpParserParsesKnownHostLine() {
 
     #expect(entry == ARPEntry(
         hostname: "router",
+        hostnameSource: .arp,
         ipAddress: "192.168.0.1",
         macAddress: "01:02:03:0a:0b:0c"
     ))
+}
+
+@Test
+func deviceIdentityConfidenceUsesCollectedEvidence() {
+    let device = NetworkDevice(
+        id: "90:dd:5d:b7:bd:01",
+        name: "Living room streamer",
+        ipAddress: "192.168.0.20",
+        macAddress: "90:dd:5d:b7:bd:01",
+        vendor: "Apple, Inc.",
+        vendorSource: .manuf,
+        hostname: "living-room-streamer.local",
+        hostnameSource: .mdns
+    )
+
+    #expect(device.identityConfidence == .high)
+    #expect(device.hostnameConfidence == .high)
+    #expect(device.vendorConfidence == .high)
+}
+
+@Test
+func deviceIdentityConfidenceDoesNotOverstateLegacyValues() {
+    let device = NetworkDevice(
+        id: "90:dd:5d:b7:bd:02",
+        name: "Legacy device",
+        ipAddress: "192.168.0.21",
+        macAddress: "90:dd:5d:b7:bd:02",
+        vendor: "Example vendor"
+    )
+
+    #expect(device.identityConfidence == .low)
+    #expect(device.vendorConfidence == .low)
+    #expect(device.hostnameConfidence == .none)
 }
 
 @Test
@@ -154,6 +188,10 @@ func deviceInventoryRoundTripPreservesCommentsAndAttentionAcknowledgement() thro
         name: "Lab server",
         ipAddress: "192.168.1.20",
         macAddress: "aa:bb:cc:dd:ee:ff",
+        vendor: "Example vendor",
+        vendorSource: .manuf,
+        hostname: "lab-server.local",
+        hostnameSource: .mdns,
         comments: "Remote access is expected on this trusted device.",
         externalURL: "https://192.168.1.20:8443",
         risk: .high,
@@ -171,6 +209,8 @@ func deviceInventoryRoundTripPreservesCommentsAndAttentionAcknowledgement() thro
     #expect(imported?.externalURL == "https://192.168.1.20:8443")
     #expect(imported?.isAttentionAcknowledged == true)
     #expect(imported?.needsAttention == false)
+    #expect(imported?.vendorSource == .manuf)
+    #expect(imported?.hostnameSource == .mdns)
 }
 
 @Test

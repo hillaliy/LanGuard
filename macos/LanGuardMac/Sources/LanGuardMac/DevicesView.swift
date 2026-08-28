@@ -68,7 +68,8 @@ struct DevicesView: View {
                             device: device,
                             portSummary: portSummary(for: device.openPorts),
                             roomTitle: roomTitle(for: device),
-                            riskColor: riskColor(for: device.risk)
+                            riskColor: riskColor(for: device.risk),
+                            showFirstSeen: sortField == .firstSeen
                         )
                     }
                     .buttonStyle(.plain)
@@ -324,7 +325,12 @@ struct DevicesView: View {
             Button {
                 editingDevice = device
             } label: {
-                CompactDeviceRow(device: device, portSummary: portSummary(for: device.openPorts), riskColor: riskColor(for: device.risk))
+                CompactDeviceRow(
+                    device: device,
+                    portSummary: portSummary(for: device.openPorts),
+                    riskColor: riskColor(for: device.risk),
+                    showFirstSeen: sortField == .firstSeen
+                )
             }
             .buttonStyle(.plain)
             .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
@@ -541,6 +547,7 @@ private struct DeviceCardRow: View {
     let portSummary: String
     let roomTitle: String
     let riskColor: Color
+    let showFirstSeen: Bool
 
     var body: some View {
         HStack(spacing: 18) {
@@ -625,8 +632,8 @@ private struct DeviceCardRow: View {
             }
             .frame(width: 78, alignment: .leading)
 
-            DeviceMetaColumn(title: "Last seen") {
-                Text(device.lastSeen.formatted(date: .abbreviated, time: .shortened))
+            DeviceMetaColumn(title: showFirstSeen ? "First seen" : "Last seen") {
+                Text(seenDate.formatted(date: .abbreviated, time: .shortened))
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -642,6 +649,10 @@ private struct DeviceCardRow: View {
         DeviceNameGuesser.isMACAddressText(device.name)
             ? DeviceNameGuesser.displayName(hostname: nil, macAddress: device.macAddress)
             : device.name
+    }
+
+    private var seenDate: Date {
+        showFirstSeen ? device.firstSeen : device.lastSeen
     }
 
     private var subtitle: String {
@@ -682,6 +693,7 @@ private struct CompactDeviceRow: View {
     let device: NetworkDevice
     let portSummary: String
     let riskColor: Color
+    let showFirstSeen: Bool
 
     private var roomTitle: String {
         let room = device.room?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -762,8 +774,8 @@ private struct CompactDeviceRow: View {
             }
             .frame(width: 64, alignment: .leading)
 
-            DeviceCompactMeta(title: "Last seen") {
-                Text(device.lastSeen.formatted(date: .abbreviated, time: .shortened))
+            DeviceCompactMeta(title: showFirstSeen ? "First seen" : "Last seen") {
+                Text(seenDate.formatted(date: .abbreviated, time: .shortened))
             }
             .frame(width: 112, alignment: .leading)
 
@@ -835,8 +847,8 @@ private struct CompactDeviceRow: View {
                 }
                 .frame(width: 64, alignment: .leading)
 
-                DeviceCompactMeta(title: "Last seen") {
-                    Text(device.lastSeen.formatted(date: .abbreviated, time: .shortened))
+                DeviceCompactMeta(title: showFirstSeen ? "First seen" : "Last seen") {
+                    Text(seenDate.formatted(date: .abbreviated, time: .shortened))
                 }
                 .frame(width: 112, alignment: .leading)
             }
@@ -868,6 +880,10 @@ private struct CompactDeviceRow: View {
         DeviceNameGuesser.isMACAddressText(device.name)
             ? DeviceNameGuesser.displayName(hostname: nil, macAddress: device.macAddress)
             : device.name
+    }
+
+    private var seenDate: Date {
+        showFirstSeen ? device.firstSeen : device.lastSeen
     }
 
     private var subtitle: String {
@@ -1040,6 +1056,23 @@ struct DeviceDetailView: View {
                     DetailRow(title: "Risk", value: originalDevice.risk.title)
                 }
 
+                Section("Identity") {
+                    IdentityConfidenceRow(
+                        title: "Identity confidence",
+                        confidence: originalDevice.identityConfidence
+                    )
+                    IdentityEvidenceRow(
+                        title: "Hostname source",
+                        source: originalDevice.hostnameSource,
+                        confidence: originalDevice.hostnameConfidence
+                    )
+                    IdentityEvidenceRow(
+                        title: "Vendor source",
+                        source: originalDevice.vendorSource,
+                        confidence: originalDevice.vendorConfidence
+                    )
+                }
+
                 Section("Timeline") {
                     DetailRow(title: "First seen", value: originalDevice.firstSeen.formatted(date: .abbreviated, time: .shortened))
                     DetailRow(title: "Last seen", value: originalDevice.lastSeen.formatted(date: .abbreviated, time: .shortened))
@@ -1200,6 +1233,43 @@ private struct DetailRow: View {
                 .multilineTextAlignment(.trailing)
                 .textSelection(.enabled)
         }
+    }
+}
+
+private struct IdentityConfidenceRow: View {
+    let title: String
+    let confidence: DeviceIdentityConfidence
+
+    var body: some View {
+        LabeledContent(title) {
+            Text(confidence.title)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(confidenceColor)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(confidenceColor.opacity(0.14), in: Capsule())
+        }
+    }
+
+    private var confidenceColor: Color {
+        switch confidence {
+        case .high: .green
+        case .medium: .orange
+        case .low, .none: .secondary
+        }
+    }
+}
+
+private struct IdentityEvidenceRow: View {
+    let title: String
+    let source: DeviceIdentitySource?
+    let confidence: DeviceIdentityConfidence
+
+    var body: some View {
+        DetailRow(
+            title: title,
+            value: source.map { "\($0.title) (\(confidence.title))" } ?? "Unknown"
+        )
     }
 }
 

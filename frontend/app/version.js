@@ -4,6 +4,17 @@ export const APP_VERSION = packageInfo.version;
 
 export const CHANGELOG_ENTRIES = [
   {
+    version: '1.7.0',
+    date: '2026-08-28',
+    items: [
+      'Added device identity confidence and source evidence for hostname and vendor detection in Docker and macOS.',
+      'Preserved hostname and vendor source metadata when exporting or importing device inventories.',
+      'Added configurable quiet-hour weekdays in Docker and macOS, including correct handling for overnight ranges.',
+      'Fixed device-list sizing to avoid unnecessary horizontal scrolling at narrower widths.',
+      'Show First Seen in Docker and macOS device rows when sorting by first-seen time.',
+    ],
+  },
+  {
     version: '1.6.0',
     date: '2026-08-26',
     items: [

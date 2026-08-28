@@ -12,6 +12,10 @@ struct SettingsView: View {
     @State private var scheduledScanningEnabled = AppSettings.default.scheduledScanningEnabled
     @State private var newDeviceNotificationsEnabled = AppSettings.default.newDeviceNotificationsEnabled
     @State private var riskyPortNotificationsEnabled = AppSettings.default.riskyPortNotificationsEnabled
+    @State private var quietHoursEnabled = AppSettings.default.quietHoursEnabled
+    @State private var quietHoursStart = Self.date(for: AppSettings.default.quietHoursStart)
+    @State private var quietHoursEnd = Self.date(for: AppSettings.default.quietHoursEnd)
+    @State private var quietHoursDays = AppSettings.default.quietHoursDays
     @State private var cloudBackupEnabled = AppSettings.default.cloudBackupEnabled
     @State private var cloudBackupFolderPath = AppSettings.default.cloudBackupFolderPath ?? ""
     @State private var launchAtLoginEnabled = LaunchAtLoginService.isEnabled
@@ -97,6 +101,33 @@ struct SettingsView: View {
                 Section("Notifications") {
                     Toggle("New unknown devices", isOn: $newDeviceNotificationsEnabled)
                     Toggle("High-risk open ports", isOn: $riskyPortNotificationsEnabled)
+                    Toggle("Quiet hours", isOn: $quietHoursEnabled)
+
+                    HStack {
+                        DatePicker(
+                            "From",
+                            selection: $quietHoursStart,
+                            displayedComponents: .hourAndMinute
+                        )
+                        DatePicker(
+                            "Until",
+                            selection: $quietHoursEnd,
+                            displayedComponents: .hourAndMinute
+                        )
+                    }
+                    .disabled(!quietHoursEnabled)
+
+                    HStack(spacing: 12) {
+                        ForEach(QuietHoursWeekday.allCases) { day in
+                            Toggle(day.shortTitle, isOn: quietHoursBinding(for: day))
+                                .toggleStyle(.checkbox)
+                        }
+                    }
+                    .disabled(!quietHoursEnabled)
+
+                    Text("For overnight ranges, early morning hours belong to the previous day.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
 
                     Button {
                         sendTestNotification()
@@ -258,6 +289,10 @@ struct SettingsView: View {
             scheduledScanningEnabled: scheduledScanningEnabled,
             newDeviceNotificationsEnabled: newDeviceNotificationsEnabled,
             riskyPortNotificationsEnabled: riskyPortNotificationsEnabled,
+            quietHoursEnabled: quietHoursEnabled,
+            quietHoursStart: Self.timeString(from: quietHoursStart),
+            quietHoursEnd: Self.timeString(from: quietHoursEnd),
+            quietHoursDays: quietHoursDays,
             cloudBackupEnabled: cloudBackupEnabled,
             cloudBackupFolderPath: backupPath.isEmpty ? nil : backupPath,
             rooms: rooms
@@ -282,8 +317,43 @@ struct SettingsView: View {
         scheduledScanningEnabled = settings.scheduledScanningEnabled
         newDeviceNotificationsEnabled = settings.newDeviceNotificationsEnabled
         riskyPortNotificationsEnabled = settings.riskyPortNotificationsEnabled
+        quietHoursEnabled = settings.quietHoursEnabled
+        quietHoursStart = Self.date(for: settings.quietHoursStart)
+        quietHoursEnd = Self.date(for: settings.quietHoursEnd)
+        quietHoursDays = settings.quietHoursDays
         cloudBackupEnabled = settings.cloudBackupEnabled
         cloudBackupFolderPath = settings.cloudBackupFolderPath ?? ""
+    }
+
+    private func quietHoursBinding(for day: QuietHoursWeekday) -> Binding<Bool> {
+        Binding(
+            get: { quietHoursDays.contains(day) },
+            set: { selected in
+                if selected {
+                    if !quietHoursDays.contains(day) {
+                        quietHoursDays.append(day)
+                    }
+                } else {
+                    quietHoursDays.removeAll { $0 == day }
+                }
+                quietHoursDays = QuietHoursWeekday.allCases.filter { quietHoursDays.contains($0) }
+            }
+        )
+    }
+
+    private static func date(for time: String) -> Date {
+        let parts = time.split(separator: ":")
+        guard parts.count == 2,
+              let hour = Int(parts[0]),
+              let minute = Int(parts[1]) else {
+            return .now
+        }
+        return Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: .now) ?? .now
+    }
+
+    private static func timeString(from date: Date) -> String {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return String(format: "%02d:%02d", components.hour ?? 0, components.minute ?? 0)
     }
 
     private func addRoom() {

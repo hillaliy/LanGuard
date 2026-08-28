@@ -783,23 +783,46 @@ def detect_web_interface(ip, open_ports, timeout=1.2):
     return ""
 
 
-def get_hostname(ip, hostname_hints=None):
-    lookup_steps = [reverse_dns_hostname, mdns_reverse_hostname]
+def get_hostname(ip, hostname_hints=None, include_source=False):
+    lookup_steps = [
+        (Device.IdentitySource.REVERSE_DNS, reverse_dns_hostname),
+        (Device.IdentitySource.MDNS, mdns_reverse_hostname),
+    ]
     if hostname_hints is None:
-        lookup_steps.extend((mdns_service_hostname, llmnr_reverse_hostname, ssdp_hostname))
+        lookup_steps.extend((
+            (Device.IdentitySource.MDNS, mdns_service_hostname),
+            (Device.IdentitySource.LLMNR, llmnr_reverse_hostname),
+            (Device.IdentitySource.SSDP, ssdp_hostname),
+        ))
     else:
-        lookup_steps.extend((lambda address: hostname_hints.get(address, ""), llmnr_reverse_hostname))
-    lookup_steps.append(netbios_hostname)
-    for lookup in lookup_steps:
+        def hinted_hostname(address):
+            hint = hostname_hints.get(address, "")
+            return hint[0] if isinstance(hint, tuple) else hint
+
+        lookup_steps.extend((
+            ("hint", hinted_hostname),
+            (Device.IdentitySource.LLMNR, llmnr_reverse_hostname),
+        ))
+    lookup_steps.append((Device.IdentitySource.NETBIOS, netbios_hostname))
+    for source, lookup in lookup_steps:
         hostname = lookup(ip)
         if hostname:
-            return hostname
-    return ""
+            if source == "hint":
+                hint = hostname_hints.get(ip, "")
+                source = hint[1] if isinstance(hint, tuple) else ""
+            return (hostname, source) if include_source else hostname
+    return ("", "") if include_source else ""
 
 
 def discover_hostname_hints():
-    hints = ssdp_hostname_map()
-    hints.update(mdns_service_hostname_map())
+    hints = {
+        ip: (hostname, Device.IdentitySource.SSDP)
+        for ip, hostname in ssdp_hostname_map().items()
+    }
+    hints.update({
+        ip: (hostname, Device.IdentitySource.MDNS)
+        for ip, hostname in mdns_service_hostname_map().items()
+    })
     return hints
 
 
@@ -1397,7 +1420,12 @@ def sync_discovered_device(
     mac = element[1].hwsrc.lower()
     vendor = ManufDA.lookup(oui, mac) if oui else None
     vendor_name = manuf_vendor(mac) or (vendor[1] if vendor else "")
-    hostname = get_hostname(ip=ip, hostname_hints=hostname_hints)
+    hostname_result = get_hostname(ip=ip, hostname_hints=hostname_hints, include_source=True)
+    if isinstance(hostname_result, tuple):
+        hostname, hostname_source = hostname_result
+    else:
+        hostname, hostname_source = hostname_result, ""
+    vendor_source = Device.IdentitySource.MANUF if vendor_name else ""
     ports_opened = 0
     ports_closed = 0
     new_devices = 0
@@ -1424,12 +1452,20 @@ def sync_discovered_device(
         if device.hostname != resolved_hostname:
             device.hostname = resolved_hostname
             update_fields.append("hostname")
+        resolved_hostname_source = hostname_source if resolved_hostname else ""
+        if device.hostname_source != resolved_hostname_source:
+            device.hostname_source = resolved_hostname_source
+            update_fields.append("hostname_source")
         resolved_vendor = preferred_vendor(
             observed_vendor=vendor_name,
         )
         if resolved_vendor != device.vendor:
             device.vendor = resolved_vendor
             update_fields.append("vendor")
+        resolved_vendor_source = vendor_source if resolved_vendor else ""
+        if device.vendor_source != resolved_vendor_source:
+            device.vendor_source = resolved_vendor_source
+            update_fields.append("vendor_source")
         if is_gateway and device.role != "gateway":
             device.role = "gateway"
             update_fields.append("role")
@@ -1479,7 +1515,9 @@ def sync_discovered_device(
             ip=ip,
             mac=mac,
             vendor=resolved_vendor,
+            vendor_source=vendor_source if resolved_vendor else "",
             hostname=hostname[:255] if hostname else "",
+            hostname_source=hostname_source if hostname else "",
             role="gateway" if is_gateway else "device",
             known=is_gateway,
             is_gateway=is_gateway,

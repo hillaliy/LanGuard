@@ -95,7 +95,7 @@ enum AppVersion {
     static var current: String {
         let bundleVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
         let normalizedVersion = bundleVersion?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return normalizedVersion?.isEmpty == false ? normalizedVersion! : "1.6.0"
+        return normalizedVersion?.isEmpty == false ? normalizedVersion! : "1.7.0"
     }
 }
 

@@ -107,7 +107,10 @@ struct DNSPTRMetadataDiscovery: NetworkMetadataDiscovering {
                         guard let hostname = await resolveHostname(ipAddress: ipAddress, timeoutSeconds: timeoutSeconds) else {
                             return nil
                         }
-                        return (ipAddress, DeviceMetadata(vendor: nil, hostname: hostname))
+                        return (ipAddress, DeviceMetadata(
+                            hostname: hostname,
+                            hostnameSource: .reverseDNS
+                        ))
                     }
                 }
 
@@ -200,7 +203,9 @@ struct SNMPMetadataDiscovery: NetworkMetadataDiscovering {
     static func metadata(sysName: String?, sysDescr: String?, ipAddress: String = "") -> DeviceMetadata {
         DeviceMetadata(
             vendor: cleanedSNMPValue(sysDescr),
-            hostname: HostnameResolver.clean(cleanedSNMPValue(sysName), ipAddress: ipAddress)
+            vendorSource: cleanedSNMPValue(sysDescr) == nil ? nil : .snmp,
+            hostname: HostnameResolver.clean(cleanedSNMPValue(sysName), ipAddress: ipAddress),
+            hostnameSource: cleanedSNMPValue(sysName) == nil ? nil : .snmp
         )
     }
 
@@ -298,7 +303,7 @@ struct SSDPMetadataDiscovery: NetworkMetadataDiscovering {
         let serverVendor = explicitVendor(fromServerHeader: response.headers["server"])
         var metadata = DeviceMetadata(
             vendor: MACVendorResolver.displayVendor(serverVendor),
-            hostname: nil
+            vendorSource: serverVendor == nil ? nil : .ssdp
         )
 
         if let location = response.headers["location"],
@@ -318,7 +323,9 @@ struct SSDPMetadataDiscovery: NetworkMetadataDiscovering {
 
         return DeviceMetadata(
             vendor: MACVendorResolver.displayVendor(manufacturer),
-            hostname: hostname
+            vendorSource: manufacturer == nil ? nil : .ssdp,
+            hostname: hostname,
+            hostnameSource: hostname == nil ? nil : .ssdp
         )
     }
 
@@ -400,7 +407,10 @@ struct MDNSReverseMetadataDiscovery: NetworkMetadataDiscovering {
                         guard let hostname = await resolveHostname(ipAddress: ipAddress, timeout: timeout) else {
                             return nil
                         }
-                        return (ipAddress, DeviceMetadata(vendor: nil, hostname: hostname))
+                        return (ipAddress, DeviceMetadata(
+                            hostname: hostname,
+                            hostnameSource: .mdns
+                        ))
                     }
                 }
 
@@ -517,7 +527,8 @@ struct MDNSPTRSocketDiscovery: NetworkMetadataDiscovering {
             port: 5353,
             timeout: timeout,
             concurrency: concurrency,
-            transactionID: 0
+            transactionID: 0,
+            source: .mdns
         )
         .discoverMetadata(for: ipAddresses)
     }
@@ -542,7 +553,8 @@ struct LLMNRReverseMetadataDiscovery: NetworkMetadataDiscovering {
             port: 5355,
             timeout: timeout,
             concurrency: concurrency,
-            transactionID: 0x4c47
+            transactionID: 0x4c47,
+            source: .llmnr
         )
         .discoverMetadata(for: ipAddresses)
     }
@@ -592,7 +604,10 @@ struct MDNSServiceMetadataDiscovery: NetworkMetadataDiscovering {
 
         var metadataByIP: [String: DeviceMetadata] = [:]
         for (ipAddress, hostname) in hostnamesByIP where allowedIPs.contains(ipAddress) {
-            metadataByIP[ipAddress] = DeviceMetadata(vendor: nil, hostname: hostname)
+            metadataByIP[ipAddress] = DeviceMetadata(
+                hostname: hostname,
+                hostnameSource: .mdns
+            )
         }
         return metadataByIP
     }
@@ -731,6 +746,7 @@ private struct ReversePTRSocketDiscovery: NetworkMetadataDiscovering {
     let timeout: TimeInterval
     let concurrency: Int
     let transactionID: UInt16
+    let source: DeviceIdentitySource
 
     func discoverMetadata(for ipAddresses: [String]) async -> [String: DeviceMetadata] {
         var metadataByIP: [String: DeviceMetadata] = [:]
@@ -746,7 +762,10 @@ private struct ReversePTRSocketDiscovery: NetworkMetadataDiscovering {
                         guard let hostname = await resolveHostname(ipAddress: ipAddress) else {
                             return nil
                         }
-                        return (ipAddress, DeviceMetadata(vendor: nil, hostname: hostname))
+                        return (ipAddress, DeviceMetadata(
+                            hostname: hostname,
+                            hostnameSource: source
+                        ))
                     }
                 }
 
@@ -848,7 +867,10 @@ struct NetBIOSNameDiscovery: NetworkMetadataDiscovering {
                         guard let hostname = await resolveHostname(ipAddress: ipAddress, timeout: timeout) else {
                             return nil
                         }
-                        return (ipAddress, DeviceMetadata(vendor: nil, hostname: hostname))
+                        return (ipAddress, DeviceMetadata(
+                            hostname: hostname,
+                            hostnameSource: .netBIOS
+                        ))
                     }
                 }
 
@@ -1482,7 +1504,9 @@ private extension DeviceMetadata {
     func merged(with other: DeviceMetadata) -> DeviceMetadata {
         DeviceMetadata(
             vendor: other.vendor ?? vendor,
-            hostname: other.hostname ?? hostname
+            vendorSource: other.vendor == nil ? vendorSource : other.vendorSource,
+            hostname: other.hostname ?? hostname,
+            hostnameSource: other.hostname == nil ? hostnameSource : other.hostnameSource
         )
     }
 }

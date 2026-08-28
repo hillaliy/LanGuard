@@ -11,6 +11,7 @@ from .models import (
     DevicePort,
     NetworkEvent,
     NotificationDelivery,
+    QUIET_HOURS_DAY_KEYS,
     ScanRun,
 )
 
@@ -130,6 +131,71 @@ ROLE_EXPECTED_PORTS = {
 }
 PORT_DENSE_ROLES = {"camera", "intercom", "server"}
 
+HIGH_CONFIDENCE_IDENTITY_SOURCES = {
+    Device.IdentitySource.REVERSE_DNS,
+    Device.IdentitySource.MDNS,
+    Device.IdentitySource.LLMNR,
+    Device.IdentitySource.NETBIOS,
+    Device.IdentitySource.SNMP,
+    Device.IdentitySource.MANUF,
+}
+MEDIUM_CONFIDENCE_IDENTITY_SOURCES = {
+    Device.IdentitySource.SSDP,
+    Device.IdentitySource.HTTP,
+    Device.IdentitySource.ARP,
+    Device.IdentitySource.IMPORTED,
+}
+
+
+def identity_field_confidence(value, source):
+    if not (value or "").strip():
+        return "none"
+    if source in HIGH_CONFIDENCE_IDENTITY_SOURCES:
+        return "high"
+    if source in MEDIUM_CONFIDENCE_IDENTITY_SOURCES:
+        return "medium"
+    return "low"
+
+
+def device_identity(device):
+    hostname_confidence = identity_field_confidence(device.hostname, device.hostname_source)
+    vendor_confidence = identity_field_confidence(device.vendor, device.vendor_source)
+    field_confidences = {hostname_confidence, vendor_confidence}
+
+    if hostname_confidence == "high" and vendor_confidence == "high":
+        confidence = "high"
+    elif "high" in field_confidences or (
+        hostname_confidence == "medium" and vendor_confidence == "medium"
+    ):
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    evidence = []
+    if device.hostname:
+        evidence.append({
+            "field": "hostname",
+            "value": device.hostname,
+            "source": device.hostname_source,
+            "source_display": device.get_hostname_source_display() if device.hostname_source else "Unknown",
+            "confidence": hostname_confidence,
+        })
+    if device.vendor:
+        evidence.append({
+            "field": "vendor",
+            "value": device.vendor,
+            "source": device.vendor_source,
+            "source_display": device.get_vendor_source_display() if device.vendor_source else "Unknown",
+            "confidence": vendor_confidence,
+        })
+
+    return {
+        "confidence": confidence,
+        "hostname_confidence": hostname_confidence,
+        "vendor_confidence": vendor_confidence,
+        "evidence": evidence,
+    }
+
 
 def device_risk(device):
     score = 0
@@ -217,6 +283,8 @@ def device_needs_attention(device, risk_data=None):
 
 
 class DeviceSerializer(serializers.ModelSerializer):
+    hostname_source = serializers.CharField(read_only=True)
+    vendor_source = serializers.CharField(read_only=True)
     attention_acknowledged_signature = serializers.HiddenField(
         default=serializers.CreateOnlyDefault("")
     )
@@ -230,6 +298,10 @@ class DeviceSerializer(serializers.ModelSerializer):
     risk_reasons = serializers.SerializerMethodField()
     attention_acknowledged = serializers.SerializerMethodField()
     needs_attention = serializers.SerializerMethodField()
+    identity_confidence = serializers.SerializerMethodField()
+    hostname_confidence = serializers.SerializerMethodField()
+    vendor_confidence = serializers.SerializerMethodField()
+    identity_evidence = serializers.SerializerMethodField()
     acknowledge_attention = serializers.BooleanField(write_only=True, required=False)
     status_display = serializers.CharField(
         source="get_status_display",
@@ -243,6 +315,28 @@ class DeviceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Device
         fields = "__all__"
+        read_only_fields = ("hostname", "vendor", "hostname_source", "vendor_source")
+
+    def get_device_identity(self, obj):
+        if not hasattr(obj, "_identity_data"):
+            obj._identity_data = device_identity(obj)
+        return obj._identity_data
+
+    @extend_schema_field(serializers.CharField)
+    def get_identity_confidence(self, obj):
+        return self.get_device_identity(obj)["confidence"]
+
+    @extend_schema_field(serializers.CharField)
+    def get_hostname_confidence(self, obj):
+        return self.get_device_identity(obj)["hostname_confidence"]
+
+    @extend_schema_field(serializers.CharField)
+    def get_vendor_confidence(self, obj):
+        return self.get_device_identity(obj)["vendor_confidence"]
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_identity_evidence(self, obj):
+        return self.get_device_identity(obj)["evidence"]
 
     def validate_external_url(self, value):
         value = (value or "").strip()
@@ -410,6 +504,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "notification_quiet_hours_enabled",
             "notification_quiet_hours_start",
             "notification_quiet_hours_end",
+            "notification_quiet_hours_days",
             "activity_cleanup_retention_days",
             "home_map_layout",
             "updated_at",
@@ -476,6 +571,15 @@ class AppSettingsSerializer(serializers.ModelSerializer):
 
     def validate_notification_quiet_hours_end(self, value):
         return self.validate_quiet_hour(value)
+
+    def validate_notification_quiet_hours_days(self, value):
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Select days as a list.")
+        if len(value) != len(set(value)):
+            raise serializers.ValidationError("Each day can only be selected once.")
+        if any(day not in QUIET_HOURS_DAY_KEYS for day in value):
+            raise serializers.ValidationError("Select valid weekdays.")
+        return [day for day in QUIET_HOURS_DAY_KEYS if day in value]
 
     def validate_quiet_hour(self, value):
         import datetime

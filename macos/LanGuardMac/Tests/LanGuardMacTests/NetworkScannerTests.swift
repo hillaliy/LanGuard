@@ -65,7 +65,7 @@ private struct HostnameMetadataDiscovery: NetworkMetadataDiscovering {
 
     func discoverMetadata(for ipAddresses: [String]) async -> [String: DeviceMetadata] {
         [
-            ipAddress: DeviceMetadata(hostname: hostname)
+            ipAddress: DeviceMetadata(hostname: hostname, hostnameSource: .mdns)
         ]
     }
 }
@@ -291,4 +291,5 @@ func localScannerUsesNetworkMetadataHostnameWhenCurrentHostnameIsMissing() async
 
     let device = try #require(devices.first { $0.ipAddress == "192.168.0.31" })
     #expect(device.hostname == "HAA 123456")
+    #expect(device.hostnameSource == .mdns)
 }

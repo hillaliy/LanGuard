@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.0 - 2026-08-28
+
+- Added device identity confidence and source evidence for hostname and vendor detection in Docker and macOS.
+- Preserved hostname and vendor source metadata when exporting or importing device inventories.
+- Added configurable quiet-hour weekdays in Docker and macOS, including correct handling for overnight ranges.
+- Fixed Docker device-list sizing to avoid unnecessary horizontal scrolling at narrower widths.
+- Updated Docker and macOS device rows to show `First Seen` when the list is sorted by first-seen time.
+
 ## 1.6.0 - 2026-08-26
 
 - Added per-channel test actions for configured Discord and Telegram notifications.

@@ -47,7 +47,9 @@ enum DeviceMerger {
                 merged.secondaryIconName = device.secondaryIconName
             }
             merged.hostname = HostnameResolver.clean(device.hostname)
+            merged.hostnameSource = merged.hostname == nil ? nil : device.hostnameSource
             merged.vendor = MACVendorResolver.displayVendor(device.vendor)
+            merged.vendorSource = merged.vendor == nil ? nil : device.vendorSource
             merged.comments = previous.comments
             merged.externalURL = previous.externalURL
             merged.attentionAcknowledgedRiskSignature = previous.attentionAcknowledgedRiskSignature
@@ -107,7 +109,9 @@ enum DeviceMerger {
             current.ipAddress = latest.ipAddress
             current.macAddress = latest.macAddress
             current.vendor = latest.vendor ?? current.vendor
+            if latest.vendor != nil { current.vendorSource = latest.vendorSource }
             current.hostname = preferredHostname(latest.hostname, fallback: current.hostname)
+            if latest.hostname != nil { current.hostnameSource = latest.hostnameSource }
             current.comments = latest.comments.isEmpty ? current.comments : latest.comments
             current.externalURL = latest.externalURL ?? current.externalURL
             current.attentionAcknowledgedRiskSignature = (
