@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Refined the README presentation and moved contributor workflows into a dedicated guide.
 - Centralized frontend changelog data and GitHub release-note generation in `CHANGELOG.md`.
 - Added a Docker migration tool for importing the current WatchYourLAN device inventory from its `/api/all` JSON output.
 - Added Docker scan comparison for completed scan runs, including device, port, and duration differences.

@@ -1,29 +1,42 @@
-# LanGuard
-
 <p align="center">
   <img src="frontend/public/logo.png" alt="LanGuard logo" width="120">
 </p>
 
+<h1 align="center">LanGuard</h1>
+
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/github/v/release/hillaliy/LanGuard?style=for-the-badge&label=version">
+  Self-hosted network visibility for discovering, organizing, and monitoring devices on your LAN.
+</p>
+
+<p align="center">
+  <a href="https://github.com/hillaliy/LanGuard/releases/latest">
+    <img alt="Latest version" src="https://img.shields.io/github/v/release/hillaliy/LanGuard?style=for-the-badge&label=version">
+  </a>
   <a href="https://github.com/hillaliy/LanGuard/pkgs/container/languard-backend">
     <img alt="Docker pulls" src="https://ghcr-badge.elias.eu.org/shield/hillaliy/LanGuard/languard-backend">
   </a>
-  <a href="https://github.com/users/hillaliy/packages/container/package/languard-backend">
-    <img alt="Backend image" src="https://img.shields.io/badge/backend-GHCR-2ea44f?style=for-the-badge&logo=github">
-  </a>
-  <a href="https://github.com/users/hillaliy/packages/container/package/languard-frontend">
-    <img alt="Frontend image" src="https://img.shields.io/badge/frontend-GHCR-2ea44f?style=for-the-badge&logo=github">
-  </a>
 </p>
 
-LanGuard is a self-hosted LAN visibility tool for home networks. It finds devices, tracks online/offline state, scans common ports, keeps history, and can send Discord or Telegram alerts for new devices.
+<p align="center">
+  <a href="#features">Features</a> &middot;
+  <a href="#portainer">Docker setup</a> &middot;
+  <a href="macos/LanGuardMac/README.md">macOS</a> &middot;
+  <a href="#migrate-from-watchyourlan">Migration</a>
+</p>
+
+LanGuard finds devices, tracks online and offline state, scans common ports,
+keeps network history, and can send Discord or Telegram alerts when new devices
+appear.
 
 ## Preview
+
+### Dashboard
 
 <p align="center">
   <img src="docs/demo-preview.png" alt="LanGuard dashboard preview with fictional device data" width="920">
 </p>
+
+### Home Map
 
 <p align="center">
   <img src="docs/home-map-preview.png" alt="LanGuard home map preview with fictional rooms and devices" width="920">
@@ -31,15 +44,29 @@ LanGuard is a self-hosted LAN visibility tool for home networks. It finds device
 
 ## Features
 
-- Device inventory with IP, MAC, vendor, hostname, icon, known/new state, and last seen time
-- Home Map view for arranging rooms and device icons into a simple floor-plan style layout
-- Open port tracking and port change events
-- Optional external links for device web interfaces, with local HTTP/HTTPS detection
-- Scan history, event history, and notification history
-- Scheduled scans that wait for the configured interval after each scan completes
-- Device inventory export/import for moving names, icons, rooms, roles, vendors, IPs, MAC addresses, and open ports between installs
-- Swagger, ReDoc, and schema endpoints
-- First-user setup: the first account created in the app becomes admin
+**Discover**
+
+- Find LAN devices and identify their IP, MAC address, vendor, and hostname
+- Track identity confidence, first and last seen times, and known or new state
+- Detect local HTTP/HTTPS interfaces and common open ports
+
+**Monitor**
+
+- Track online and offline state, port changes, and device activity
+- Compare completed scans and retain scan, event, and notification history
+- Run scheduled scans after the configured interval
+
+**Organize**
+
+- Assign names, icons, rooms, roles, and expected device behavior
+- Arrange rooms and devices in the Docker Home Map view
+- Export and import device inventory between LanGuard installations
+
+**Notify and integrate**
+
+- Send Discord or Telegram alerts for new devices and important changes
+- Use Swagger, ReDoc, and the OpenAPI schema for integrations
+- Create the initial administrator directly from first-user setup
 
 ## Portainer
 
@@ -199,52 +226,13 @@ For stable tracking, disable private/random MAC addressing for your home Wi-Fi n
 
 Change the image tags in the Portainer stack and redeploy. Do not delete the `languard_database` volume unless you want to reset LanGuard.
 
-## Development
-
-```bash
-python3.14 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python backend/manage.py migrate
-python backend/manage.py runserver 127.0.0.1:8000
-```
-
-```bash
-cd frontend
-npm ci
-npm run dev
-```
-
-Open `http://127.0.0.1:3000`.
-
-## Release Metadata
-
-[`VERSION`](VERSION) is the single source for the Docker, frontend, and macOS
-version number. [`CHANGELOG.md`](CHANGELOG.md) is the single source for the
-frontend **What's new** catalog and GitHub release notes.
-
-Validate both files and generate release notes for the current version with:
-
-```bash
-node scripts/changelog.mjs --check
-node scripts/changelog.mjs --version "$(cat VERSION)" > /tmp/languard-release-notes.md
-```
-
-Move completed entries from `Unreleased` into a dated version section before
-publishing a release. Do not edit `frontend/app/version.js` with release entries;
-the frontend build generates them from `CHANGELOG.md`.
-
-## Checks
-
-```bash
-.venv/bin/python backend/manage.py test core
-node --test scripts/changelog.test.mjs
-node scripts/changelog.mjs --check
-cd frontend && npm run lint && npm run build
-```
-
 ## API
 
 - Swagger: `/api/schema/swagger/`
 - ReDoc: `/api/schema/redoc/`
 - Schema: `/api/schema/`
+
+## Contributing
+
+Development setup, checks, and release metadata instructions are documented in
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
