@@ -12,6 +12,12 @@ services:
     volumes:
       - languard_database:/data
       - languard_static:/static
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
     restart: unless-stopped
 
   scanner:
@@ -29,6 +35,10 @@ services:
       - languard_database:/data
       - languard_static:/static
     restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+        restart: true
 
   frontend:
     image: ghcr.io/hillaliy/languard-frontend:latest
@@ -41,7 +51,9 @@ services:
       - "8080:80"
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+        restart: true
 
 volumes:
   languard_database:

@@ -66,11 +66,26 @@ def validate_production_settings(environment, secret_key, debug, allowed_hosts):
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def project_version():
+    configured_version = os.getenv("APP_VERSION", "").strip()
+    if configured_version:
+        return configured_version
+
+    for version_file in (BASE_DIR / "VERSION", BASE_DIR.parent / "VERSION"):
+        if version_file.is_file():
+            version = version_file.read_text(encoding="utf-8").strip()
+            if version:
+                return version
+
+    raise ImproperlyConfigured("LanGuard VERSION file is missing or empty.")
+
+
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development").strip().lower()
-APP_VERSION = os.getenv("APP_VERSION", "1.7.0")
+APP_VERSION = project_version()
 LATEST_VERSION_URL = os.getenv(
     "LATEST_VERSION_URL",
-    "https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/package.json",
+    "https://raw.githubusercontent.com/hillaliy/LanGuard/main/VERSION",
 )
 VERSION_CHECK_TIMEOUT = float(os.getenv("VERSION_CHECK_TIMEOUT", "3"))
 VERSION_CHECK_INTERVAL = int(os.getenv("VERSION_CHECK_INTERVAL", "21600"))
@@ -89,7 +104,12 @@ ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
 
 CORS_ALLOWED_ORIGINS = env_list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://127.0.0.1:3000", "http://localhost:3000"],
+    default=[
+        "http://127.0.0.1:3000",
+        "http://localhost:3000",
+        "http://127.0.0.1:3001",
+        "http://localhost:3001",
+    ],
 )
 
 CORS_ALLOW_CREDENTIALS = True

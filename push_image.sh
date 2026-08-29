@@ -15,10 +15,10 @@ USE_REGISTRY_CACHE="${USE_REGISTRY_CACHE:-true}"
 LOCAL_ARCH_ONLY="${LOCAL_ARCH_ONLY:-false}"
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-  echo "Usage: $0 [version]"
+  echo "Usage: $0"
   echo
   echo "Defaults:"
-  echo "  version: frontend/package.json version"
+  echo "  version: VERSION file"
   echo "  backend: ${BACKEND_IMAGE}"
   echo "  scheduler: ${SCHEDULER_IMAGE}"
   echo "  frontend: ${FRONTEND_IMAGE}"
@@ -30,6 +30,11 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   echo "  LOCAL_ARCH_ONLY=true to publish only this Mac's CPU architecture"
   echo "  USE_REGISTRY_CACHE=false to disable buildx registry cache"
   exit 0
+fi
+
+if [[ $# -gt 0 ]]; then
+  echo "Version arguments are not supported. Update ${ROOT_DIR}/VERSION instead."
+  exit 1
 fi
 
 if [[ "${LOCAL_ARCH_ONLY}" == "true" ]]; then
@@ -47,10 +52,7 @@ if [[ "${LOCAL_ARCH_ONLY}" == "true" ]]; then
   esac
 fi
 
-VERSION="${1:-}"
-if [[ -z "${VERSION}" ]]; then
-  VERSION="$(node -p "require('${ROOT_DIR}/frontend/package.json').version")"
-fi
+VERSION="$(tr -d '[:space:]' < "${ROOT_DIR}/VERSION")"
 
 if [[ -z "${VERSION}" ]]; then
   echo "Version is required."
@@ -104,7 +106,6 @@ fi
 echo "Building and pushing backend image..."
 docker buildx build \
   --platform "${PLATFORMS}" \
-  --build-arg "APP_VERSION=${VERSION}" \
   --build-arg "APP_COMPONENT=backend" \
   -f "${ROOT_DIR}/Dockerfile" \
   "${BACKEND_CACHE_ARGS[@]}" \
@@ -115,7 +116,6 @@ docker buildx build \
 echo "Building and pushing scheduler image..."
 docker buildx build \
   --platform "${PLATFORMS}" \
-  --build-arg "APP_VERSION=${VERSION}" \
   --build-arg "APP_COMPONENT=scheduler" \
   -f "${ROOT_DIR}/Dockerfile" \
   "${SCHEDULER_CACHE_ARGS[@]}" \
@@ -130,6 +130,6 @@ docker buildx build \
   "${FRONTEND_CACHE_ARGS[@]}" \
   "${FRONTEND_TAGS[@]}" \
   --push \
-  "${ROOT_DIR}/frontend"
+  "${ROOT_DIR}"
 
 echo "LanGuard images pushed successfully."

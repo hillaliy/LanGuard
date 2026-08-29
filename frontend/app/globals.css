@@ -435,6 +435,13 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.dashboard-summary-value-nowrap {
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
 .dashboard-insight-grid {
   display: grid;
   gap: 18px;

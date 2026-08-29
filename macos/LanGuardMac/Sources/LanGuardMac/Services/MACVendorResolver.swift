@@ -34,7 +34,16 @@ enum MACVendorResolver {
         guard let cleaned = vendor?.trimmingCharacters(in: .whitespacesAndNewlines), !cleaned.isEmpty else {
             return nil
         }
+        guard !isMACAddressText(cleaned) else {
+            return nil
+        }
         return cleaned
+    }
+
+    private static func isMACAddressText(_ value: String) -> Bool {
+        let compact = value.filter(\.isHexDigit)
+        let separators = value.filter { $0 == ":" || $0 == "-" }
+        return compact.count == 12 && separators.count == 5
     }
 
     static func isLocallyAdministered(_ macAddress: String) -> Bool {

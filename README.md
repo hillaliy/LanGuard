@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-1.7.0-2496ed?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/github/v/release/hillaliy/LanGuard?style=for-the-badge&label=version">
   <a href="https://github.com/hillaliy/LanGuard/pkgs/container/languard-backend">
     <img alt="Docker pulls" src="https://ghcr-badge.elias.eu.org/shield/hillaliy/LanGuard/languard-backend">
   </a>
@@ -58,6 +58,12 @@ services:
     volumes:
       - languard_database:/data
       - languard_static:/static
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/', timeout=3).read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 60s
     restart: unless-stopped
 
   scanner:
@@ -73,6 +79,10 @@ services:
       - languard_database:/data
       - languard_static:/static
     restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+        restart: true
 
   frontend:
     image: ghcr.io/hillaliy/languard-frontend:latest
@@ -85,16 +95,26 @@ services:
       - 8080:80
     restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+        restart: true
 
 volumes:
   languard_database:
   languard_static:
 ```
 
-The scanner uses its own `languard-scheduler` image and has no runtime dependency
-on the web backend, so container update tools can update either service independently.
-Both images are built from the same LanGuard source release.
+The scanner uses its own `languard-scheduler` image. It does not call the web
+backend, but both services share the database and schema, so Compose keeps their
+startup and update order coordinated. Both images are built from the same LanGuard
+source release and should be updated together.
+
+> [!IMPORTANT]
+> The next Docker release includes a Docker deployment change. Existing Compose
+> files remain compatible, but installations should update the stack with the
+> current Compose definition and recreate it once to enable the backend health
+> check and coordinated service restarts. Named volumes are preserved, so this
+> does not delete LanGuard data.
 
 > [!IMPORTANT]
 > When upgrading from version 1.4.0 or earlier, change the scanner service image
@@ -129,7 +149,7 @@ The scanner waits for the configured scan interval after a scan completes before
 If you override `DISCORD_ICON_URL`, use a versioned URL when replacing the icon so Discord mobile clients do not reuse an old cached image, for example:
 
 ```env
-DISCORD_ICON_URL=https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png?v=1.7.0
+DISCORD_ICON_URL=https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png?v=current
 ```
 
 Portainer will create the stack network automatically.

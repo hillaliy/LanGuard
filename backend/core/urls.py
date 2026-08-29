@@ -18,6 +18,7 @@ from .views import (
     export_db,
     import_db,
     export_devices,
+    health_status,
     home_map_layout,
     import_devices,
     maintenance_cleanup,
@@ -26,6 +27,7 @@ from .views import (
 )
 
 urlpatterns = [
+    path("health/", health_status, name="health-status"),
     path("register/", UserRegistrationView.as_view(), name="register"),
     path("setup/", setup_status, name="setup-status"),
     path("version/", version_status, name="version-status"),

@@ -3,11 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPOSITORY_DIR="$(cd "$ROOT_DIR/../.." && pwd)"
 APP_NAME="${APP_NAME:-LanGuard}"
 APP_DIR="$ROOT_DIR/.build/app/$APP_NAME.app"
 RELEASE_DIR="$ROOT_DIR/.build/release"
 STAGING_DIR="$ROOT_DIR/.build/dmg-staging"
-VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$ROOT_DIR/Packaging/Info.plist")"
+VERSION="$(tr -d '[:space:]' < "$REPOSITORY_DIR/VERSION")"
 DMG_PATH="$RELEASE_DIR/$APP_NAME-$VERSION.dmg"
 VOLUME_NAME="$APP_NAME $VERSION"
 

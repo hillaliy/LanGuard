@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANUF_URL="${MANUF_URL:-https://gitlab.com/wireshark/wireshark/-/raw/release-4.0/manuf}"
+MANUF_URL="${MANUF_URL:-https://www.wireshark.org/download/automated/data/manuf}"
 TARGET="$ROOT_DIR/Resources/manuf"
 TMP_FILE="$(mktemp)"
 
