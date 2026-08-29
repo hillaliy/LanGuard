@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
+from django.db import DatabaseError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 import requests
@@ -38,6 +39,7 @@ from .scan import (
     default_gateway_from_proc_route,
     discover_devices,
     detect_web_interface,
+    dns_server_reverse_hostname,
     dns_encode_name,
     dns_ptr_names,
     guess_device_identity,
@@ -60,6 +62,7 @@ from .scan import (
     normalize_scan_ports,
     preferred_vendor,
     ssdp_hostname_from_response,
+    ssdp_metadata_from_response,
     sync_discovered_device,
     sync_device_ports,
     validate_ip_range,
@@ -106,6 +109,7 @@ class HostnameResolutionTests(SimpleTestCase):
 
     def test_clean_hostname_normalizes_dns_name(self):
         self.assertEqual(clean_hostname("living-room-device.local."), "living room device")
+        self.assertEqual(clean_hostname("_IEDABF97574FD3AAD.local."), "IEDABF97574FD3AAD")
 
     def test_clean_hostname_returns_blank_when_unavailable(self):
         self.assertEqual(clean_hostname(""), "")
@@ -114,6 +118,17 @@ class HostnameResolutionTests(SimpleTestCase):
         self.assertEqual(clean_hostname("0"), "")
         self.assertEqual(clean_hostname(";; connection timed out; no servers could be reached"), "")
         self.assertEqual(clean_hostname("192.168.1.10", ip_address="192.168.1.10"), "")
+        self.assertEqual(clean_hostname("_gateway"), "")
+        self.assertEqual(clean_hostname("gateway.local"), "")
+
+    @patch("core.scan.dns_ptr_names", return_value=["deco-x60.local."])
+    @patch("core.scan.udp_exchange", return_value=b"dns response")
+    def test_gateway_dns_reverse_lookup_uses_router_ptr_record(self, exchange, _ptr_names):
+        self.assertEqual(
+            dns_server_reverse_hostname("192.168.1.110", "192.168.1.1"),
+            "deco x60",
+        )
+        self.assertEqual(exchange.call_args.args[1:3], ("192.168.1.1", 53))
 
     @patch("core.scan.netbios_hostname", return_value="")
     @patch("core.scan.ssdp_hostname", return_value="")
@@ -409,6 +424,22 @@ class HostnameResolutionTests(SimpleTestCase):
         self.assertEqual(ssdp_hostname_from_response(response, "192.168.1.1"), "Archer BE550")
 
     @patch("core.scan.requests.get")
+    def test_ssdp_metadata_reads_vendor_and_model_from_device_description(self, get):
+        get.return_value.text = (
+            "<root><manufacturer>TP-Link Systems Inc.</manufacturer>"
+            "<modelName>Deco X60</modelName></root>"
+        )
+        response = (
+            b"HTTP/1.1 200 OK\r\n"
+            b"LOCATION: http://192.168.1.1:80/rootDesc.xml\r\n\r\n"
+        )
+
+        self.assertEqual(
+            ssdp_metadata_from_response(response, "192.168.1.1"),
+            {"vendor": "TP-Link Systems Inc.", "hostname": "Deco X60"},
+        )
+
+    @patch("core.scan.requests.get")
     def test_ssdp_hostname_from_response_ignores_other_device_location(self, get):
         response = (
             b"HTTP/1.1 200 OK\r\n"
@@ -456,6 +487,12 @@ class HostnameResolutionTests(SimpleTestCase):
             manuf_vendor("bc:5e:33:b0:02:04"),
             "Hangzhou Hikvision Digital Technology Co.,Ltd.",
         )
+
+    def test_manuf_vendor_recognizes_current_tp_link_prefix(self):
+        self.assertEqual(manuf_vendor("3c:6a:d2:f4:07:74"), "TP-Link Systems Inc.")
+
+    def test_preferred_vendor_rejects_mac_address_fallback(self):
+        self.assertEqual(preferred_vendor("3c:6a:d2:f4:07:74"), "")
 
     def test_manuf_vendor_ignores_locally_administered_mac(self):
         self.assertEqual(manuf_vendor("f6:34:f0:00:c6:8d"), "")
@@ -523,13 +560,13 @@ class VersionStatusTests(TestCase):
 
     @override_settings(
         APP_VERSION="1.0.2",
-        LATEST_VERSION_URL="https://example.test/package.json",
+        LATEST_VERSION_URL="https://example.test/VERSION",
         VERSION_CHECK_TIMEOUT=1,
     )
     @patch("core.views.urllib.request.urlopen")
     def test_version_endpoint_returns_latest_public_version(self, urlopen):
         response_mock = Mock()
-        response_mock.read.return_value = b'{"version": "1.0.3"}'
+        response_mock.read.return_value = b"1.0.3\n"
         urlopen.return_value.__enter__.return_value = response_mock
 
         response = self.client.get("/api/v1/version/")
@@ -538,6 +575,22 @@ class VersionStatusTests(TestCase):
         self.assertEqual(response.data["data"]["current_version"], "1.0.2")
         self.assertEqual(response.data["data"]["latest_version"], "1.0.3")
         self.assertEqual(response.data["data"]["check_interval_seconds"], 21600)
+
+    @override_settings(
+        APP_VERSION="1.0.2",
+        LATEST_VERSION_URL="https://example.test/package.json",
+        VERSION_CHECK_TIMEOUT=1,
+    )
+    @patch("core.views.urllib.request.urlopen")
+    def test_version_endpoint_accepts_legacy_json_source(self, urlopen):
+        response_mock = Mock()
+        response_mock.read.return_value = b'{"version": "1.0.3"}'
+        urlopen.return_value.__enter__.return_value = response_mock
+
+        response = self.client.get("/api/v1/version/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["latest_version"], "1.0.3")
 
     @override_settings(APP_VERSION="1.0.2", LATEST_VERSION_URL="")
     def test_version_endpoint_uses_saved_check_interval(self):
@@ -555,6 +608,24 @@ class VersionStatusTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["current_version"], "1.0.2")
         self.assertIsNone(response.data["data"]["latest_version"])
+
+
+class HealthStatusTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_health_endpoint_is_public_and_checks_database(self):
+        response = self.client.get("/api/v1/health/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"status": "ok"})
+
+    @patch("core.views.connection.cursor", side_effect=DatabaseError("unavailable"))
+    def test_health_endpoint_reports_database_failure(self, cursor):
+        response = self.client.get("/api/v1/health/")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.data, {"status": "unavailable"})
 
 
 class AuthApiTests(TestCase):
@@ -1033,6 +1104,33 @@ class ScanStabilityTests(TestCase):
         self.assertTrue(device.known)
         self.assertEqual(device.name, "Gateway")
         self.assertEqual(device.icon, "router")
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname")
+    def test_existing_gateway_preserves_user_selected_role(self, get_hostname):
+        get_hostname.return_value = "Deco X60"
+        device = Device.objects.create(
+            name="Main Deco",
+            ip="192.168.0.1",
+            mac="3c:6a:d2:f4:07:7c",
+            role="meshRouter",
+            known=True,
+            is_gateway=True,
+            icon="router",
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.0.0/24"),
+            gateway_ip=device.ip,
+        )
+
+        device.refresh_from_db()
+        self.assertTrue(device.is_gateway)
+        self.assertEqual(device.role, "meshRouter")
+        self.assertEqual(device.hostname, "Deco X60")
+        self.assertEqual(device.vendor, "TP-Link Systems Inc.")
 
     def test_clear_stale_gateways_keeps_current_gateway_only(self):
         current = Device.objects.create(

@@ -1526,6 +1526,21 @@ function RiskBadge({ device, compact = false }) {
   );
 }
 
+function GatewayBadge({ device, compact = false }) {
+  if (!device?.is_gateway) return null;
+
+  return (
+    <Badge
+      color="blue"
+      variant="light"
+      size={compact ? 'sm' : 'md'}
+      leftSection={<IconRouter size={compact ? 12 : 14} stroke={2} />}
+    >
+      Gateway
+    </Badge>
+  );
+}
+
 function formatTopbarDate(value, timeZone) {
   return new Intl.DateTimeFormat(undefined, {
     weekday: 'short',
@@ -1847,8 +1862,8 @@ function ScanDetailsContent({ scanStatus, scanVisibility, timeZone }) {
         <SummaryMetric label="Devices" value={scanStatus?.devices_seen ?? 0} />
         <SummaryMetric label="Duration" value={formatDuration(scanVisibility?.duration_seconds)} />
         <SummaryMetric label="Range" value={scanVisibility?.current_range || '-'} />
-        <SummaryMetric label="Started" value={formatDate(scanVisibility?.started_at, timeZone)} />
-        <SummaryMetric label="Finished" value={formatDate(scanVisibility?.finished_at, timeZone)} />
+        <SummaryMetric label="Started" value={formatDate(scanVisibility?.started_at, timeZone)} nowrap />
+        <SummaryMetric label="Finished" value={formatDate(scanVisibility?.finished_at, timeZone)} nowrap />
       </SimpleGrid>
 
       {scanVisibility?.last_error && (
@@ -1906,8 +1921,8 @@ function LatestScanCard({ scanStatus, scanVisibility, timeZone, onOpenDetails })
       <SimpleGrid cols={2}>
         <SummaryMetric label="Devices" value={scanStatus?.devices_seen ?? 0} />
         <SummaryMetric label="Duration" value={formatDuration(scanVisibility?.duration_seconds)} />
-        <SummaryMetric label="Started" value={formatDate(scanVisibility?.started_at, timeZone)} />
-        <SummaryMetric label="Finished" value={formatDate(scanVisibility?.finished_at, timeZone)} />
+        <SummaryMetric label="Started" value={formatDate(scanVisibility?.started_at, timeZone)} nowrap />
+        <SummaryMetric label="Finished" value={formatDate(scanVisibility?.finished_at, timeZone)} nowrap />
       </SimpleGrid>
       {scanVisibility?.last_error && (
         <Alert mt="md" color="red" icon={<IconAlertCircle size={18} />}>
@@ -2119,11 +2134,16 @@ function SummaryRow({ label, value }) {
   );
 }
 
-function SummaryMetric({ label, value, align = 'left' }) {
+function SummaryMetric({ label, value, align = 'left', nowrap = false }) {
   return (
     <Box ta={align}>
       <Text size="sm" c="dimmed" fw={600}>{label}</Text>
-      <Text className="dashboard-summary-value" fw={800}>{value}</Text>
+      <Text
+        className={`dashboard-summary-value${nowrap ? ' dashboard-summary-value-nowrap' : ''}`}
+        fw={800}
+      >
+        {value}
+      </Text>
     </Box>
   );
 }
@@ -2418,7 +2438,12 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
     <Modal
       opened={opened}
       onClose={closeModal}
-      title={displayDeviceName(device)}
+      title={(
+        <Group gap="xs" wrap="nowrap">
+          <Text fw={700}>{displayDeviceName(device)}</Text>
+          <GatewayBadge device={device} compact />
+        </Group>
+      )}
       centered
       size="lg"
     >
@@ -2457,7 +2482,7 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
               roomOptions.filter((option) => option.value !== room)
             )}
           />
-          <Box className="device-field">
+          <Box className="device-field editable">
             <Text size="xs" c="dimmed">Role</Text>
             <Select
               classNames={{ input: 'device-field-input' }}
@@ -3675,55 +3700,208 @@ function EventsPage({
   );
 }
 
-function ScanHistoryPage({ scanRuns, timeZone, pagination, loadingMore, onLoadMore }) {
-  return (
-    <Stack gap="lg">
-      <Group justify="space-between" align="flex-end">
-        <Group gap="sm">
-          <span className="page-icon">
-            <IconHistory size={26} />
-          </span>
-          <Box>
-            <Title order={2}>Scan history</Title>
-            <Text c="dimmed">Recent scan runs and detected changes</Text>
-          </Box>
-        </Group>
-        <Badge variant="light">{activityRecordLabel(pagination, scanRuns.length)}</Badge>
-      </Group>
+function scanRunDurationSeconds(run) {
+  if (!run?.started_at || !run?.finished_at) return 0;
+  return Math.max(0, Math.round((new Date(run.finished_at) - new Date(run.started_at)) / 1000));
+}
 
-      <ActivityTablePanel
-        hasMore={hasNextActivityPage(pagination)}
-        loadingMore={loadingMore}
-        onLoadMore={onLoadMore}
-      >
-        <Table verticalSpacing="sm">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Status</Table.Th>
-              <Table.Th>Range</Table.Th>
-              <Table.Th>Started</Table.Th>
-              <Table.Th>Seen</Table.Th>
-              <Table.Th>Port changes</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {scanRuns.map((run) => (
-              <Table.Tr key={run.id}>
-                <Table.Td>
-                  <Badge color={run.status === 'success' ? 'teal' : run.status === 'failed' ? 'red' : 'blue'} variant="light">
-                    {run.status}
-                  </Badge>
-                </Table.Td>
-                <Table.Td>{run.ip_range}</Table.Td>
-                <Table.Td>{formatDate(run.started_at, timeZone)}</Table.Td>
-                <Table.Td>{run.devices_seen}</Table.Td>
-                <Table.Td>{run.ports_opened} / {run.ports_closed}</Table.Td>
+function ScanComparisonModal({ opened, onClose, scanRuns, timeZone }) {
+  const comparableRuns = useMemo(
+    () => scanRuns.filter((run) => run.status !== 'running' && run.finished_at),
+    [scanRuns]
+  );
+  const [currentId, setCurrentId] = useState(null);
+  const [baselineId, setBaselineId] = useState(null);
+
+  useEffect(() => {
+    const availableIds = new Set(comparableRuns.map((run) => String(run.id)));
+    if (!currentId || !availableIds.has(currentId)) {
+      setCurrentId(comparableRuns[0] ? String(comparableRuns[0].id) : null);
+    }
+    if (!baselineId || !availableIds.has(baselineId) || baselineId === currentId) {
+      setBaselineId(comparableRuns[1] ? String(comparableRuns[1].id) : null);
+    }
+  }, [baselineId, comparableRuns, currentId]);
+
+  const currentRun = comparableRuns.find((run) => String(run.id) === currentId);
+  const baselineRun = comparableRuns.find((run) => String(run.id) === baselineId);
+  const options = comparableRuns.map((run) => ({
+    value: String(run.id),
+    label: `${formatDate(run.started_at, timeZone)} · ${run.ip_range}`,
+  }));
+  const metrics = [
+    { label: 'Devices seen', current: currentRun?.devices_seen, baseline: baselineRun?.devices_seen },
+    { label: 'Online devices', current: currentRun?.online_devices, baseline: baselineRun?.online_devices },
+    { label: 'New devices', current: currentRun?.new_devices, baseline: baselineRun?.new_devices },
+    { label: 'Ports opened', current: currentRun?.ports_opened, baseline: baselineRun?.ports_opened },
+    { label: 'Ports closed', current: currentRun?.ports_closed, baseline: baselineRun?.ports_closed },
+    {
+      label: 'Duration',
+      current: scanRunDurationSeconds(currentRun),
+      baseline: scanRunDurationSeconds(baselineRun),
+      duration: true,
+    },
+  ];
+
+  return (
+    <Modal opened={opened} onClose={onClose} title="Compare scans" centered size="lg">
+      <Stack gap="lg">
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <Select
+            label="Current scan"
+            data={options}
+            value={currentId}
+            onChange={setCurrentId}
+            allowDeselect={false}
+            searchable
+          />
+          <Select
+            label="Baseline scan"
+            data={options}
+            value={baselineId}
+            onChange={setBaselineId}
+            allowDeselect={false}
+            searchable
+          />
+        </SimpleGrid>
+
+        {currentRun && baselineRun && currentRun.id !== baselineRun.id ? (
+          <>
+            <Group justify="space-between" gap="md">
+              <Group gap="xs">
+                <Text c="dimmed" size="sm">Current</Text>
+                <Badge color={currentRun.status === 'success' ? 'teal' : 'red'} variant="light">
+                  {currentRun.status}
+                </Badge>
+              </Group>
+              <Group gap="xs">
+                <Text c="dimmed" size="sm">Baseline</Text>
+                <Badge color={baselineRun.status === 'success' ? 'teal' : 'red'} variant="light">
+                  {baselineRun.status}
+                </Badge>
+              </Group>
+            </Group>
+            <Table.ScrollContainer minWidth={520}>
+              <Table verticalSpacing="sm">
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Metric</Table.Th>
+                    <Table.Th>Baseline</Table.Th>
+                    <Table.Th>Current</Table.Th>
+                    <Table.Th>Change</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {metrics.map((metric) => {
+                    const current = Number(metric.current) || 0;
+                    const baseline = Number(metric.baseline) || 0;
+                    const delta = current - baseline;
+                    const displayValue = (value) => metric.duration ? formatDuration(value) : value;
+                    const deltaLabel = metric.duration
+                      ? `${delta > 0 ? '+' : delta < 0 ? '-' : ''}${formatDuration(Math.abs(delta))}`
+                      : `${delta > 0 ? '+' : ''}${delta}`;
+                    return (
+                      <Table.Tr key={metric.label}>
+                        <Table.Td><Text fw={700}>{metric.label}</Text></Table.Td>
+                        <Table.Td>{displayValue(baseline)}</Table.Td>
+                        <Table.Td>{displayValue(current)}</Table.Td>
+                        <Table.Td>
+                          <Badge color={delta === 0 ? 'gray' : 'blue'} variant="light">
+                            {deltaLabel}
+                          </Badge>
+                        </Table.Td>
+                      </Table.Tr>
+                    );
+                  })}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+            <Text c="dimmed" size="sm">
+              Comparison uses the totals recorded for each scan. Historical per-device snapshots were not stored.
+            </Text>
+          </>
+        ) : (
+          <Alert color="blue" icon={<IconAlertCircle size={18} />}>
+            Select two different completed scans to compare them.
+          </Alert>
+        )}
+      </Stack>
+    </Modal>
+  );
+}
+
+function ScanHistoryPage({ scanRuns, timeZone, pagination, loadingMore, onLoadMore }) {
+  const [comparisonOpened, comparison] = useDisclosure(false);
+  const comparableRunCount = scanRuns.filter(
+    (run) => run.status !== 'running' && run.finished_at
+  ).length;
+
+  return (
+    <>
+      <Stack gap="lg">
+        <Group justify="space-between" align="flex-end">
+          <Group gap="sm">
+            <span className="page-icon">
+              <IconHistory size={26} />
+            </span>
+            <Box>
+              <Title order={2}>Scan history</Title>
+              <Text c="dimmed">Recent scan runs and detected changes</Text>
+            </Box>
+          </Group>
+          <Group gap="sm">
+            <Button
+              variant="light"
+              leftSection={<IconArrowsSort size={18} />}
+              onClick={comparison.open}
+              disabled={comparableRunCount < 2}
+            >
+              Compare scans
+            </Button>
+            <Badge variant="light">{activityRecordLabel(pagination, scanRuns.length)}</Badge>
+          </Group>
+        </Group>
+
+        <ActivityTablePanel
+          hasMore={hasNextActivityPage(pagination)}
+          loadingMore={loadingMore}
+          onLoadMore={onLoadMore}
+        >
+          <Table verticalSpacing="sm">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Status</Table.Th>
+                <Table.Th>Range</Table.Th>
+                <Table.Th>Started</Table.Th>
+                <Table.Th>Seen</Table.Th>
+                <Table.Th>Port changes</Table.Th>
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </ActivityTablePanel>
-    </Stack>
+            </Table.Thead>
+            <Table.Tbody>
+              {scanRuns.map((run) => (
+                <Table.Tr key={run.id}>
+                  <Table.Td>
+                    <Badge color={run.status === 'success' ? 'teal' : run.status === 'failed' ? 'red' : 'blue'} variant="light">
+                      {run.status}
+                    </Badge>
+                  </Table.Td>
+                  <Table.Td>{run.ip_range}</Table.Td>
+                  <Table.Td>{formatDate(run.started_at, timeZone)}</Table.Td>
+                  <Table.Td>{run.devices_seen}</Table.Td>
+                  <Table.Td>{run.ports_opened} / {run.ports_closed}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </ActivityTablePanel>
+      </Stack>
+      <ScanComparisonModal
+        opened={comparisonOpened}
+        onClose={comparison.close}
+        scanRuns={scanRuns}
+        timeZone={timeZone}
+      />
+    </>
   );
 }
 
@@ -4598,6 +4776,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           <Box className="device-list-title">
                             <Group gap="xs" wrap="nowrap">
                               <Text fw={800} className="truncate-cell">{displayDeviceName(device)}</Text>
+                              <GatewayBadge device={device} compact />
                               <Badge
                                 className="device-known-badge"
                                 color={device.known ? 'teal' : 'yellow'}
@@ -4673,6 +4852,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                           </Group>
                           <Group gap={6} justify="flex-end" wrap="wrap">
                             <RiskBadge device={device} compact />
+                            <GatewayBadge device={device} compact />
                             <Badge
                               className="device-known-badge"
                               color={device.known ? 'teal' : 'yellow'}

@@ -281,6 +281,7 @@ func vendorResolverPreservesObservedVendorNames() {
             observedVendor: "Hon Hai Precision Industry Co.,Ltd."
         ) == "Hon Hai Precision Industry Co.,Ltd."
     )
+    #expect(MACVendorResolver.displayVendor("3c:6a:d2:f4:07:74") == nil)
 }
 
 @Test
@@ -665,6 +666,8 @@ func hostnameResolverRejectsDNSClassAndNumericFieldsAsHostname() {
     #expect(HostnameResolver.clean("IN", ipAddress: "192.168.0.79") == nil)
     #expect(HostnameResolver.clean("0", ipAddress: "192.168.0.79") == nil)
     #expect(HostnameResolver.clean(";; connection timed out; no servers could be reached", ipAddress: "192.168.0.21") == nil)
+    #expect(HostnameResolver.clean("_IEDABF97574FD3AAD.local", ipAddress: "192.168.0.28") == "IEDABF97574FD3AAD")
+    #expect(HostnameResolver.clean("_gateway.local", ipAddress: "192.168.0.1") == nil)
 }
 
 @Test
@@ -686,6 +689,7 @@ func bundledVendorDatabaseParsesManufLines() {
     # comment
     90:DD:5D Apple Apple, Inc.
     24-A1-60 Espressif Espressif Inc.
+    3C:6A:D2 TPLink TP-Link Systems Inc.
     00-11-22-33-40/36 PreciseVendor Precise Vendor Ltd.
     """
 
@@ -693,6 +697,7 @@ func bundledVendorDatabaseParsesManufLines() {
 
     #expect(vendors["90dd5d"] == "Apple, Inc.")
     #expect(vendors["24a160"] == "Espressif Inc.")
+    #expect(vendors["3c6ad2"] == "TP-Link Systems Inc.")
     #expect(vendors["001122334"] == "Precise Vendor Ltd.")
 }
 

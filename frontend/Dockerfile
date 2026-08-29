@@ -1,19 +1,20 @@
 FROM --platform=$BUILDPLATFORM node:24-alpine AS builder
 
-WORKDIR /app
+WORKDIR /app/frontend
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY package*.json ./
+COPY frontend/package*.json ./
 RUN npm ci
 
-COPY app ./app
-COPY public ./public
-COPY next.config.mjs eslint.config.mjs ./
+COPY VERSION /app/VERSION
+COPY frontend/app ./app
+COPY frontend/public ./public
+COPY frontend/next.config.mjs frontend/eslint.config.mjs ./
 RUN npm run build
 
 FROM caddy:2-alpine
 
-COPY Caddyfile /etc/caddy/Caddyfile
-COPY --from=builder /app/out /srv/frontend
+COPY frontend/Caddyfile /etc/caddy/Caddyfile
+COPY --from=builder /app/frontend/out /srv/frontend
 
 EXPOSE 80

@@ -24,7 +24,7 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_DEVICE_NAME = "Device"
 DEFAULT_DEVICE_ICONS = {"", "plus", "unknown", "device", "desktop"}
 SSDP_CACHE_TTL_SECONDS = 10
-SSDP_HOSTNAME_CACHE = {"expires_at": 0.0, "hostnames": {}}
+SSDP_METADATA_CACHE = {"expires_at": 0.0, "metadata": {}}
 MDNS_SERVICE_CACHE_TTL_SECONDS = 10
 MDNS_SERVICE_HOSTNAME_CACHE = {"expires_at": 0.0, "hostnames": {}}
 MDNS_SERVICE_TIMEOUT_SECONDS = 1.8
@@ -673,9 +673,17 @@ def ssdp_hostname(ip):
 
 
 def ssdp_hostname_map():
+    return {
+        ip: metadata["hostname"]
+        for ip, metadata in ssdp_metadata_map().items()
+        if metadata.get("hostname")
+    }
+
+
+def ssdp_metadata_map():
     now = time.monotonic()
-    if SSDP_HOSTNAME_CACHE["expires_at"] > now:
-        return dict(SSDP_HOSTNAME_CACHE["hostnames"])
+    if SSDP_METADATA_CACHE["expires_at"] > now:
+        return dict(SSDP_METADATA_CACHE["metadata"])
 
     packet = (
         "M-SEARCH * HTTP/1.1\r\n"
@@ -692,33 +700,41 @@ def ssdp_hostname_map():
         LOGGER.debug("SSDP lookup failed: %s", exc)
         return {}
 
-    hostnames = {}
+    metadata_by_ip = {}
     for response, source_ip in responses:
-        hostname = ssdp_hostname_from_response(response, source_ip)
-        if hostname:
-            hostnames[source_ip] = hostname
+        metadata = ssdp_metadata_from_response(response, source_ip)
+        if not metadata:
+            continue
+        current = metadata_by_ip.setdefault(source_ip, {})
+        for key, value in metadata.items():
+            if value and not current.get(key):
+                current[key] = value
 
-    SSDP_HOSTNAME_CACHE["expires_at"] = now + SSDP_CACHE_TTL_SECONDS
-    SSDP_HOSTNAME_CACHE["hostnames"] = hostnames
-    return dict(hostnames)
+    SSDP_METADATA_CACHE["expires_at"] = now + SSDP_CACHE_TTL_SECONDS
+    SSDP_METADATA_CACHE["metadata"] = metadata_by_ip
+    return dict(metadata_by_ip)
 
 
 def ssdp_hostname_from_response(response, ip):
+    return ssdp_metadata_from_response(response, ip).get("hostname", "")
+
+
+def ssdp_metadata_from_response(response, ip):
     text = response.decode("utf-8", "ignore")
     headers = parse_http_headers(text)
     location = headers.get("location", "")
     if not location:
-        return ""
+        return {}
     parsed = urlparse(location)
     if parsed.hostname and parsed.hostname != ip:
-        return ""
+        return {}
     try:
         result = requests.get(location, timeout=1.0, headers={"User-Agent": "LanGuard/1.0"})
     except requests.RequestException as exc:
         LOGGER.debug("SSDP device description fetch failed for %s: %s", ip, exc)
-        return ""
+        return {}
     body = result.text[:128_000]
-    return hostname_from_device_description(body, ip)
+    return metadata_from_device_description(body, ip)
 
 
 def parse_http_headers(text):
@@ -732,14 +748,25 @@ def parse_http_headers(text):
 
 
 def hostname_from_device_description(body, ip=""):
+    return metadata_from_device_description(body, ip).get("hostname", "")
+
+
+def metadata_from_device_description(body, ip=""):
+    metadata = {}
+    manufacturer = xml_description_value(body, "manufacturer")
+    if manufacturer and not is_mac_address_text(manufacturer):
+        metadata["vendor"] = manufacturer
     for tag in ("friendlyName", "modelName"):
-        match = re.search(rf"<{tag}>\s*([^<]+)\s*</{tag}>", body or "", re.IGNORECASE)
-        if not match:
-            continue
-        hostname = clean_hostname(match.group(1))
+        hostname = clean_hostname(xml_description_value(body, tag), ip_address=ip)
         if hostname and hostname != ip:
-            return hostname
-    return ""
+            metadata["hostname"] = hostname
+            break
+    return metadata
+
+
+def xml_description_value(body, tag):
+    match = re.search(rf"<{tag}>\s*([^<]+)\s*</{tag}>", body or "", re.IGNORECASE)
+    return match.group(1).strip() if match else ""
 
 
 def web_interface_candidates(ip, open_ports):
@@ -783,11 +810,16 @@ def detect_web_interface(ip, open_ports, timeout=1.2):
     return ""
 
 
-def get_hostname(ip, hostname_hints=None, include_source=False):
+def get_hostname(ip, hostname_hints=None, include_source=False, dns_server=""):
     lookup_steps = [
         (Device.IdentitySource.REVERSE_DNS, reverse_dns_hostname),
-        (Device.IdentitySource.MDNS, mdns_reverse_hostname),
     ]
+    if dns_server:
+        lookup_steps.append((
+            Device.IdentitySource.REVERSE_DNS,
+            lambda address: dns_server_reverse_hostname(address, dns_server),
+        ))
+    lookup_steps.append((Device.IdentitySource.MDNS, mdns_reverse_hostname))
     if hostname_hints is None:
         lookup_steps.extend((
             (Device.IdentitySource.MDNS, mdns_service_hostname),
@@ -835,10 +867,29 @@ def reverse_dns_hostname(ip):
         return ""
 
 
+def dns_server_reverse_hostname(ip, dns_server):
+    name = reverse_dns_name(ip)
+    if not name or not dns_server:
+        return ""
+    packet = dns_query_packet(name, query_type=12)
+    try:
+        response = udp_exchange(packet, dns_server, 53, 0.7)
+    except OSError as exc:
+        LOGGER.debug("Gateway DNS hostname lookup failed for %s via %s: %s", ip, dns_server, exc)
+        return ""
+    for ptr_name in dns_ptr_names(response, expected_owner=name):
+        hostname = clean_hostname(ptr_name, ip_address=ip)
+        if hostname:
+            return hostname
+    return ""
+
+
 def clean_hostname(hostname, ip_address=""):
     hostname = (hostname or "").strip().rstrip(".")
     lowered = hostname.lower()
-    invalid_values = {"", "?", "in", "internet", "ptr", "a", "aaaa"}
+    short_hostname = hostname.split(".")[0].lstrip("_").strip()
+    lowered_short_hostname = short_hostname.lower()
+    invalid_values = {"", "?", "in", "internet", "ptr", "a", "aaaa", "_gateway", "gateway"}
     invalid_fragments = (
         "connection timed out",
         "no servers could be reached",
@@ -851,14 +902,14 @@ def clean_hostname(hostname, ip_address=""):
         "in-addr.arpa",
     )
     if (
-        lowered in invalid_values
-        or hostname == ip_address
-        or hostname.startswith(";")
-        or hostname.isdigit()
+        lowered_short_hostname in invalid_values
+        or short_hostname == ip_address
+        or short_hostname.startswith(";")
+        or short_hostname.isdigit()
         or any(fragment in lowered for fragment in invalid_fragments)
     ):
         return ""
-    return hostname.split(".")[0].replace("-", " ").strip()
+    return short_hostname.replace("-", " ").strip()
 
 
 def trim_vendor(vendor):
@@ -879,7 +930,8 @@ def canonical_vendor(vendor=""):
 
 
 def preferred_vendor(observed_vendor=""):
-    return canonical_vendor(observed_vendor) or ""
+    vendor = canonical_vendor(observed_vendor)
+    return "" if is_mac_address_text(vendor) else vendor
 
 
 def open_port_numbers(open_ports=None):
@@ -1360,6 +1412,11 @@ def scan(ip_range, scan_run=None):
         scan_started_at = timezone.now()
         oui = scapy.MANUFDB
         hostname_hints = discover_hostname_hints()
+        vendor_hints = {
+            ip: (metadata["vendor"], Device.IdentitySource.SSDP)
+            for ip, metadata in ssdp_metadata_map().items()
+            if metadata.get("vendor")
+        }
 
         for element in answered_list:
             stats = sync_discovered_device(
@@ -1369,6 +1426,7 @@ def scan(ip_range, scan_run=None):
                 scan_started_at=scan_started_at,
                 gateway_ip=gateway_ip,
                 hostname_hints=hostname_hints,
+                vendor_hints=vendor_hints,
             )
             new_devices += stats["new_devices"]
             ports_opened += stats["ports_opened"]
@@ -1414,18 +1472,33 @@ def sync_discovered_device(
     scan_started_at=None,
     gateway_ip="",
     hostname_hints=None,
+    vendor_hints=None,
 ):
     scan_started_at = scan_started_at or timezone.now()
     ip = element[1].psrc
     mac = element[1].hwsrc.lower()
     vendor = ManufDA.lookup(oui, mac) if oui else None
-    vendor_name = manuf_vendor(mac) or (vendor[1] if vendor else "")
-    hostname_result = get_hostname(ip=ip, hostname_hints=hostname_hints, include_source=True)
+    manuf_name = manuf_vendor(mac)
+    scapy_name = preferred_vendor(vendor[1] if vendor else "")
+    vendor_hint = (vendor_hints or {}).get(ip, "")
+    hinted_name = vendor_hint[0] if isinstance(vendor_hint, tuple) else vendor_hint
+    hinted_source = vendor_hint[1] if isinstance(vendor_hint, tuple) else ""
+    vendor_name = manuf_name or scapy_name or preferred_vendor(hinted_name)
+    hostname_result = get_hostname(
+        ip=ip,
+        hostname_hints=hostname_hints,
+        include_source=True,
+        dns_server=gateway_ip,
+    )
     if isinstance(hostname_result, tuple):
         hostname, hostname_source = hostname_result
     else:
         hostname, hostname_source = hostname_result, ""
-    vendor_source = Device.IdentitySource.MANUF if vendor_name else ""
+    vendor_source = (
+        Device.IdentitySource.MANUF
+        if manuf_name or scapy_name
+        else hinted_source if vendor_name else ""
+    )
     ports_opened = 0
     ports_closed = 0
     new_devices = 0
@@ -1466,9 +1539,6 @@ def sync_discovered_device(
         if device.vendor_source != resolved_vendor_source:
             device.vendor_source = resolved_vendor_source
             update_fields.append("vendor_source")
-        if is_gateway and device.role != "gateway":
-            device.role = "gateway"
-            update_fields.append("role")
         set_device_status(
             device,
             Device.Status.ONLINE,

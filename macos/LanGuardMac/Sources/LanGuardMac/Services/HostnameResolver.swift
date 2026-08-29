@@ -29,17 +29,20 @@ enum HostnameResolver {
         let cleaned = (hostname ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        let lowered = cleaned.lowercased()
-        guard !cleaned.isEmpty,
-              cleaned != "?",
-              cleaned != ipAddress,
-              !cleaned.hasPrefix(";"),
-              !cleaned.allSatisfy(\.isNumber),
+        let shortHostname = String((cleaned.split(separator: ".").first ?? "").drop(while: { $0 == "_" }))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let lowered = shortHostname.lowercased()
+        guard !shortHostname.isEmpty,
+              shortHostname != "?",
+              shortHostname != ipAddress,
+              !shortHostname.hasPrefix(";"),
+              !shortHostname.allSatisfy(\.isNumber),
               lowered != "in",
               lowered != "internet",
               lowered != "ptr",
               lowered != "a",
               lowered != "aaaa",
+              lowered != "gateway",
               !lowered.contains("connection timed out"),
               !lowered.contains("no servers could be reached"),
               !lowered.contains("communications error"),
@@ -51,9 +54,6 @@ enum HostnameResolver {
               !lowered.contains("in-addr.arpa") else {
             return nil
         }
-        return cleaned
-            .split(separator: ".")
-            .first?
-            .replacingOccurrences(of: "-", with: " ")
+        return shortHostname.replacingOccurrences(of: "-", with: " ")
     }
 }

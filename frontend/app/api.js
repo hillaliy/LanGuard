@@ -7,7 +7,7 @@ function getApiBase() {
     return CONFIGURED_API_BASE;
   }
 
-  if (typeof window !== 'undefined' && window.location.port === '3000') {
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
     return 'http://127.0.0.1:8000/api/v1';
   }
 

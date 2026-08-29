@@ -20,7 +20,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.http import JsonResponse
-from django.db import DatabaseError, IntegrityError
+from django.db import DatabaseError, IntegrityError, connection
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
@@ -160,6 +160,24 @@ DEVICE_ORDERING_FIELDS = {
 FIRST_SEEN_PERIODS = {"today", "7d", "30d"}
 
 
+@extend_schema(exclude=True)
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def health_status(request):
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            cursor.fetchone()
+    except DatabaseError:
+        LOGGER.exception("Database health check failed")
+        return Response(
+            {"status": "unavailable"},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    return Response({"status": "ok"}, status=status.HTTP_200_OK)
+
+
 def first_seen_threshold(period):
     now = timezone.now()
     if period == "today":
@@ -276,18 +294,23 @@ def fetch_latest_version():
             request,
             timeout=settings.VERSION_CHECK_TIMEOUT,
         ) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+            response_text = response.read().decode("utf-8").strip()
     except (
         OSError,
         TimeoutError,
         urllib.error.URLError,
-        json.JSONDecodeError,
         UnicodeDecodeError,
     ) as exc:
         LOGGER.info("Latest version check failed: %s", exc)
         return None
 
-    latest_version = payload.get("version")
+    try:
+        payload = json.loads(response_text)
+    except json.JSONDecodeError:
+        latest_version = response_text
+    else:
+        latest_version = payload.get("version") if isinstance(payload, dict) else None
+
     if isinstance(latest_version, str) and latest_version.strip():
         return latest_version.strip()
     return None

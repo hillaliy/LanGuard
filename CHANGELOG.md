@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Added Docker scan comparison for completed scan runs, including device, port, and duration differences.
+- Improved Docker gateway presentation while preserving user-selected device roles across scans.
+- Improved Docker router hostname and vendor discovery through gateway DNS and SSDP device metadata.
+- Normalized discovered hostnames that begin with service-record underscores in Docker and macOS.
+- Refreshed the bundled vendor database and added current TP-Link vendor coverage in Docker and macOS.
+- Centralized Docker, frontend, and macOS release versions in the repository `VERSION` file.
+- Kept Latest Scan timestamps on one line and clarified editable device fields in Docker.
+- **Docker deployment change:** Existing Docker and Portainer installations should update their Compose definition and recreate the LanGuard stack once. Older Compose files remain compatible, but the updated definition adds backend health checks and coordinates backend, scheduler, and frontend restarts for more reliable automatic updates. Named volumes and stored data are preserved.
+- Added a public backend health endpoint that verifies database availability before dependent containers start.
+
 ## 1.7.0 - 2026-08-28
 
 - Added device identity confidence and source evidence for hostname and vendor detection in Docker and macOS.

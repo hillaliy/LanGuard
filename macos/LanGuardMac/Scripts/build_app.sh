@@ -2,6 +2,8 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPOSITORY_DIR="$(cd "$ROOT_DIR/../.." && pwd)"
+VERSION="$(tr -d '[:space:]' < "$REPOSITORY_DIR/VERSION")"
 CONFIGURATION="${CONFIGURATION:-debug}"
 APP_NAME="${APP_NAME:-LanGuard}"
 PRODUCT_NAME="LanGuardMac"
@@ -19,6 +21,7 @@ rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
 cp "$ROOT_DIR/Packaging/Info.plist" "$CONTENTS_DIR/Info.plist"
+/usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$CONTENTS_DIR/Info.plist"
 cp "$ROOT_DIR/.build/$CONFIGURATION/$PRODUCT_NAME" "$MACOS_DIR/$PRODUCT_NAME"
 
 if [ -d "$ROOT_DIR/Resources" ]; then

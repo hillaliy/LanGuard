@@ -1,6 +1,4 @@
-import packageInfo from '../package.json';
-
-export const APP_VERSION = packageInfo.version;
+export const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION || 'development';
 
 export const CHANGELOG_ENTRIES = [
   {
