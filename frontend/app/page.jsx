@@ -2981,6 +2981,7 @@ function SettingsPage({ onSaved }) {
   const [testingChannel, setTestingChannel] = useState('');
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importingWatchYourLan, setImportingWatchYourLan] = useState(false);
   const [cleanupDays, setCleanupDays] = useState(90);
   const [cleanupTarget, setCleanupTarget] = useState(null);
   const [cleaningActivity, setCleaningActivity] = useState('');
@@ -3140,6 +3141,38 @@ function SettingsPage({ onSaved }) {
       showErrorNotification('Could not import inventory', message);
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function importWatchYourLanFile(file) {
+    if (!file) {
+      return;
+    }
+
+    setImportingWatchYourLan(true);
+    setError('');
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const result = await apiRequest('devices/import/watchyourlan/', {
+        method: 'POST',
+        body: payload,
+      });
+      await onSaved({});
+      const summary = result.data || {};
+      showSuccessNotification(
+        'WatchYourLAN migration complete',
+        `Created ${summary.created || 0}, updated ${summary.updated || 0}, skipped ${summary.skipped || 0}.`
+      );
+    } catch (err) {
+      const message =
+        err instanceof SyntaxError
+          ? 'Choose a valid JSON file downloaded from the WatchYourLAN /api/all endpoint.'
+          : err.message;
+      setError(message);
+      showErrorNotification('Could not import WatchYourLAN devices', message);
+    } finally {
+      setImportingWatchYourLan(false);
     }
   }
 
@@ -3482,6 +3515,29 @@ function SettingsPage({ onSaved }) {
               )}
             </FileButton>
           </Group>
+        </Group>
+
+        <Divider />
+
+        <Group justify="space-between" align="flex-start">
+          <Box>
+            <Text fw={700}>WatchYourLAN migration</Text>
+            <Text size="sm" c="dimmed">
+              Import devices from the JSON returned by the WatchYourLAN <code>/api/all</code> endpoint.
+            </Text>
+          </Box>
+          <FileButton onChange={importWatchYourLanFile} accept="application/json,.json">
+            {(props) => (
+              <Button
+                {...props}
+                variant="light"
+                leftSection={<IconUpload size={18} />}
+                loading={importingWatchYourLan}
+              >
+                Import from WatchYourLAN
+              </Button>
+            )}
+          </FileButton>
         </Group>
 
         <Divider />

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a Docker migration tool for importing the current WatchYourLAN device inventory from its `/api/all` JSON output.
 - Added Docker scan comparison for completed scan runs, including device, port, and duration differences.
 - Improved Docker gateway presentation while preserving user-selected device roles across scans.
 - Improved Docker router hostname and vendor discovery through gateway DNS and SSDP device metadata.

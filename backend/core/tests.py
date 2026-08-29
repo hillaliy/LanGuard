@@ -2889,6 +2889,118 @@ class ScanApiTests(TestCase):
             [80, 443],
         )
 
+    def test_watchyourlan_inventory_import_maps_api_all_hosts(self):
+        response = self.client.post(
+            "/api/v1/devices/import/watchyourlan/",
+            [
+                {
+                    "ID": 7,
+                    "Name": "Living Room TV",
+                    "DNS": "living-room-tv.local",
+                    "Iface": "eth0",
+                    "IP": "192.168.1.50",
+                    "Mac": "b0:be:76:12:34:56",
+                    "Hw": "TP-Link Systems Inc.",
+                    "Date": "2026-08-29 10:30:00",
+                    "Known": 1,
+                    "Now": 1,
+                },
+                {
+                    "ID": 8,
+                    "Name": "Offline tablet",
+                    "DNS": "",
+                    "Iface": "eth0",
+                    "IP": "192.168.1.51",
+                    "Mac": "90:dd:5d:12:34:56",
+                    "Hw": "Apple, Inc.",
+                    "Date": "2026-08-29 09:15:00",
+                    "Known": 0,
+                    "Now": 0,
+                },
+            ],
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["created"], 2)
+        imported = Device.objects.get(mac="b0:be:76:12:34:56")
+        self.assertEqual(imported.name, "Living Room TV")
+        self.assertEqual(imported.hostname, "living-room-tv.local")
+        self.assertEqual(imported.hostname_source, Device.IdentitySource.IMPORTED)
+        self.assertEqual(imported.vendor, "TP-Link Systems Inc.")
+        self.assertEqual(imported.vendor_source, Device.IdentitySource.IMPORTED)
+        self.assertTrue(imported.known)
+        self.assertTrue(imported.online)
+        self.assertEqual(imported.status, Device.Status.ONLINE)
+        offline = Device.objects.get(mac="90:dd:5d:12:34:56")
+        self.assertFalse(offline.known)
+        self.assertFalse(offline.online)
+        self.assertEqual(offline.status, Device.Status.OFFLINE)
+
+    def test_watchyourlan_inventory_import_updates_existing_device_by_mac(self):
+        response = self.client.post(
+            "/api/v1/devices/import/watchyourlan/",
+            [
+                {
+                    "Name": "Migrated laptop",
+                    "DNS": "migrated-laptop.local",
+                    "IP": "192.168.1.40",
+                    "Mac": "aa:aa:aa:aa:aa:aa",
+                    "Hw": "Example vendor",
+                    "Date": "2026-08-29 11:00:00",
+                    "Known": 1,
+                    "Now": 1,
+                }
+            ],
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["updated"], 1)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.name, "Migrated laptop")
+        self.assertEqual(self.device.ip, "192.168.1.40")
+        self.assertEqual(self.device.hostname, "migrated-laptop.local")
+        self.assertTrue(self.device.known)
+
+    def test_watchyourlan_inventory_import_rejects_other_json_shapes(self):
+        response = self.client.post(
+            "/api/v1/devices/import/watchyourlan/",
+            {"devices": []},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("WatchYourLAN", response.data["detail"])
+
+        response = self.client.post(
+            "/api/v1/devices/import/watchyourlan/",
+            [
+                {
+                    "name": "LanGuard device",
+                    "ip": "192.168.1.60",
+                    "mac": "90:dd:5d:12:34:60",
+                }
+            ],
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("WatchYourLAN", response.data["detail"])
+
+    def test_watchyourlan_inventory_import_requires_admin(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.post(
+            "/api/v1/devices/import/watchyourlan/",
+            [],
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
     def test_device_inventory_import_restores_comments_and_acknowledges_current_risk(self):
         response = self.client.post(
             "/api/v1/devices/import/",

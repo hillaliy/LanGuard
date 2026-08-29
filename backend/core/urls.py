@@ -21,6 +21,7 @@ from .views import (
     health_status,
     home_map_layout,
     import_devices,
+    import_watchyourlan_devices,
     maintenance_cleanup,
     test_notification_channel,
     users,
@@ -52,6 +53,11 @@ urlpatterns = [
     path("notifications/", notifications, name="notifications"),
     path("devices/export/", export_devices, name="export_devices"),
     path("devices/import/", import_devices, name="import_devices"),
+    path(
+        "devices/import/watchyourlan/",
+        import_watchyourlan_devices,
+        name="import_watchyourlan_devices",
+    ),
     path("export-db/", export_db, name="export_db"),
     path("import-db/", import_db, name="import_db"),
 ]
