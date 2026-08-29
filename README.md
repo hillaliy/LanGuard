@@ -146,6 +146,37 @@ After sign in, open Settings to change the scan range, scan interval, timezone, 
 
 The scanner waits for the configured scan interval after a scan completes before starting the next scheduled scan. For example, with a 5 minute interval, a scan that finishes at 20:14 will schedule the next scan for about 20:19.
 
+## Migrate from WatchYourLAN
+
+LanGuard can import the current device inventory from
+[WatchYourLAN](https://github.com/aceberg/WatchYourLAN). On the machine that can
+reach WatchYourLAN, download the JSON returned by its documented `/api/all`
+endpoint:
+
+```bash
+curl http://WATCHYOURLAN_IP:8840/api/all -o watchyourlan-devices.json
+```
+
+If WatchYourLAN is published through a reverse proxy, replace the URL with its
+actual address and include the authentication options required by that proxy.
+
+Then:
+
+1. Sign in to LanGuard as an administrator.
+2. Open **Settings**.
+3. Under **WatchYourLAN migration**, select **Import from WatchYourLAN**.
+4. Choose `watchyourlan-devices.json`.
+
+LanGuard matches existing devices by MAC address and imports the device name,
+DNS hostname, IP address, MAC address, hardware vendor, known state, online state,
+and last-seen value. Invalid records are skipped and the completion notification
+shows how many devices were created, updated, or skipped.
+
+WatchYourLAN does not provide LanGuard rooms, roles, icons, comments, open-port
+history, identity confidence, or Home Map layout through this endpoint. Configure
+those fields in LanGuard after the migration; later scans can enrich hostname,
+vendor, port, and status information. Scan history is intentionally not imported.
+
 If you override `DISCORD_ICON_URL`, use a versioned URL when replacing the icon so Discord mobile clients do not reuse an old cached image, for example:
 
 ```env

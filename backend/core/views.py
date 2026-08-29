@@ -441,6 +441,70 @@ def inventory_devices_from_payload(payload):
     return devices
 
 
+def watchyourlan_devices_from_payload(payload):
+    if isinstance(payload, list):
+        hosts = payload
+    elif isinstance(payload, dict) and isinstance(payload.get("data"), list):
+        hosts = payload["data"]
+    else:
+        raise ValidationError(
+            {
+                "detail": (
+                    "Choose a WatchYourLAN JSON file downloaded from the /api/all endpoint."
+                )
+            }
+        )
+
+    if hosts and not any(
+        isinstance(host, dict) and ("Mac" in host or "IP" in host)
+        for host in hosts
+    ):
+        raise ValidationError(
+            {
+                "detail": (
+                    "The selected file does not contain WatchYourLAN /api/all records."
+                )
+            }
+        )
+
+    devices = []
+    for host in hosts:
+        if not isinstance(host, dict):
+            devices.append(host)
+            continue
+
+        name = host.get("Name")
+        hostname = host.get("DNS")
+        ip = host.get("IP")
+        mac = host.get("Mac")
+        vendor = host.get("Hw")
+        known = host.get("Known", 0)
+        online = parse_inventory_bool(host.get("Now", 0))
+        last_seen = host.get("Date")
+
+        devices.append(
+            {
+                "name": name or hostname or "Device",
+                "hostname": hostname or "",
+                "hostname_source": Device.IdentitySource.IMPORTED if hostname else "",
+                "ip": ip,
+                "mac": mac,
+                "vendor": vendor or "",
+                "vendor_source": Device.IdentitySource.IMPORTED if vendor else "",
+                "known": parse_inventory_bool(known),
+                "status": Device.Status.ONLINE if online else Device.Status.OFFLINE,
+                "first_seen": last_seen,
+                "last_seen": last_seen,
+            }
+        )
+
+    return {
+        "format": INVENTORY_FORMAT,
+        "version": 1,
+        "devices": devices,
+    }
+
+
 def import_inventory_devices(payload):
     imported_devices = inventory_devices_from_payload(payload)
     created = 0
@@ -622,7 +686,7 @@ def inventory_export_response():
     )
 
 
-def inventory_import_response(payload):
+def inventory_import_response(payload, source="LanGuard"):
     try:
         result = import_inventory_devices(payload)
     except ValidationError:
@@ -649,7 +713,7 @@ def inventory_import_response(payload):
         {
             "status": "OK",
             "info": (
-                f"Imported {result['created']} new devices and updated "
+                f"Imported {result['created']} new devices from {source} and updated "
                 f"{result['updated']} existing devices."
             ),
             "data": result,
@@ -1435,3 +1499,14 @@ def export_devices(request):
 @permission_classes([permissions.IsAdminUser])
 def import_devices(request):
     return inventory_import_response(request.data)
+
+
+@extend_schema(
+    request=OpenApiTypes.OBJECT,
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def import_watchyourlan_devices(request):
+    payload = watchyourlan_devices_from_payload(request.data)
+    return inventory_import_response(payload, source="WatchYourLAN")
