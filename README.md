@@ -107,7 +107,9 @@ volumes:
 The scanner uses its own `languard-scheduler` image. It does not call the web
 backend, but both services share the database and schema, so Compose keeps their
 startup and update order coordinated. Both images are built from the same LanGuard
-source release and should be updated together.
+source release and should be updated together. Always update and recreate the
+backend, scheduler, and frontend containers as one release, even when the scheduler
+service itself has no visible feature change.
 
 > [!IMPORTANT]
 > The next Docker release includes a Docker deployment change. Existing Compose
@@ -215,10 +217,29 @@ npm run dev
 
 Open `http://127.0.0.1:3000`.
 
+## Release Metadata
+
+[`VERSION`](VERSION) is the single source for the Docker, frontend, and macOS
+version number. [`CHANGELOG.md`](CHANGELOG.md) is the single source for the
+frontend **What's new** catalog and GitHub release notes.
+
+Validate both files and generate release notes for the current version with:
+
+```bash
+node scripts/changelog.mjs --check
+node scripts/changelog.mjs --version "$(cat VERSION)" > /tmp/languard-release-notes.md
+```
+
+Move completed entries from `Unreleased` into a dated version section before
+publishing a release. Do not edit `frontend/app/version.js` with release entries;
+the frontend build generates them from `CHANGELOG.md`.
+
 ## Checks
 
 ```bash
 .venv/bin/python backend/manage.py test core
+node --test scripts/changelog.test.mjs
+node scripts/changelog.mjs --check
 cd frontend && npm run lint && npm run build
 ```
 

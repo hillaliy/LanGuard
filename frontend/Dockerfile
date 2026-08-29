@@ -7,6 +7,8 @@ COPY frontend/package*.json ./
 RUN npm ci
 
 COPY VERSION /app/VERSION
+COPY CHANGELOG.md /app/CHANGELOG.md
+COPY scripts/changelog.mjs /app/scripts/changelog.mjs
 COPY frontend/app ./app
 COPY frontend/public ./public
 COPY frontend/next.config.mjs frontend/eslint.config.mjs ./

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Centralized frontend changelog data and GitHub release-note generation in `CHANGELOG.md`.
 - Added a Docker migration tool for importing the current WatchYourLAN device inventory from its `/api/all` JSON output.
 - Added Docker scan comparison for completed scan runs, including device, port, and duration differences.
 - Improved Docker gateway presentation while preserving user-selected device roles across scans.
@@ -117,6 +118,21 @@
 - Prevented unrelated multicast PTR answers from assigning the wrong hostname to other devices.
 - Cleared stale read-only hostnames when the latest scan no longer resolves a valid hostname.
 - Aligned macOS hostname safety checks with Docker for mDNS and reverse PTR responses.
+
+## 1.1.1 - 2026-08-11
+
+- Cleaned stale duplicate Docker inventory records during imports when an old MAC remains on the same IP.
+- Improved Docker room and role views with vertical sections and scrollable dashboard insight cards.
+- Fixed Docker device-list date layout so Last seen values no longer clip or push neighboring columns.
+- Opened the macOS device detail sheet directly from Dashboard Needs Attention items.
+
+## 1.1.0 - 2026-08-10
+
+- Improved Docker dashboard layout with macOS-style status, health, scan, recent-change, and attention cards.
+- Improved Docker device browsing with card rows, room and role map views, and better macOS import compatibility.
+- Aligned macOS page headers with their sidebar icons and improved the LanGuard header icon in dark mode.
+- Improved Docker vendor lookup with bundled Wireshark manuf data and expanded hostname discovery fallbacks.
+- Updated backend and frontend dependencies, keeping Django on the latest compatible 6.0.x release and resolving npm audit findings.
 
 ## 1.0.22 - 2026-08-06
 
@@ -247,6 +263,17 @@
 - Improved the mobile device list so phone screens no longer squeeze table columns.
 - Added tablet, lock, and robot vacuum device icons.
 - Cleaned up frontend Caddyfile formatting for quieter container startup logs.
+
+## 1.0.2 - 2026-06-30
+
+- Updated Docker networking so scans can see LAN devices instead of only the Docker host.
+- Added a configurable frontend backend upstream for host-network deployments.
+- Tuned Granian backend concurrency for home use.
+
+## 1.0.1 - 2026-06-29
+
+- Added a container startup lock so backend and scanner migrations do not race on first deploy.
+- Improved README logo sizing and project badges.
 
 ## 1.0.0 - 2026-06-29
 
