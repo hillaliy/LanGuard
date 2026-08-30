@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+## 1.8.0 - 2026-08-30
+
+- Replaced the Docker device details modal with a dedicated device page containing overview, editing, access, and per-device history views while preserving inventory filters and scroll position.
 - Refined the README presentation and moved contributor workflows into a dedicated guide.
 - Centralized frontend changelog data and GitHub release-note generation in `CHANGELOG.md`.
 - Added a Docker migration tool for importing the current WatchYourLAN device inventory from its `/api/all` JSON output.

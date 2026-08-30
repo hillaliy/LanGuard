@@ -19,6 +19,8 @@
 
 	handle {
 		root * /srv/frontend
+		@device_page path_regexp device_page ^/devices/[0-9]+/?$
+		rewrite @device_page /devices.html
 		try_files {path} /index.html
 		file_server
 	}

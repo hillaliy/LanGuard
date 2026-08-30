@@ -27,6 +27,7 @@ import {
   Stack,
   Switch,
   Table,
+  Tabs,
   Text,
   TextInput,
   Textarea,
@@ -40,6 +41,7 @@ import { notifications } from '@mantine/notifications';
 import {
   IconAlertCircle,
   IconAirConditioning,
+  IconArrowLeft,
   IconArrowsSort,
   IconBell,
   IconBlind,
@@ -57,6 +59,7 @@ import {
   IconDeviceTv,
   IconDeviceWatch,
   IconDownload,
+  IconEdit,
   IconGripVertical,
   IconHistory,
   IconLamp,
@@ -77,6 +80,7 @@ import {
   IconSearch,
   IconSend,
   IconServer,
+  IconDeviceFloppy,
   IconSettings,
   IconShieldCheck,
   IconShieldLock,
@@ -2307,11 +2311,13 @@ function DeviceIconPicker({ value, onChange, label = 'Icon' }) {
   );
 }
 
-function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }) {
+function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roomOptions }) {
+  const [device, setDevice] = useState(null);
+  const [events, setEvents] = useState([]);
+  const [eventPagination, setEventPagination] = useState(null);
   const [icon, setIcon] = useState('');
   const [secondaryIcon, setSecondaryIcon] = useState('');
   const [name, setName] = useState('');
-  const [hostname, setHostname] = useState('');
   const [role, setRole] = useState('device');
   const [room, setRoom] = useState('');
   const [known, setKnown] = useState(false);
@@ -2320,54 +2326,125 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
   const [detectedWebUrl, setDetectedWebUrl] = useState('');
   const [detectingWebUrl, setDetectingWebUrl] = useState(false);
   const [attentionAcknowledged, setAttentionAcknowledged] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMoreEvents, setLoadingMoreEvents] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirmOpened, deleteConfirm] = useDisclosure(false);
 
-  useEffect(() => {
-    if (device) {
-      setIcon(device.icon || '');
-      setSecondaryIcon(device.secondary_icon || '');
-      setName(device.name || '');
-      setHostname(device.hostname || '');
-      setRole(device.role || 'device');
-      setRoom(device.room || '');
-      setKnown(Boolean(device.known));
-      setComments(device.comments || '');
-      setExternalUrl(device.external_url || '');
-      setDetectedWebUrl('');
-      setAttentionAcknowledged(Boolean(device.attention_acknowledged));
-      setError('');
+  function populateForm(nextDevice) {
+    setIcon(nextDevice?.icon || '');
+    setSecondaryIcon(nextDevice?.secondary_icon || '');
+    setName(nextDevice?.name || '');
+    setRole(nextDevice?.role || 'device');
+    setRoom(nextDevice?.room || '');
+    setKnown(Boolean(nextDevice?.known));
+    setComments(nextDevice?.comments || '');
+    setExternalUrl(nextDevice?.external_url || '');
+    setAttentionAcknowledged(Boolean(nextDevice?.attention_acknowledged));
+  }
 
-      const webPorts = new Set([80, 443, 8000, 8080, 8443, 8888]);
-      const hasWebPort = (device.open_ports || []).some((item) =>
-        webPorts.has(Number(item?.port ?? item))
-      );
-      if (!device.external_url && hasWebPort) {
-        let active = true;
-        setDetectingWebUrl(true);
-        apiRequest(`device/web-interface/?id=${device.id}`)
-          .then((payload) => {
-            if (active) {
-              setDetectedWebUrl(payload?.url || '');
-            }
-          })
-          .catch(() => {})
-          .finally(() => {
-            if (active) {
-              setDetectingWebUrl(false);
-            }
-          });
-        return () => {
-          active = false;
-        };
-      }
-      setDetectingWebUrl(false);
+  async function loadDevice({ quiet = false } = {}) {
+    if (!quiet) {
+      setLoading(true);
     }
+    setError('');
+    try {
+      const payload = await apiRequest('device/', { params: { id: deviceId } });
+      const nextDevice = payload.data;
+      setDevice(nextDevice);
+      populateForm(nextDevice);
+      return nextDevice;
+    } catch (err) {
+      setError(err.message);
+      return null;
+    } finally {
+      if (!quiet) {
+        setLoading(false);
+      }
+    }
+  }
+
+  async function loadDeviceEvents({ offset = 0, append = false } = {}) {
+    const payload = await apiRequest('events/', {
+      params: { device: deviceId, limit: 100, offset },
+    });
+    const nextEvents = payload.data || [];
+    setEvents((current) => (append ? appendUniqueById(current, nextEvents) : nextEvents));
+    setEventPagination(payload.pagination || null);
+  }
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    Promise.all([
+      apiRequest('device/', { params: { id: deviceId } }),
+      apiRequest('events/', { params: { device: deviceId, limit: 100 } }),
+    ])
+      .then(([devicePayload, eventPayload]) => {
+        if (!active) {
+          return;
+        }
+        setDevice(devicePayload.data);
+        populateForm(devicePayload.data);
+        setEvents(eventPayload.data || []);
+        setEventPagination(eventPayload.pagination || null);
+        setError('');
+      })
+      .catch((err) => {
+        if (active) {
+          setError(err.message);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [deviceId]);
+
+  useEffect(() => {
+    if (!device) {
+      return undefined;
+    }
+    setDetectedWebUrl('');
+    const webPorts = new Set([80, 443, 8000, 8080, 8443, 8888]);
+    const hasWebPort = (device.open_ports || []).some((item) =>
+      webPorts.has(Number(item?.port ?? item))
+    );
+    if (device.external_url || !hasWebPort) {
+      setDetectingWebUrl(false);
+      return undefined;
+    }
+
+    let active = true;
+    setDetectingWebUrl(true);
+    apiRequest('device/web-interface/', { params: { id: device.id } })
+      .then((payload) => {
+        if (active) {
+          setDetectedWebUrl(payload?.url || '');
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) {
+          setDetectingWebUrl(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
   }, [device]);
 
   async function save() {
-    if (!device) {
+    if (!device || !name.trim()) {
+      if (!name.trim()) {
+        setError('Device name is required.');
+      }
       return;
     }
     setSaving(true);
@@ -2388,16 +2465,16 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
           name,
           role,
           room,
-          hostname,
           known,
           comments,
           external_url: externalUrl.trim(),
           acknowledge_attention: known && attentionAcknowledged,
         },
       });
-      await onSaved();
+      const updatedDevice = await loadDevice({ quiet: true });
+      await onSaved(updatedDevice);
       showSuccessNotification('Device saved', `${name || device.name} was updated.`);
-      onClose();
+      setEditing(false);
     } catch (err) {
       setError(err.message);
       showErrorNotification('Could not save device', err.message);
@@ -2415,10 +2492,9 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
     const deletedName = device.name;
     try {
       await apiRequest(`device/?id=${device.id}`, { method: 'DELETE' });
-      await onSaved();
       showSuccessNotification('Device deleted', `${deletedName} was removed.`);
       deleteConfirm.close();
-      onClose();
+      await onDeleted();
     } catch (err) {
       setError(err.message);
       showErrorNotification('Could not delete device', err.message);
@@ -2427,204 +2503,276 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
     }
   }
 
-  function closeModal() {
-    deleteConfirm.close();
-    onClose();
+  function cancelEditing() {
+    populateForm(device);
+    setError('');
+    setEditing(false);
   }
 
-  const currentStatus = deviceStatus(device);
+  async function loadMoreEvents() {
+    if (!hasNextActivityPage(eventPagination) || loadingMoreEvents) {
+      return;
+    }
+    setLoadingMoreEvents(true);
+    try {
+      await loadDeviceEvents({ offset: eventPagination.next_offset, append: true });
+    } catch (err) {
+      showErrorNotification('Could not load device history', err.message);
+    } finally {
+      setLoadingMoreEvents(false);
+    }
+  }
+
+  const currentStatus = device ? deviceStatus(device) : null;
+  const activeUrl = externalUrl.trim() || detectedWebUrl;
 
   return (
-    <Modal
-      opened={opened}
-      onClose={closeModal}
-      title={(
-        <Group gap="xs" wrap="nowrap">
-          <Text fw={700}>{displayDeviceName(device)}</Text>
-          <GatewayBadge device={device} compact />
+    <Paper className="device-detail-page" radius="md">
+      <LoadingOverlay visible={loading} />
+      <Stack gap="lg">
+        <Group justify="space-between" align="flex-start" wrap="wrap">
+          <Group gap="sm" align="flex-start" wrap="nowrap">
+            <Tooltip label="Back to devices">
+              <ActionIcon variant="subtle" color="gray" onClick={onBack} aria-label="Back to devices">
+                <IconArrowLeft size={20} />
+              </ActionIcon>
+            </Tooltip>
+            {device && (
+              <span className="device-detail-icon">
+                <DeviceIconStack device={device} size={26} />
+              </span>
+            )}
+            <Box>
+              <Group gap="xs" wrap="wrap">
+                <Title order={2}>{device ? displayDeviceName(device) : 'Device'}</Title>
+                {device && <GatewayBadge device={device} compact />}
+                {device && <RiskBadge device={device} compact />}
+              </Group>
+              {device && <Text c="dimmed">{deviceSubtitle(device)}</Text>}
+              {currentStatus && (
+                <Group gap="xs" mt={4}>
+                  <span className={`status-dot ${currentStatus.dot}`} />
+                  <Text size="sm">{currentStatus.label}</Text>
+                  {device?.status_source_display && (
+                    <Text size="sm" c="dimmed">via {device.status_source_display}</Text>
+                  )}
+                </Group>
+              )}
+            </Box>
+          </Group>
+          {device && (
+            editing ? (
+              <Group gap="xs">
+                <Button variant="default" onClick={cancelEditing} disabled={saving}>Cancel</Button>
+                <Button leftSection={<IconDeviceFloppy size={18} />} onClick={save} loading={saving}>
+                  Save
+                </Button>
+              </Group>
+            ) : (
+              <Button leftSection={<IconEdit size={18} />} onClick={() => setEditing(true)}>
+                Edit device
+              </Button>
+            )
+          )}
         </Group>
-      )}
-      centered
-      size="lg"
-    >
-      <Stack>
+
         {error && (
           <Alert color="red" icon={<IconAlertCircle size={18} />}>
             {error}
           </Alert>
         )}
+        {device && (
+          <Tabs defaultValue="overview" keepMounted={false}>
+            <Tabs.List>
+              <Tabs.Tab value="overview" leftSection={<IconNetwork size={17} />}>Overview</Tabs.Tab>
+              <Tabs.Tab value="history" leftSection={<IconHistory size={17} />}>History</Tabs.Tab>
+            </Tabs.List>
 
-        <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <DeviceField
-            label="Name"
-            value={name}
-            editable
-            required
-            onChange={setName}
-          />
-          <DeviceField
-            label="Vendor"
-            value={device?.vendor || '-'}
-          />
-          <DeviceField
-            label="IP address"
-            value={device?.ip || '-'}
-          />
-          <DeviceField
-            label="MAC address"
-            value={device?.mac || '-'}
-          />
-          <DeviceField label="Hostname" value={hostname || '-'} />
-          <RoomField
-            value={room}
-            onChange={setRoom}
-            roomOptions={buildRoomOptions([], room).concat(
-              roomOptions.filter((option) => option.value !== room)
-            )}
-          />
-          <Box className="device-field editable">
-            <Text size="xs" c="dimmed">Role</Text>
-            <Select
-              classNames={{ input: 'device-field-input' }}
-              data={deviceRoleOptions.map((value) => ({
-                value,
-                label: formatRoleLabel(value),
-              }))}
-              value={role}
-              onChange={(value) => setRole(value || 'device')}
-            />
-          </Box>
-          <DeviceIconPicker value={icon} onChange={setIcon} />
-          <DeviceIconPicker label="Secondary icon" value={secondaryIcon} onChange={setSecondaryIcon} />
-        </SimpleGrid>
-
-        <IdentityConfidenceField device={device} />
-
-        <Textarea
-          label="Comments"
-          placeholder="Add notes about this device"
-          value={comments}
-          onChange={(event) => setComments(event.currentTarget.value)}
-          autosize
-          minRows={2}
-          maxRows={5}
-        />
-
-        <Stack gap="xs">
-          <TextInput
-            label="External link"
-            placeholder="https://192.168.0.20"
-            value={externalUrl}
-            error={!validExternalUrl(externalUrl) ? 'Enter a valid HTTP or HTTPS URL.' : null}
-            onChange={(event) => setExternalUrl(event.currentTarget.value)}
-          />
-          {detectingWebUrl && (
-            <Group gap="xs">
-              <Loader size="xs" />
-              <Text size="sm" c="dimmed">Checking for a web interface...</Text>
-            </Group>
-          )}
-          {(externalUrl.trim() || detectedWebUrl) && validExternalUrl(externalUrl.trim() || detectedWebUrl) && (
-            <Group gap="xs">
-              <Button
-                component="a"
-                href={externalUrl.trim() || detectedWebUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                variant="light"
-                leftSection={<IconArrowUpRight size={17} />}
-              >
-                Open link
-              </Button>
-              {!externalUrl.trim() && detectedWebUrl && (
-                <Button variant="default" onClick={() => setExternalUrl(detectedWebUrl)}>
-                  Use detected link
-                </Button>
-              )}
-            </Group>
-          )}
-        </Stack>
-
-        <Group>
-          <Switch
-            label="Known device"
-            checked={known}
-            onChange={(event) => {
-              const nextKnown = event.currentTarget.checked;
-              setKnown(nextKnown);
-              if (!nextKnown) {
-                setAttentionAcknowledged(false);
-              }
-            }}
-          />
-          <Switch
-            label="This device does not need attention"
-            description="Acknowledges the current risk. Risk changes will require attention again."
-            checked={attentionAcknowledged}
-            disabled={!known || (!device?.needs_attention && !device?.attention_acknowledged)}
-            onChange={(event) => setAttentionAcknowledged(event.currentTarget.checked)}
-          />
-          <Group gap="xs">
-            <span className={`status-dot ${currentStatus.dot}`} />
-            <Text size="sm">{currentStatus.label}</Text>
-            {device?.status_source_display && (
-              <Text size="sm" c="dimmed">via {device.status_source_display}</Text>
-            )}
-            <Text size="sm" c="dimmed">Missed scans: {device?.missed_scans ?? 0}</Text>
-          </Group>
-          <RiskBadge device={device} />
-        </Group>
-
-        {currentStatus.reason && (
-          <Text size="sm" c="dimmed">{currentStatus.reason}</Text>
-        )}
-
-        <Divider />
-
-        <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <Box>
-            <Text size="xs" c="dimmed">First seen</Text>
-            <Text size="sm">{formatDate(device?.firstseen, timeZone)}</Text>
-          </Box>
-          <Box>
-            <Text size="xs" c="dimmed">Last seen</Text>
-            <Text size="sm">{formatDate(device?.lastseen, timeZone)}</Text>
-          </Box>
-          <Box>
-            <Text size="xs" c="dimmed">Last port scan</Text>
-            <Text size="sm">{formatDate(device?.last_port_scan, timeZone)}</Text>
-          </Box>
-          <Box>
-            <Text size="xs" c="dimmed">Open ports</Text>
-            <Group gap={4} mt={4}>
-              {(device?.open_ports || []).length ? (
-                (device?.open_ports || []).map((port) => (
-                  <Badge key={`${port.protocol}-${port.port}`} variant="light">
-                    {port.protocol}/{port.port}
-                  </Badge>
-                ))
+            <Tabs.Panel value="overview" pt="lg">
+              {editing ? (
+                <Stack gap="lg">
+                  <SimpleGrid cols={{ base: 1, md: 2 }}>
+                    <DeviceField label="Name" value={name} editable required onChange={setName} />
+                    <RoomField
+                      value={room}
+                      onChange={setRoom}
+                      roomOptions={buildRoomOptions([], room).concat(
+                        roomOptions.filter((option) => option.value !== room)
+                      )}
+                    />
+                    <Box className="device-field editable">
+                      <Text size="xs" c="dimmed">Role</Text>
+                      <Select
+                        classNames={{ input: 'device-field-input' }}
+                        data={deviceRoleOptions.map((value) => ({ value, label: formatRoleLabel(value) }))}
+                        value={role}
+                        onChange={(value) => setRole(value || 'device')}
+                      />
+                    </Box>
+                    <TextInput
+                      label="External link"
+                      placeholder="https://192.168.0.20"
+                      value={externalUrl}
+                      error={!validExternalUrl(externalUrl) ? 'Enter a valid HTTP or HTTPS URL.' : null}
+                      onChange={(event) => setExternalUrl(event.currentTarget.value)}
+                    />
+                  </SimpleGrid>
+                  <SimpleGrid cols={{ base: 1, md: 2 }}>
+                    <DeviceIconPicker value={icon} onChange={setIcon} />
+                    <DeviceIconPicker label="Secondary icon" value={secondaryIcon} onChange={setSecondaryIcon} />
+                  </SimpleGrid>
+                  <Textarea
+                    label="Comments"
+                    placeholder="Add notes about this device"
+                    value={comments}
+                    onChange={(event) => setComments(event.currentTarget.value)}
+                    autosize
+                    minRows={3}
+                    maxRows={8}
+                  />
+                  <Group align="flex-start">
+                    <Switch
+                      label="Known device"
+                      checked={known}
+                      onChange={(event) => {
+                        const nextKnown = event.currentTarget.checked;
+                        setKnown(nextKnown);
+                        if (!nextKnown) {
+                          setAttentionAcknowledged(false);
+                        }
+                      }}
+                    />
+                    <Switch
+                      label="This device does not need attention"
+                      description="Acknowledges the current risk. Risk changes will require attention again."
+                      checked={attentionAcknowledged}
+                      disabled={!known || (!device.needs_attention && !device.attention_acknowledged)}
+                      onChange={(event) => setAttentionAcknowledged(event.currentTarget.checked)}
+                    />
+                  </Group>
+                  <Group>
+                    <Button
+                      color="red"
+                      variant="light"
+                      leftSection={<IconTrash size={18} />}
+                      onClick={deleteConfirm.open}
+                    >
+                      Delete device
+                    </Button>
+                  </Group>
+                </Stack>
               ) : (
-                <Text size="sm">-</Text>
-              )}
-            </Group>
-          </Box>
-        </SimpleGrid>
+                <Stack gap="xl">
+                  <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
+                    <section className="device-detail-section">
+                      <Title order={4}>Identity</Title>
+                      <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md">
+                        <DeviceField label="Vendor" value={device.vendor || '-'} />
+                        <DeviceField label="Hostname" value={device.hostname || '-'} />
+                        <DeviceField label="MAC address" value={device.mac || '-'} />
+                      </SimpleGrid>
+                      <IdentityConfidenceField device={device} />
+                    </section>
+                    <section className="device-detail-section">
+                      <Title order={4}>Network</Title>
+                      <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md">
+                        <DeviceField label="IP address" value={device.ip || '-'} />
+                        <DeviceField label="Last port scan" value={formatDate(device.last_port_scan, timeZone)} />
+                        <DeviceField label="Missed scans" value={String(device.missed_scans ?? 0)} />
+                        <DeviceField label="Status source" value={device.status_source_display || '-'} />
+                      </SimpleGrid>
+                      <Text size="xs" c="dimmed" mt="md">Open ports</Text>
+                      <Group gap={6} mt={6}>
+                        {(device.open_ports || []).length ? (
+                          device.open_ports.map((port) => (
+                            <Badge key={`${port.protocol}-${port.port}`} variant="light">
+                              {port.protocol}/{port.port}{port.service ? ` ${port.service}` : ''}
+                            </Badge>
+                          ))
+                        ) : <Text size="sm">-</Text>}
+                      </Group>
+                    </section>
+                  </SimpleGrid>
 
-        <Divider />
-        <Group justify="space-between">
-          <Button
-            color="red"
-            variant="light"
-            leftSection={<IconTrash size={18} />}
-            onClick={deleteConfirm.open}
-            loading={saving}
-          >
-            Delete
-          </Button>
-          <Button onClick={save} loading={saving}>
-            Save
-          </Button>
-        </Group>
+                  <Divider />
+                  <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
+                    <section className="device-detail-section">
+                      <Title order={4}>Profile</Title>
+                      <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md">
+                        <DeviceField label="Room" value={device.room || 'Unassigned'} />
+                        <DeviceField label="Role" value={formatRoleLabel(device.role)} />
+                        <DeviceField label="First seen" value={formatDate(device.firstseen, timeZone)} />
+                        <DeviceField label="Last seen" value={formatDate(device.lastseen, timeZone)} />
+                      </SimpleGrid>
+                    </section>
+                    <section className="device-detail-section">
+                      <Title order={4}>Notes and access</Title>
+                      <Text size="sm" mt="md" className="wrap-text">
+                        {device.comments || 'No notes added.'}
+                      </Text>
+                      {detectingWebUrl && (
+                        <Group gap="xs" mt="md"><Loader size="xs" /><Text size="sm" c="dimmed">Checking web interface...</Text></Group>
+                      )}
+                      {activeUrl && validExternalUrl(activeUrl) && (
+                        <Button
+                          component="a"
+                          href={activeUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          variant="light"
+                          mt="md"
+                          leftSection={<IconArrowUpRight size={17} />}
+                        >
+                          Open device interface
+                        </Button>
+                      )}
+                    </section>
+                  </SimpleGrid>
+                  {currentStatus?.reason && <Alert color="gray">{currentStatus.reason}</Alert>}
+                </Stack>
+              )}
+            </Tabs.Panel>
+
+            <Tabs.Panel value="history" pt="lg">
+              <Stack gap="md">
+                <Group justify="space-between">
+                  <Box>
+                    <Title order={4}>Device history</Title>
+                    <Text size="sm" c="dimmed">{activityRecordLabel(eventPagination, events.length)}</Text>
+                  </Box>
+                </Group>
+                <ScrollArea.Autosize mah={520} type="auto" className="activity-table-scroll">
+                  <Table striped highlightOnHover verticalSpacing="sm">
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Time</Table.Th>
+                        <Table.Th>Event</Table.Th>
+                        <Table.Th>Details</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {events.map((event) => (
+                        <Table.Tr key={event.id}>
+                          <Table.Td className="device-history-time">{formatDate(event.created_at, timeZone)}</Table.Td>
+                          <Table.Td><Badge variant="light">{event.event_type_display || formatRoleLabel(event.event_type)}</Badge></Table.Td>
+                          <Table.Td>{event.message || '-'}</Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </ScrollArea.Autosize>
+                {!events.length && <Text c="dimmed">No history recorded for this device.</Text>}
+                {hasNextActivityPage(eventPagination) && (
+                  <Group justify="center">
+                    <Button variant="default" onClick={loadMoreEvents} loading={loadingMoreEvents}>
+                      Load older events
+                    </Button>
+                  </Group>
+                )}
+              </Stack>
+            </Tabs.Panel>
+          </Tabs>
+        )}
       </Stack>
       <Modal
         opened={deleteConfirmOpened}
@@ -2652,7 +2800,7 @@ function DeviceModal({ device, opened, onClose, onSaved, timeZone, roomOptions }
           </Group>
         </Stack>
       </Modal>
-    </Modal>
+    </Paper>
   );
 }
 
@@ -4018,6 +4166,7 @@ function NotificationsPage({
 }
 
 const activityPageLimit = 500;
+const dashboardStateStorageKey = 'languard_dashboard_navigation_state';
 
 function activityRecordLabel(pagination, loadedCount) {
   const total = pagination?.count ?? loadedCount;
@@ -4045,7 +4194,7 @@ function appendUniqueById(current, incoming) {
   ];
 }
 
-function Dashboard({ user, onLogout, onUserUpdated }) {
+function Dashboard({ user, onLogout, onUserUpdated, initialDeviceId = null }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -4083,17 +4232,21 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   const [mainView, setMainView] = useState('dashboard');
   const [deviceOrdering, setDeviceOrdering] = useState('');
   const [eventType, setEventType] = useState('');
-  const [activeDevice, setActiveDevice] = useState(null);
+  const [devicePageId, setDevicePageId] = useState(
+    initialDeviceId ? String(initialDeviceId) : ''
+  );
   const [changelogOpened, setChangelogOpened] = useState(false);
   const [seenChangelogVersion, setSeenChangelogVersion] = useState(APP_VERSION);
   const [latestVersion, setLatestVersion] = useState(APP_VERSION);
   const [versionCheckInterval, setVersionCheckInterval] = useState(
     versionCheckFallbackInterval
   );
-  const [modalOpened, modal] = useDisclosure(false);
   const [logoutModalOpened, logoutModal] = useDisclosure(false);
   const [usersModalOpened, usersModal] = useDisclosure(false);
   const [scanDetailsOpened, scanDetailsModal] = useDisclosure(false);
+  const deviceListRef = useRef(null);
+  const pendingDashboardScrollRef = useRef(null);
+  const pendingDeviceListScrollRef = useRef(null);
   const tableStateRef = useRef({
     search: '',
     deviceStatus: '',
@@ -4119,6 +4272,72 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
     : 'Version history';
   const displayTimeZone = appSettings?.time_zone || dashboardTimeZone || undefined;
   const showFirstSeen = deviceOrdering === 'firstseen' || deviceOrdering === '-firstseen';
+  function storeDashboardNavigationState(overrides = {}) {
+    window.sessionStorage.setItem(
+      dashboardStateStorageKey,
+      JSON.stringify({
+        search,
+        deviceStatus,
+        firstSeenPeriod,
+        inventoryView,
+        mainView,
+        deviceOrdering,
+        eventType,
+        scrollY: window.scrollY,
+        deviceListScrollTop: deviceListRef.current?.scrollTop || 0,
+        ...overrides,
+      })
+    );
+  }
+
+  function openDevicePage(device) {
+    if (!device?.id) {
+      return;
+    }
+    storeDashboardNavigationState();
+    window.history.pushState({ languardDevicePage: true }, '', `/devices/${device.id}`);
+    setDevicePageId(String(device.id));
+    window.setTimeout(() => window.scrollTo({ top: 0 }), 0);
+  }
+
+  function navigateToView(view) {
+    if (devicePageId) {
+      storeDashboardNavigationState({ mainView: view, scrollY: 0 });
+      window.history.pushState({}, '', '/');
+      setDevicePageId('');
+      setMainView(view);
+      return;
+    }
+    setMainView(view);
+  }
+
+  function returnFromDevicePage() {
+    if (window.history.state?.languardDevicePage) {
+      window.history.back();
+    } else {
+      window.history.replaceState({}, '', '/');
+      setDevicePageId('');
+    }
+  }
+
+  useEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
+
+    function deviceIdFromPath() {
+      return window.location.pathname.match(/^\/devices\/(\d+)\/?$/)?.[1] || '';
+    }
+
+    setDevicePageId((current) => current || deviceIdFromPath());
+    function handlePopState() {
+      setDevicePageId(deviceIdFromPath());
+    }
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.history.scrollRestoration = previousScrollRestoration;
+    };
+  }, []);
 
   useEffect(() => {
     tableStateRef.current = {
@@ -4338,6 +4557,117 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
   }
 
   useEffect(() => {
+    if (devicePageId) {
+      return;
+    }
+    const stored = window.sessionStorage.getItem(dashboardStateStorageKey);
+    if (!stored) {
+      return;
+    }
+    try {
+      const state = JSON.parse(stored);
+      setSearch(state.search || '');
+      setDeviceStatus(state.deviceStatus || '');
+      setFirstSeenPeriod(state.firstSeenPeriod || '');
+      setInventoryView(state.inventoryView || 'table');
+      setMainView(state.mainView || 'dashboard');
+      setDeviceOrdering(state.deviceOrdering || '');
+      setEventType(state.eventType || '');
+      tableStateRef.current = {
+        ...tableStateRef.current,
+        search: state.search || '',
+        deviceStatus: state.deviceStatus || '',
+        firstSeenPeriod: state.firstSeenPeriod || '',
+        deviceOrdering: state.deviceOrdering || '',
+      };
+      pendingDashboardScrollRef.current = Math.max(Number(state.scrollY) || 0, 0);
+      pendingDeviceListScrollRef.current = Math.max(
+        Number(state.deviceListScrollTop) || 0,
+        0
+      );
+    } catch {
+      window.sessionStorage.removeItem(dashboardStateStorageKey);
+    }
+  }, [devicePageId]);
+
+  useEffect(() => {
+    if (devicePageId || loading || pendingDashboardScrollRef.current === null) {
+      return undefined;
+    }
+
+    const scrollTop = pendingDashboardScrollRef.current;
+    pendingDashboardScrollRef.current = null;
+    let animationFrame = null;
+    let attempts = 0;
+    const restoreScroll = () => {
+      window.scrollTo({ top: scrollTop, behavior: 'auto' });
+      attempts += 1;
+      if (attempts < 12 && Math.abs(window.scrollY - scrollTop) > 1) {
+        animationFrame = window.requestAnimationFrame(restoreScroll);
+      }
+    };
+    animationFrame = window.requestAnimationFrame(restoreScroll);
+    const fallbackTimers = [150, 400, 800].map((delay) =>
+      window.setTimeout(() => {
+        window.scrollTo({ top: scrollTop, behavior: 'auto' });
+      }, delay)
+    );
+
+    return () => {
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      fallbackTimers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [devicePageId, devices.length, loading, mainView]);
+
+  useEffect(() => {
+    if (
+      devicePageId ||
+      loading ||
+      inventoryView !== 'table' ||
+      pendingDeviceListScrollRef.current === null
+    ) {
+      return undefined;
+    }
+
+    const scrollTop = pendingDeviceListScrollRef.current;
+    pendingDeviceListScrollRef.current = null;
+    let animationFrame = null;
+    let attempts = 0;
+    const restoreScroll = () => {
+      const list = deviceListRef.current;
+      if (!list) {
+        attempts += 1;
+      } else {
+        list.scrollTop = scrollTop;
+        attempts += 1;
+        if (Math.abs(list.scrollTop - scrollTop) <= 1) {
+          return;
+        }
+      }
+      if (attempts < 12) {
+        animationFrame = window.requestAnimationFrame(restoreScroll);
+      }
+    };
+    animationFrame = window.requestAnimationFrame(restoreScroll);
+    const fallbackTimers = [150, 400, 800].map((delay) =>
+      window.setTimeout(() => {
+        if (deviceListRef.current) {
+          deviceListRef.current.scrollTop = scrollTop;
+        }
+      }, delay)
+    );
+
+    return () => {
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      fallbackTimers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [devicePageId, devices.length, inventoryView, loading, mainView]);
+
+  useEffect(() => {
     loadData();
     const timer = window.setInterval(() => loadData({ quiet: true }), 60000);
     return () => window.clearInterval(timer);
@@ -4542,20 +4872,20 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
           <Stack className="sidebar-nav" gap={6}>
             <Button
               className="sidebar-nav-button"
-              variant={mainView === 'dashboard' ? 'filled' : 'subtle'}
+              variant={!devicePageId && mainView === 'dashboard' ? 'filled' : 'subtle'}
               justify="flex-start"
               leftSection={<IconLayoutDashboard size={18} />}
-              onClick={() => setMainView('dashboard')}
+              onClick={() => navigateToView('dashboard')}
               fullWidth
             >
               Dashboard
             </Button>
             <Button
               className="sidebar-nav-button"
-              variant={mainView === 'home-map' ? 'filled' : 'subtle'}
+              variant={!devicePageId && mainView === 'home-map' ? 'filled' : 'subtle'}
               justify="flex-start"
               leftSection={<IconSmartHome size={18} />}
-              onClick={() => setMainView('home-map')}
+              onClick={() => navigateToView('home-map')}
               fullWidth
             >
               Home Map
@@ -4563,30 +4893,30 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
             <Divider my={4} />
             <Button
               className="sidebar-nav-button"
-              variant={mainView === 'events' ? 'filled' : 'subtle'}
+              variant={!devicePageId && mainView === 'events' ? 'filled' : 'subtle'}
               justify="flex-start"
               leftSection={<IconBell size={18} />}
-              onClick={() => setMainView('events')}
+              onClick={() => navigateToView('events')}
               fullWidth
             >
               Events
             </Button>
             <Button
               className="sidebar-nav-button"
-              variant={mainView === 'history' ? 'filled' : 'subtle'}
+              variant={!devicePageId && mainView === 'history' ? 'filled' : 'subtle'}
               justify="flex-start"
               leftSection={<IconHistory size={18} />}
-              onClick={() => setMainView('history')}
+              onClick={() => navigateToView('history')}
               fullWidth
             >
               Scan history
             </Button>
             <Button
               className="sidebar-nav-button"
-              variant={mainView === 'notifications' ? 'filled' : 'subtle'}
+              variant={!devicePageId && mainView === 'notifications' ? 'filled' : 'subtle'}
               justify="flex-start"
               leftSection={<IconBell size={18} />}
-              onClick={() => setMainView('notifications')}
+              onClick={() => navigateToView('notifications')}
               fullWidth
             >
               Notifications
@@ -4609,10 +4939,10 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 </Button>
                 <Button
                   className="sidebar-nav-button"
-                  variant={mainView === 'settings' ? 'filled' : 'subtle'}
+                  variant={!devicePageId && mainView === 'settings' ? 'filled' : 'subtle'}
                   justify="flex-start"
                   leftSection={<IconSettings size={18} />}
-                  onClick={() => setMainView('settings')}
+                  onClick={() => navigateToView('settings')}
                   fullWidth
                 >
                   Settings
@@ -4631,13 +4961,24 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
             </Alert>
           )}
 
-          {mainView === 'home-map' ? (
+          {devicePageId ? (
+            <DeviceDetailsPage
+              deviceId={devicePageId}
+              onBack={returnFromDevicePage}
+              onSaved={async () => loadData({ quiet: true })}
+              onDeleted={async () => {
+                storeDashboardNavigationState({ mainView: 'dashboard', scrollY: 0 });
+                window.history.replaceState({}, '', '/');
+                setDevicePageId('');
+                setMainView('dashboard');
+              }}
+              timeZone={displayTimeZone}
+              roomOptions={roomOptions}
+            />
+          ) : mainView === 'home-map' ? (
             <HomeMap
               devices={mapDevices}
-              onSelectDevice={(device) => {
-                setActiveDevice(device);
-                modal.open();
-              }}
+              onSelectDevice={openDevicePage}
             />
           ) : mainView === 'settings' && canManageUsers ? (
             <SettingsPage
@@ -4654,10 +4995,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
               pagination={eventPagination}
               loadingMore={activityLoadingMore.events}
               onLoadMore={loadMoreEventsData}
-              onSelectDevice={(device) => {
-                setActiveDevice(device);
-                modal.open();
-              }}
+              onSelectDevice={openDevicePage}
             />
           ) : mainView === 'history' ? (
             <ScanHistoryPage
@@ -4693,10 +5031,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
           <DashboardInsightCards
             events={dashboardEvents}
             devices={mapDevices}
-            onSelectDevice={(device) => {
-              setActiveDevice(device);
-              modal.open();
-            }}
+            onSelectDevice={openDevicePage}
             timeZone={displayTimeZone}
           />
 
@@ -4759,10 +5094,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                 <Box p="md">
                   <RolesMap
                     devices={mapDevices}
-                    onSelectDevice={(device) => {
-                      setActiveDevice(device);
-                      modal.open();
-                    }}
+                    onSelectDevice={openDevicePage}
                   />
                   <Text size="xs" c="dimmed" mt="sm">
                     Showing up to 100 devices grouped by role.
@@ -4815,15 +5147,12 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                       </Text>
                     </Group>
                   </Box>
-                  <Stack className="device-list" gap={0}>
+                  <Stack ref={deviceListRef} className="device-list" gap={0}>
                     {filteredDevices.map((device) => (
                       <UnstyledButton
                         className="device-list-row"
                         key={device.id}
-                        onClick={() => {
-                          setActiveDevice(device);
-                          modal.open();
-                        }}
+                        onClick={() => openDevicePage(device)}
                       >
                         <Group className="device-list-primary" gap="md" align="center" wrap="nowrap">
                           <span className="device-list-icon">
@@ -4891,10 +5220,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
                       <UnstyledButton
                         className="device-mobile-row"
                         key={device.id}
-                        onClick={() => {
-                          setActiveDevice(device);
-                          modal.open();
-                        }}
+                        onClick={() => openDevicePage(device)}
                       >
                         <Group justify="space-between" align="flex-start" wrap="nowrap">
                           <Group gap="sm" align="flex-start" wrap="nowrap" className="device-mobile-main">
@@ -4979,14 +5305,6 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
         />
       </Modal>
 
-      <DeviceModal
-        device={activeDevice}
-        opened={modalOpened}
-        onClose={modal.close}
-        onSaved={() => loadData({ quiet: true })}
-        timeZone={displayTimeZone}
-        roomOptions={roomOptions}
-      />
       <UserManagementModal
         opened={usersModalOpened}
         onClose={usersModal.close}
@@ -5040,7 +5358,7 @@ function Dashboard({ user, onLogout, onUserUpdated }) {
 }
 
 
-export default function Home() {
+export function LanGuardApplication({ initialDeviceId = null }) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
 
@@ -5062,6 +5380,11 @@ export default function Home() {
       user={user}
       onLogout={() => setUser(null)}
       onUserUpdated={setUser}
+      initialDeviceId={initialDeviceId}
     />
   );
+}
+
+export default function Home() {
+  return <LanGuardApplication />;
 }

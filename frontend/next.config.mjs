@@ -7,7 +7,13 @@ const changelogEntries = frontendChangelogEntries(changelogMarkdown);
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'export',
+  ...(process.env.NODE_ENV === 'development'
+    ? {
+        async rewrites() {
+          return [{ source: '/devices/:id', destination: '/devices' }];
+        },
+      }
+    : { output: 'export' }),
   env: {
     NEXT_PUBLIC_APP_VERSION: appVersion,
     NEXT_PUBLIC_CHANGELOG_JSON: JSON.stringify(changelogEntries),
