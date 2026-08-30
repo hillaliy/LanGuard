@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Added an optional Docker AdGuard Home integration with scheduled query-log synchronization, per-device and network-wide DNS activity, blocked-query totals, filtering, unmatched-client diagnostics, manual cleanup, and configurable aggregate retention.
-- Reorganized Docker settings into clearer visual categories and refresh the device inventory immediately after deleting a device.
+- Reorganized Docker settings into focused Scanning, Notifications, Add-ons, Data & migration, and Maintenance categories, and refreshed the device inventory immediately after deleting a device.
 - Added dedicated Docker routes for Dashboard, Home Map, Events, Scan history, Notifications, and Settings with working refresh and browser Back/Forward navigation.
 - Added a dedicated Not Found page and proper HTTP 404 responses for unknown Docker routes.
 

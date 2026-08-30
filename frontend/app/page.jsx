@@ -3703,10 +3703,20 @@ function SettingsPage({ onSaved }) {
           </Alert>
         )}
 
-        <Stack className="settings-category" gap="sm">
+        <Tabs defaultValue="scanning" orientation="vertical" className="settings-layout">
+          <Tabs.List className="settings-category-nav">
+            <Tabs.Tab value="scanning" leftSection={<IconNetwork size={18} />}>Scanning</Tabs.Tab>
+            <Tabs.Tab value="notifications" leftSection={<IconBell size={18} />}>Notifications</Tabs.Tab>
+            <Tabs.Tab value="addons" leftSection={<IconWorldSearch size={18} />}>Add-ons</Tabs.Tab>
+            <Tabs.Tab value="data" leftSection={<IconDownload size={18} />}>Data & migration</Tabs.Tab>
+            <Tabs.Tab value="maintenance" leftSection={<IconTrash size={18} />}>Maintenance</Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel value="scanning" className="settings-category-panel">
+        <Stack gap="lg">
           <Box>
-            <Text fw={700}>Network scanning</Text>
-            <Text size="sm" c="dimmed">Configure the default network range and scheduled scan timing.</Text>
+            <Title order={3}>Network scanning</Title>
+            <Text c="dimmed">Configure the default network range and scheduled scan timing.</Text>
           </Box>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
           <TextInput
@@ -3741,9 +3751,16 @@ function SettingsPage({ onSaved }) {
           The interval starts after each scan completes. Restart the scanner container after changing scan interval or timezone.
         </Text>
         </Stack>
+          </Tabs.Panel>
 
-        <Stack className="settings-category" gap="sm">
-          <Text fw={700}>Notification rules</Text>
+          <Tabs.Panel value="notifications" className="settings-category-panel">
+        <Stack gap="xl">
+          <Box>
+            <Title order={3}>Notifications</Title>
+            <Text c="dimmed">Choose which network changes are reported and configure delivery channels.</Text>
+          </Box>
+          <Stack gap="sm">
+          <Text fw={700}>Rules</Text>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Switch
               label="New devices"
@@ -3804,9 +3821,11 @@ function SettingsPage({ onSaved }) {
               ))}
             </Group>
           </Checkbox.Group>
-        </Stack>
+          </Stack>
 
-        <Stack className="settings-category" gap="sm">
+          <Divider label="Delivery channels" labelPosition="left" />
+
+        <Stack className="settings-subsection" gap="sm">
           <Group justify="space-between">
             <Group gap="sm">
               <Text fw={700}>Discord</Text>
@@ -3851,7 +3870,7 @@ function SettingsPage({ onSaved }) {
           </Group>
         </Stack>
 
-        <Stack className="settings-category" gap="sm">
+        <Stack className="settings-subsection" gap="sm">
           <Group justify="space-between">
             <Group gap="sm">
               <Text fw={700}>Telegram</Text>
@@ -3898,8 +3917,19 @@ function SettingsPage({ onSaved }) {
             </Tooltip>
           </Group>
         </Stack>
+        </Stack>
+          </Tabs.Panel>
 
-        <Stack className="settings-category" gap="sm">
+          <Tabs.Panel value="addons" className="settings-category-panel">
+        <Stack gap="xl">
+          <Group justify="space-between" align="flex-start">
+            <Box>
+              <Title order={3}>Add-ons</Title>
+              <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
+            </Box>
+            <Badge variant="light">1 available</Badge>
+          </Group>
+        <Stack className="settings-subsection" gap="sm">
           <Group justify="space-between" align="flex-start">
             <Box>
               <Group gap="sm">
@@ -4003,8 +4033,16 @@ function SettingsPage({ onSaved }) {
             </Group>
           </Group>
         </Stack>
+        </Stack>
+          </Tabs.Panel>
 
-        <Group className="settings-category" justify="space-between" align="flex-start">
+          <Tabs.Panel value="maintenance" className="settings-category-panel">
+        <Stack gap="xl">
+          <Box>
+            <Title order={3}>Maintenance</Title>
+            <Text c="dimmed">Manage retained activity without changing device inventory.</Text>
+          </Box>
+        <Group justify="space-between" align="flex-start" wrap="wrap">
           <Box>
             <Text fw={700}>Activity cleanup</Text>
             <Text size="sm" c="dimmed">
@@ -4059,8 +4097,16 @@ function SettingsPage({ onSaved }) {
             </Button>
           </Group>
         </Group>
+        </Stack>
+          </Tabs.Panel>
 
-        <Group className="settings-category" justify="space-between" align="flex-start">
+          <Tabs.Panel value="data" className="settings-category-panel">
+        <Stack gap="xl">
+          <Box>
+            <Title order={3}>Data & migration</Title>
+            <Text c="dimmed">Move device inventory into or out of LanGuard.</Text>
+          </Box>
+        <Group justify="space-between" align="flex-start" wrap="wrap">
           <Box>
             <Text fw={700}>Device inventory</Text>
             <Text size="sm" c="dimmed">
@@ -4091,7 +4137,9 @@ function SettingsPage({ onSaved }) {
           </Group>
         </Group>
 
-        <Group className="settings-category" justify="space-between" align="flex-start">
+        <Divider />
+
+        <Group justify="space-between" align="flex-start" wrap="wrap">
           <Box>
             <Text fw={700}>WatchYourLAN migration</Text>
             <Text size="sm" c="dimmed">
@@ -4111,6 +4159,9 @@ function SettingsPage({ onSaved }) {
             )}
           </FileButton>
         </Group>
+        </Stack>
+          </Tabs.Panel>
+        </Tabs>
 
         <Group justify="flex-end" className="settings-page-actions">
           <Button onClick={saveSettings} loading={saving}>
