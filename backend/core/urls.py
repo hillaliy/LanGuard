@@ -3,6 +3,9 @@ from django.urls import path
 from .views import (
     UserRegistrationView,
     app_settings,
+    device_dns_activity,
+    dns_activity,
+    dns_unmatched_clients,
     UserLoginView,
     UserEditView,
     UserLogoutView,
@@ -24,6 +27,8 @@ from .views import (
     import_watchyourlan_devices,
     maintenance_cleanup,
     test_notification_channel,
+    sync_adguard,
+    test_adguard,
     users,
 )
 
@@ -37,6 +42,8 @@ urlpatterns = [
     path("logout/", UserLogoutView.as_view(), name="logout"),
     path("users/", users, name="users"),
     path("settings/", app_settings, name="app-settings"),
+    path("integrations/adguard/test/", test_adguard, name="test-adguard"),
+    path("integrations/adguard/sync/", sync_adguard, name="sync-adguard"),
     path(
         "notifications/test/",
         test_notification_channel,
@@ -46,6 +53,13 @@ urlpatterns = [
     path("maintenance/cleanup/", maintenance_cleanup, name="maintenance-cleanup"),
     path("device/", device, name="device"),
     path("device/web-interface/", device_web_interface, name="device-web-interface"),
+    path("device/dns-activity/", device_dns_activity, name="device-dns-activity"),
+    path("dns-activity/", dns_activity, name="dns-activity"),
+    path(
+        "dns-activity/unmatched/",
+        dns_unmatched_clients,
+        name="dns-unmatched-clients",
+    ),
     path("scan/", scan_now, name="scan_now"),
     path("scan/status/", scan_status, name="scan_status"),
     path("scan/runs/", scan_runs, name="scan_runs"),

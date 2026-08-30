@@ -316,6 +316,18 @@ textarea {
   position: relative;
 }
 
+.settings-category {
+  margin-inline: calc(var(--mantine-spacing-lg) * -1);
+  padding: var(--mantine-spacing-lg);
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  background: color-mix(in srgb, var(--muted-panel-bg) 72%, transparent);
+}
+
+.settings-category + .settings-category {
+  margin-top: calc(var(--mantine-spacing-md) * -1);
+}
+
 .page-icon {
   width: 52px;
   height: 52px;

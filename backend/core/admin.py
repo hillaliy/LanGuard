@@ -1,7 +1,9 @@
 from django.contrib import admin
 from .models import (
+    AdGuardUnmatchedClient,
     AppSettings,
     Device,
+    DeviceDNSActivity,
     DevicePort,
     NetworkEvent,
     NotificationDelivery,
@@ -28,6 +30,34 @@ class DevicePortAdmin(admin.ModelAdmin):
     list_display = ("device", "protocol", "port", "service", "open", "lastseen")
     list_filter = ("open", "protocol", "service")
     search_fields = ("device__name", "device__ip", "port", "service")
+
+
+@admin.register(DeviceDNSActivity)
+class DeviceDNSActivityAdmin(admin.ModelAdmin):
+    list_display = (
+        "device",
+        "domain",
+        "query_type",
+        "query_count",
+        "blocked_count",
+        "last_seen",
+    )
+    list_filter = ("query_type", "last_reason")
+    search_fields = ("device__name", "device__ip", "domain")
+    readonly_fields = ("first_seen", "last_seen")
+
+
+@admin.register(AdGuardUnmatchedClient)
+class AdGuardUnmatchedClientAdmin(admin.ModelAdmin):
+    list_display = (
+        "client",
+        "query_count",
+        "blocked_count",
+        "last_domain",
+        "last_seen",
+    )
+    search_fields = ("client", "last_domain")
+    readonly_fields = ("first_seen", "last_seen")
 
 
 @admin.register(ScanRun)
@@ -69,6 +99,9 @@ class AppSettingsAdmin(admin.ModelAdmin):
         "scan_interval",
         "version_check_interval",
         "activity_cleanup_retention_days",
+        "adguard_enabled",
+        "adguard_sync_interval",
+        "adguard_retention_days",
         "time_zone",
         "notifications_enabled",
         "updated_at",

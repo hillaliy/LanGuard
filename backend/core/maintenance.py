@@ -3,10 +3,16 @@ from datetime import timedelta
 from django.utils import timezone
 
 from .datetime_utils import utc_isoformat
-from .models import NetworkEvent, NotificationDelivery, ScanRun
+from .models import (
+    AdGuardUnmatchedClient,
+    DeviceDNSActivity,
+    NetworkEvent,
+    NotificationDelivery,
+    ScanRun,
+)
 
 
-ACTIVITY_CLEANUP_TARGETS = {"events", "scan_runs", "notifications"}
+ACTIVITY_CLEANUP_TARGETS = {"events", "scan_runs", "notifications", "dns_activity"}
 
 
 def cleanup_activity(target, older_than_days=90, clean_all=False):
@@ -27,6 +33,8 @@ def cleanup_activity(target, older_than_days=90, clean_all=False):
         "notifications": 0,
         "events": 0,
         "scan_runs": 0,
+        "dns_activity": 0,
+        "dns_unmatched_clients": 0,
     }
 
     if target == "notifications":
@@ -47,6 +55,18 @@ def cleanup_activity(target, older_than_days=90, clean_all=False):
             queryset = queryset.filter(started_at__lt=cutoff)
         _, scan_run_details = queryset.delete()
         deleted["scan_runs"] = scan_run_details.get("core.ScanRun", 0)
+    elif target == "dns_activity":
+        activity_queryset = DeviceDNSActivity.objects.all()
+        unmatched_queryset = AdGuardUnmatchedClient.objects.all()
+        if cutoff is not None:
+            activity_queryset = activity_queryset.filter(last_seen__lt=cutoff)
+            unmatched_queryset = unmatched_queryset.filter(last_seen__lt=cutoff)
+        _, activity_details = activity_queryset.delete()
+        _, unmatched_details = unmatched_queryset.delete()
+        deleted["dns_activity"] = activity_details.get("core.DeviceDNSActivity", 0)
+        deleted["dns_unmatched_clients"] = unmatched_details.get(
+            "core.AdGuardUnmatchedClient", 0
+        )
 
     return {
         "target": target,
@@ -64,6 +84,8 @@ def cleanup_all_activity(older_than_days):
             "notifications": 0,
             "events": 0,
             "scan_runs": 0,
+            "dns_activity": 0,
+            "dns_unmatched_clients": 0,
         },
         "targets": {},
     }
