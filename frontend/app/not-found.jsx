@@ -49,7 +49,7 @@ export default function NotFound() {
           <Group justify="center">
             <Button
               component="a"
-              href="/"
+              href="/dashboard"
               size="md"
               leftSection={<IconArrowLeft size={18} />}
             >

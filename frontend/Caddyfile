@@ -19,9 +19,19 @@
 
 	handle {
 		root * /srv/frontend
+		@root path /
+		rewrite @root /index.html
 		@device_page path_regexp device_page ^/devices/[0-9]+/?$
 		rewrite @device_page /devices.html
-		try_files {path} /index.html
+		@trailing_slash path_regexp trailing_slash ^(.+)/$
+		rewrite @trailing_slash {re.trailing_slash.1}
+		try_files {path} {path}.html =404
+		file_server
+	}
+
+	handle_errors {
+		root * /srv/frontend
+		rewrite * /404.html
 		file_server
 	}
 }
