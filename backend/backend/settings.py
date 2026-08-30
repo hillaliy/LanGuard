@@ -39,6 +39,10 @@ def env_list(name, default=None, cast=str):
     return [cast(item.strip()) for item in value.split(",") if item.strip()]
 
 
+def include_internal_hosts(allowed_hosts):
+    return list(dict.fromkeys([*allowed_hosts, "localhost", "127.0.0.1", "[::1]"]))
+
+
 def validate_production_settings(environment, secret_key, debug, allowed_hosts):
     if environment != "production":
         return
@@ -100,7 +104,9 @@ SECRET_KEY = os.getenv("SECRET_KEY", "unsafe-dev-secret-key")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env_bool("DEBUG", default=False)
 
-ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", default=["localhost", "127.0.0.1"])
+CONFIGURED_ALLOWED_HOSTS = env_list(
+    "ALLOWED_HOSTS", default=["localhost", "127.0.0.1"]
+)
 
 CORS_ALLOWED_ORIGINS = env_list(
     "CORS_ALLOWED_ORIGINS",
@@ -115,7 +121,10 @@ CORS_ALLOWED_ORIGINS = env_list(
 CORS_ALLOW_CREDENTIALS = True
 CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
 
-validate_production_settings(ENVIRONMENT, SECRET_KEY, DEBUG, ALLOWED_HOSTS)
+validate_production_settings(
+    ENVIRONMENT, SECRET_KEY, DEBUG, CONFIGURED_ALLOWED_HOSTS
+)
+ALLOWED_HOSTS = include_internal_hosts(CONFIGURED_ALLOWED_HOSTS)
 
 
 # Application definition

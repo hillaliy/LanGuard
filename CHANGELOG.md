@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.8.1 - 2026-08-30
+
+- **Docker/web only:** Fixed backend health checks being rejected when custom `ALLOWED_HOSTS` omitted the internal loopback address, which could prevent dependent containers from starting or staying available.
+
 ## 1.8.0 - 2026-08-30
 
 - Replaced the Docker device details modal with a dedicated device page containing overview, editing, access, and per-device history views while preserving inventory filters and scroll position.
