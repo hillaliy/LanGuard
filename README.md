@@ -81,7 +81,7 @@ services:
     network_mode: host
     environment:
       - SECRET_KEY=change-this-to-a-long-random-secret
-      - ALLOWED_HOSTS=192.168.1.10,languard.local
+      - ALLOWED_HOSTS=192.168.1.10,languard.local,127.0.0.1
     volumes:
       - languard_database:/data
       - languard_static:/static
@@ -101,7 +101,7 @@ services:
     command: ["python", "-u", "manage.py", "run_scheduler", "--run-now"]
     environment:
       - SECRET_KEY=change-this-to-a-long-random-secret
-      - ALLOWED_HOSTS=192.168.1.10,languard.local
+      - ALLOWED_HOSTS=192.168.1.10,languard.local,127.0.0.1
     volumes:
       - languard_database:/data
       - languard_static:/static
@@ -161,10 +161,11 @@ Create a `SECRET_KEY` with:
 openssl rand -base64 48
 ```
 
-`ALLOWED_HOSTS` should be the IP or hostname you open in the browser, for example:
+`ALLOWED_HOSTS` should include the IP or hostname you open in the browser. Keep
+`127.0.0.1` for the container health check, for example:
 
 ```env
-ALLOWED_HOSTS=192.168.1.10,languard.local
+ALLOWED_HOSTS=192.168.1.10,languard.local,127.0.0.1
 ```
 
 You normally do not need `CORS_ALLOWED_ORIGINS` in the Portainer stack. The frontend container serves the UI and proxies API requests to the backend on the same origin.

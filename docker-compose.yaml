@@ -6,7 +6,7 @@ services:
     network_mode: host
     environment:
       SECRET_KEY: change-this-to-a-long-random-secret
-      ALLOWED_HOSTS: 192.168.1.10,languard.local
+      ALLOWED_HOSTS: 192.168.1.10,languard.local,127.0.0.1
       DB_PATH: /data/db.sqlite3
       STATIC_ROOT: /static
     volumes:
@@ -28,7 +28,7 @@ services:
     command: ["python", "-u", "manage.py", "run_scheduler", "--run-now"]
     environment:
       SECRET_KEY: change-this-to-a-long-random-secret
-      ALLOWED_HOSTS: 192.168.1.10,languard.local
+      ALLOWED_HOSTS: 192.168.1.10,languard.local,127.0.0.1
       DB_PATH: /data/db.sqlite3
       STATIC_ROOT: /static
     volumes:

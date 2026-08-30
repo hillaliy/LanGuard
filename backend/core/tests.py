@@ -12,7 +12,7 @@ from django.utils import timezone
 import requests
 from rest_framework.test import APIClient
 
-from backend.settings import validate_production_settings
+from backend.settings import include_internal_hosts, validate_production_settings
 from .datetime_utils import utc_isoformat
 from .models import (
     AppSettings,
@@ -71,6 +71,12 @@ from .scan import (
 
 
 class ProductionSettingsTests(SimpleTestCase):
+    def test_internal_health_check_hosts_are_always_allowed(self):
+        self.assertEqual(
+            include_internal_hosts(["languard.local", "127.0.0.1"]),
+            ["languard.local", "127.0.0.1", "localhost", "[::1]"],
+        )
+
     def test_development_allows_local_defaults(self):
         validate_production_settings(
             "development",
