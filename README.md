@@ -65,8 +65,28 @@ appear.
 **Notify and integrate**
 
 - Send Discord or Telegram alerts for new devices and important changes
+- Sync per-device DNS destinations and blocked-query totals from AdGuard Home
 - Use Swagger, ReDoc, and the OpenAPI schema for integrations
 - Create the initial administrator directly from first-user setup
+
+## How scanning works
+
+LanGuard combines several lightweight discovery methods to build and maintain
+the device inventory:
+
+| Method | Purpose |
+| --- | --- |
+| ARP discovery | Find active devices and their MAC addresses on the local network |
+| Reverse DNS, mDNS, LLMNR, SSDP, and NetBIOS | Resolve hostnames and device metadata |
+| OUI/manuf lookup | Identify hardware vendors from MAC addresses |
+| TCP port checks | Track configured ports and detect service availability changes |
+| ICMP and known-port confirmation | Avoid marking devices offline when they still respond outside ARP discovery |
+| HTTP/HTTPS probing | Suggest a reachable local device-management interface |
+| AdGuard Home sync | Collect aggregated per-device DNS destinations when the integration is enabled |
+
+By default, LanGuard scans private IPv4 ranges and a limited set of configured
+TCP ports. It does not capture packet contents or inspect application traffic,
+and its recurring port checks are not a vulnerability assessment.
 
 ## Portainer
 
@@ -138,6 +158,22 @@ source release and should be updated together. Always update and recreate the
 backend, scheduler, and frontend containers as one release, even when the scheduler
 service itself has no visible feature change.
 
+### Scheduler tasks
+
+The scheduler container runs LanGuard's recurring background work:
+
+| Task | Default schedule | Configuration |
+| --- | --- | --- |
+| Network scan | Immediately at startup, then 5 minutes after the previous scan completes | Scan interval in Settings |
+| Failed notification retry | Every 15 minutes | `NOTIFICATION_RETRY_INTERVAL` |
+| Activity cleanup | Every 24 hours | Activity retention in Settings |
+| AdGuard Home sync | Every 5 minutes when enabled | AdGuard Home settings |
+
+The scan range and scan interval are loaded when the scheduler starts, so restart
+the scheduler container after changing either value. Activity retention and
+AdGuard Home settings are read from the database during their scheduled loops and
+do not require a restart.
+
 > [!IMPORTANT]
 > The next Docker release includes a Docker deployment change. Existing Compose
 > files remain compatible, but installations should update the stack with the
@@ -175,6 +211,37 @@ Open `http://<docker-host-ip>:8080` and create the first user. That user becomes
 After sign in, open Settings to change the scan range, scan interval, timezone, Discord webhook, or Telegram settings.
 
 The scanner waits for the configured scan interval after a scan completes before starting the next scheduled scan. For example, with a 5 minute interval, a scan that finishes at 20:14 will schedule the next scan for about 20:19.
+
+## AdGuard Home
+
+Docker installations can sync AdGuard Home query-log activity into LanGuard.
+LanGuard stores aggregated counters per device, domain, and DNS query type
+instead of copying every raw DNS response. Old aggregates are removed using
+the retention period configured in Settings.
+
+1. Make sure the query log is enabled in AdGuard Home.
+2. In LanGuard, open **Settings** and enable **AdGuard Home**.
+3. Enter the AdGuard Home URL and credentials, then select **Test connection**.
+4. Save Settings and select **Sync now** for the first import.
+5. Open **DNS Activity** for a network-wide view, or open a device and select
+   **DNS activity** for its destinations and blocked-query totals.
+
+The central DNS Activity page includes search, allowed/blocked filtering,
+device links, and diagnostics for AdGuard client identifiers that do not match
+a current LanGuard device IP. Settings also provides separate manual cleanup
+for DNS aggregates and unmatched-client diagnostics, including a **Clean all**
+option.
+
+The scheduler continues syncing at the configured interval. Update the
+`languard-scheduler` image together with the backend and frontend whenever this
+integration is included in a release.
+
+> [!IMPORTANT]
+> Per-device attribution requires AdGuard Home to record the device IP in the
+> query log. If every DNS request is forwarded through the router and AdGuard
+> Home only sees the router IP, LanGuard can only associate that activity with
+> the router. Configure clients or DHCP to use AdGuard Home directly when you
+> need device-level activity.
 
 ## Migrate from WatchYourLAN
 

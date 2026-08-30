@@ -10,6 +10,7 @@ from core.maintenance import cleanup_all_activity
 from core.models import AppSettings
 from core.notifications import retry_failed_notifications
 from core.scan import scan
+from core.adguard import sync_adguard_query_log
 
 
 LOGGER = logging.getLogger(__name__)
@@ -114,6 +115,24 @@ class Command(BaseCommand):
             finally:
                 close_old_connections()
 
+        def run_adguard_sync():
+            close_old_connections()
+            try:
+                result = sync_adguard_query_log()
+                if result["status"] == "ok":
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            "AdGuard Home sync completed: "
+                            f"{result['matched']} matched queries across "
+                            f"{result['domains_updated']} device domains"
+                        )
+                    )
+            except Exception:
+                LOGGER.exception("AdGuard Home sync failed")
+                self.stderr.write(self.style.ERROR("AdGuard Home sync failed"))
+            finally:
+                close_old_connections()
+
         def retry_loop():
             while not stop_event.wait(retry_interval * 60):
                 run_notification_retry()
@@ -121,6 +140,20 @@ class Command(BaseCommand):
         def activity_cleanup_loop():
             while not stop_event.wait(24 * 60 * 60):
                 run_activity_cleanup()
+
+        def adguard_sync_loop():
+            while not stop_event.is_set():
+                close_old_connections()
+                try:
+                    config = AppSettings.load()
+                    enabled = config.adguard_enabled
+                    interval_seconds = max(config.adguard_sync_interval, 1) * 60
+                finally:
+                    close_old_connections()
+                if enabled:
+                    run_adguard_sync()
+                if stop_event.wait(interval_seconds):
+                    break
 
         def stop_scheduler(signum, frame):
             self.stdout.write("Stopping scheduler...")
@@ -137,6 +170,9 @@ class Command(BaseCommand):
         if options["run_now"]:
             run_scheduled_scan()
 
+        adguard_sync_thread = threading.Thread(target=adguard_sync_loop, daemon=True)
+        adguard_sync_thread.start()
+
         self.stdout.write(
             self.style.SUCCESS(
                 f"Scheduled network scans {interval} minutes after each scan completes for {ip_range}"
@@ -149,6 +185,9 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS("Scheduled activity cleanup every 24 hours")
+        )
+        self.stdout.write(
+            self.style.SUCCESS("AdGuard Home sync follows the saved integration interval")
         )
 
         while not stop_event.wait(interval * 60):

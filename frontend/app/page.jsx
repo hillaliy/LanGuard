@@ -96,6 +96,7 @@ import {
   IconWifi,
   IconWindmill,
   IconWindow,
+  IconWorldSearch,
   IconX,
 } from '@tabler/icons-react';
 import {
@@ -2216,7 +2217,7 @@ function IdentityConfidenceField({ device }) {
   const label = confidence.charAt(0).toUpperCase() + confidence.slice(1);
 
   return (
-    <Box className="device-field identity-confidence-field">
+    <Box className="device-field identity-confidence-field" mt="md">
       <Group justify="space-between" gap="xs" wrap="nowrap">
         <Text size="xs" c="dimmed">Identity confidence</Text>
         <Badge color={color} variant="light">{label}</Badge>
@@ -2328,6 +2329,16 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
   const [attentionAcknowledged, setAttentionAcknowledged] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMoreEvents, setLoadingMoreEvents] = useState(false);
+  const [activeDeviceTab, setActiveDeviceTab] = useState('overview');
+  const [dnsActivity, setDnsActivity] = useState([]);
+  const [dnsPagination, setDnsPagination] = useState(null);
+  const [dnsSummary, setDnsSummary] = useState(null);
+  const [dnsIntegration, setDnsIntegration] = useState(null);
+  const [dnsSearch, setDnsSearch] = useState('');
+  const [dnsFilter, setDnsFilter] = useState('all');
+  const [dnsOrdering, setDnsOrdering] = useState('-last_seen');
+  const [loadingDnsActivity, setLoadingDnsActivity] = useState(false);
+  const [loadingMoreDnsActivity, setLoadingMoreDnsActivity] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
@@ -2343,6 +2354,11 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
     setComments(nextDevice?.comments || '');
     setExternalUrl(nextDevice?.external_url || '');
     setAttentionAcknowledged(Boolean(nextDevice?.attention_acknowledged));
+  }
+
+  function startEditing() {
+    setActiveDeviceTab('overview');
+    setEditing(true);
   }
 
   async function loadDevice({ quiet = false } = {}) {
@@ -2373,6 +2389,38 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
     const nextEvents = payload.data || [];
     setEvents((current) => (append ? appendUniqueById(current, nextEvents) : nextEvents));
     setEventPagination(payload.pagination || null);
+  }
+
+  async function loadDnsActivity({ offset = 0, append = false, quiet = false } = {}) {
+    if (!quiet) {
+      setLoadingDnsActivity(true);
+    }
+    const params = {
+      id: deviceId,
+      limit: 100,
+      offset,
+      search: dnsSearch.trim(),
+      ordering: dnsOrdering,
+    };
+    if (dnsFilter === 'blocked') {
+      params.blocked = true;
+    } else if (dnsFilter === 'allowed') {
+      params.blocked = false;
+    }
+    try {
+      const payload = await apiRequest('device/dns-activity/', { params });
+      const nextActivity = payload.data || [];
+      setDnsActivity((current) =>
+        append ? appendUniqueById(current, nextActivity) : nextActivity
+      );
+      setDnsPagination(payload.pagination || null);
+      setDnsSummary(payload.summary || null);
+      setDnsIntegration(payload.integration || null);
+    } finally {
+      if (!quiet) {
+        setLoadingDnsActivity(false);
+      }
+    }
   }
 
   useEffect(() => {
@@ -2406,6 +2454,29 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
       active = false;
     };
   }, [deviceId]);
+
+  useEffect(() => {
+    setActiveDeviceTab('overview');
+    setDnsActivity([]);
+    setDnsPagination(null);
+    setDnsSummary(null);
+    setDnsIntegration(null);
+    setDnsSearch('');
+    setDnsFilter('all');
+    setDnsOrdering('-last_seen');
+  }, [deviceId]);
+
+  useEffect(() => {
+    if (activeDeviceTab !== 'dns') {
+      return undefined;
+    }
+    const timer = window.setTimeout(() => {
+      loadDnsActivity().catch((err) => {
+        showErrorNotification('Could not load DNS activity', err.message);
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [activeDeviceTab, deviceId, dnsSearch, dnsFilter, dnsOrdering]);
 
   useEffect(() => {
     if (!device) {
@@ -2523,6 +2594,24 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
     }
   }
 
+  async function loadMoreDnsActivity() {
+    if (!hasNextActivityPage(dnsPagination) || loadingMoreDnsActivity) {
+      return;
+    }
+    setLoadingMoreDnsActivity(true);
+    try {
+      await loadDnsActivity({
+        offset: dnsPagination.next_offset,
+        append: true,
+        quiet: true,
+      });
+    } catch (err) {
+      showErrorNotification('Could not load DNS activity', err.message);
+    } finally {
+      setLoadingMoreDnsActivity(false);
+    }
+  }
+
   const currentStatus = device ? deviceStatus(device) : null;
   const activeUrl = externalUrl.trim() || detectedWebUrl;
 
@@ -2569,7 +2658,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
                 </Button>
               </Group>
             ) : (
-              <Button leftSection={<IconEdit size={18} />} onClick={() => setEditing(true)}>
+              <Button leftSection={<IconEdit size={18} />} onClick={startEditing}>
                 Edit device
               </Button>
             )
@@ -2582,10 +2671,15 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
           </Alert>
         )}
         {device && (
-          <Tabs defaultValue="overview" keepMounted={false}>
+          <Tabs value={activeDeviceTab} onChange={setActiveDeviceTab} keepMounted={false}>
             <Tabs.List>
               <Tabs.Tab value="overview" leftSection={<IconNetwork size={17} />}>Overview</Tabs.Tab>
-              <Tabs.Tab value="history" leftSection={<IconHistory size={17} />}>History</Tabs.Tab>
+              {!editing && (
+                <Tabs.Tab value="history" leftSection={<IconHistory size={17} />}>History</Tabs.Tab>
+              )}
+              {!editing && (
+                <Tabs.Tab value="dns" leftSection={<IconWorldSearch size={17} />}>DNS activity</Tabs.Tab>
+              )}
             </Tabs.List>
 
             <Tabs.Panel value="overview" pt="lg">
@@ -2766,6 +2860,146 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
                   <Group justify="center">
                     <Button variant="default" onClick={loadMoreEvents} loading={loadingMoreEvents}>
                       Load older events
+                    </Button>
+                  </Group>
+                )}
+              </Stack>
+            </Tabs.Panel>
+
+            <Tabs.Panel value="dns" pt="lg">
+              <Stack gap="md">
+                <Group justify="space-between" align="flex-start" wrap="wrap">
+                  <Box>
+                    <Title order={4}>DNS activity</Title>
+                    <Text size="sm" c="dimmed">
+                      Aggregated AdGuard Home destinations for this device.
+                    </Text>
+                  </Box>
+                  {dnsIntegration?.last_sync_at && (
+                    <Text size="sm" c="dimmed">
+                      Last synced {formatDate(dnsIntegration.last_sync_at, timeZone)}
+                    </Text>
+                  )}
+                </Group>
+
+                {dnsIntegration && !dnsIntegration.configured && (
+                  <Alert color="blue" icon={<IconWorldSearch size={18} />}>
+                    Configure AdGuard Home in Settings to collect DNS activity.
+                  </Alert>
+                )}
+                {dnsIntegration?.configured && !dnsIntegration.enabled && (
+                  <Alert color="gray">AdGuard Home sync is currently disabled.</Alert>
+                )}
+                {dnsIntegration?.last_error && (
+                  <Alert color="red" icon={<IconAlertCircle size={18} />}>
+                    Last sync failed: {dnsIntegration.last_error}
+                  </Alert>
+                )}
+
+                <SimpleGrid cols={{ base: 1, sm: 3 }}>
+                  <DeviceField
+                    label="Unique domains"
+                    value={Number(dnsSummary?.unique_domains || 0).toLocaleString()}
+                  />
+                  <DeviceField
+                    label="DNS queries"
+                    value={Number(dnsSummary?.total_queries || 0).toLocaleString()}
+                  />
+                  <DeviceField
+                    label="Blocked queries"
+                    value={Number(dnsSummary?.blocked_queries || 0).toLocaleString()}
+                  />
+                </SimpleGrid>
+
+                <Group align="flex-end" wrap="wrap">
+                  <TextInput
+                    label="Search domains"
+                    placeholder="api.example.com"
+                    value={dnsSearch}
+                    onChange={(event) => setDnsSearch(event.currentTarget.value)}
+                    leftSection={<IconSearch size={16} />}
+                    style={{ flex: '1 1 260px' }}
+                  />
+                  <SegmentedControl
+                    value={dnsFilter}
+                    onChange={setDnsFilter}
+                    data={[
+                      { value: 'all', label: 'All' },
+                      { value: 'allowed', label: 'Allowed' },
+                      { value: 'blocked', label: 'Blocked' },
+                    ]}
+                  />
+                  <Select
+                    label="Sort by"
+                    value={dnsOrdering}
+                    onChange={(value) => setDnsOrdering(value || '-last_seen')}
+                    data={[
+                      { value: '-last_seen', label: 'Recently seen' },
+                      { value: '-query_count', label: 'Most queries' },
+                      { value: '-blocked_count', label: 'Most blocked' },
+                      { value: 'domain', label: 'Domain name' },
+                    ]}
+                    w={180}
+                  />
+                </Group>
+
+                <Box pos="relative">
+                  <LoadingOverlay visible={loadingDnsActivity} />
+                  <ScrollArea.Autosize mah={520} type="auto" className="activity-table-scroll">
+                    <Table striped highlightOnHover verticalSpacing="sm">
+                      <Table.Thead>
+                        <Table.Tr>
+                          <Table.Th>Domain</Table.Th>
+                          <Table.Th>Type</Table.Th>
+                          <Table.Th>Queries</Table.Th>
+                          <Table.Th>Blocked</Table.Th>
+                          <Table.Th>Last seen</Table.Th>
+                        </Table.Tr>
+                      </Table.Thead>
+                      <Table.Tbody>
+                        {dnsActivity.map((activity) => (
+                          <Table.Tr key={activity.id}>
+                            <Table.Td>
+                              <Text size="sm" fw={600} className="wrap-text">
+                                {activity.domain}
+                              </Text>
+                              {activity.last_service_name && (
+                                <Text size="xs" c="dimmed">{activity.last_service_name}</Text>
+                              )}
+                            </Table.Td>
+                            <Table.Td>{activity.query_type || '-'}</Table.Td>
+                            <Table.Td>{Number(activity.query_count || 0).toLocaleString()}</Table.Td>
+                            <Table.Td>
+                              {activity.blocked_count > 0 ? (
+                                <Tooltip label={activity.last_reason || 'Blocked by AdGuard Home'}>
+                                  <Badge color="red" variant="light">
+                                    {Number(activity.blocked_count).toLocaleString()}
+                                  </Badge>
+                                </Tooltip>
+                              ) : (
+                                <Text size="sm" c="dimmed">0</Text>
+                              )}
+                            </Table.Td>
+                            <Table.Td className="device-history-time">
+                              {formatDate(activity.last_seen, timeZone)}
+                            </Table.Td>
+                          </Table.Tr>
+                        ))}
+                      </Table.Tbody>
+                    </Table>
+                  </ScrollArea.Autosize>
+                </Box>
+                {!loadingDnsActivity && !dnsActivity.length && (
+                  <Text c="dimmed">No DNS activity recorded for this device.</Text>
+                )}
+                {hasNextActivityPage(dnsPagination) && (
+                  <Group justify="center">
+                    <Button
+                      variant="default"
+                      onClick={loadMoreDnsActivity}
+                      loading={loadingMoreDnsActivity}
+                    >
+                      Load more domains
                     </Button>
                   </Group>
                 )}
@@ -3116,6 +3350,15 @@ function SettingsPage({ onSaved }) {
   const [discordWebhook, setDiscordWebhook] = useState('');
   const [telegramToken, setTelegramToken] = useState('');
   const [telegramUserId, setTelegramUserId] = useState('');
+  const [adguardEnabled, setAdguardEnabled] = useState(false);
+  const [adguardConfigured, setAdguardConfigured] = useState(false);
+  const [adguardUrl, setAdguardUrl] = useState('');
+  const [adguardUsername, setAdguardUsername] = useState('');
+  const [adguardPassword, setAdguardPassword] = useState('');
+  const [adguardSyncInterval, setAdguardSyncInterval] = useState(5);
+  const [adguardRetentionDays, setAdguardRetentionDays] = useState(90);
+  const [adguardLastSyncAt, setAdguardLastSyncAt] = useState(null);
+  const [adguardLastError, setAdguardLastError] = useState('');
   const [notifyNewDevices, setNotifyNewDevices] = useState(true);
   const [notifyDeviceOnline, setNotifyDeviceOnline] = useState(false);
   const [notifyDeviceOffline, setNotifyDeviceOffline] = useState(false);
@@ -3127,6 +3370,8 @@ function SettingsPage({ onSaved }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testingChannel, setTestingChannel] = useState('');
+  const [testingAdguard, setTestingAdguard] = useState(false);
+  const [syncingAdguard, setSyncingAdguard] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importingWatchYourLan, setImportingWatchYourLan] = useState(false);
@@ -3152,6 +3397,15 @@ function SettingsPage({ onSaved }) {
       setDiscordWebhook(data.discord_webhook || '');
       setTelegramToken(data.telegram_token || '');
       setTelegramUserId(data.telegram_user_id || '');
+      setAdguardEnabled(Boolean(data.adguard_enabled));
+      setAdguardConfigured(Boolean(data.adguard_configured));
+      setAdguardUrl(data.adguard_url || '');
+      setAdguardUsername(data.adguard_username || '');
+      setAdguardPassword('');
+      setAdguardSyncInterval(Number(data.adguard_sync_interval || 5));
+      setAdguardRetentionDays(Number(data.adguard_retention_days || 90));
+      setAdguardLastSyncAt(data.adguard_last_sync_at || null);
+      setAdguardLastError(data.adguard_last_error || '');
       setNotifyNewDevices(Boolean(data.notify_new_devices));
       setNotifyDeviceOnline(Boolean(data.notify_device_online));
       setNotifyDeviceOffline(Boolean(data.notify_device_offline));
@@ -3196,15 +3450,23 @@ function SettingsPage({ onSaved }) {
         notification_quiet_hours_end: quietHoursEnd,
         notification_quiet_hours_days: quietHoursDays,
         activity_cleanup_retention_days: cleanupDays,
+        adguard_enabled: adguardEnabled,
+        adguard_url: adguardUrl.trim(),
+        adguard_username: adguardUsername.trim(),
+        adguard_sync_interval: adguardSyncInterval,
+        adguard_retention_days: adguardRetentionDays,
       };
       body.discord_webhook = discordWebhook;
       body.telegram_token = telegramToken;
       body.telegram_user_id = telegramUserId;
+      if (adguardPassword) {
+        body.adguard_password = adguardPassword;
+      }
 
       const savedSettings = await apiRequest('settings/', { method: 'PUT', body });
       await loadSettings();
       await onSaved(savedSettings.data || {});
-      showSuccessNotification('Settings saved', 'Scanner and notification settings were updated.');
+      showSuccessNotification('Settings saved', 'Scanner, notification, and integration settings were updated.');
     } catch (err) {
       setError(err.message);
       showErrorNotification('Could not save settings', err.message);
@@ -3235,6 +3497,53 @@ function SettingsPage({ onSaved }) {
       showErrorNotification('Test notification failed', err.message);
     } finally {
       setTestingChannel('');
+    }
+  }
+
+  async function testAdguardConnection() {
+    setTestingAdguard(true);
+    setError('');
+    try {
+      const body = {
+        url: adguardUrl.trim(),
+        username: adguardUsername.trim(),
+      };
+      if (adguardPassword) {
+        body.password = adguardPassword;
+      }
+      const payload = await apiRequest('integrations/adguard/test/', {
+        method: 'POST',
+        body,
+      });
+      const data = payload.data || {};
+      showSuccessNotification(
+        'AdGuard Home connected',
+        `${data.version || 'Server detected'} · Query log ${data.query_log_enabled ? 'enabled' : 'disabled'}.`
+      );
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('AdGuard Home connection failed', err.message);
+    } finally {
+      setTestingAdguard(false);
+    }
+  }
+
+  async function syncAdguardNow() {
+    setSyncingAdguard(true);
+    setError('');
+    try {
+      const payload = await apiRequest('integrations/adguard/sync/', { method: 'POST' });
+      const data = payload.data || {};
+      await loadSettings();
+      showSuccessNotification(
+        'AdGuard Home synced',
+        `Matched ${data.matched || 0} queries across ${data.domains_updated || 0} device domains.`
+      );
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('AdGuard Home sync failed', err.message);
+    } finally {
+      setSyncingAdguard(false);
     }
   }
 
@@ -3328,6 +3637,7 @@ function SettingsPage({ onSaved }) {
     events: 'Events',
     scan_runs: 'Scan history',
     notifications: 'Notifications',
+    dns_activity: 'DNS activity',
   };
 
   async function cleanupActivity(cleanAll = false) {
@@ -3349,7 +3659,9 @@ function SettingsPage({ onSaved }) {
       const targetLabel = cleanupTargetLabels[cleanupTarget] || 'Activity';
       showSuccessNotification(
         `${targetLabel} cleaned`,
-        `Deleted ${deleted.events || 0} events, ${deleted.scan_runs || 0} scan runs, and ${deleted.notifications || 0} notifications.`
+        cleanupTarget === 'dns_activity'
+          ? `Deleted ${deleted.dns_activity || 0} DNS records and ${deleted.dns_unmatched_clients || 0} unmatched client records.`
+          : `Deleted ${deleted.events || 0} events, ${deleted.scan_runs || 0} scan runs, and ${deleted.notifications || 0} notifications.`
       );
       return true;
     } catch (err) {
@@ -3391,6 +3703,11 @@ function SettingsPage({ onSaved }) {
           </Alert>
         )}
 
+        <Stack className="settings-category" gap="sm">
+          <Box>
+            <Text fw={700}>Network scanning</Text>
+            <Text size="sm" c="dimmed">Configure the default network range and scheduled scan timing.</Text>
+          </Box>
         <SimpleGrid cols={{ base: 1, sm: 3 }}>
           <TextInput
             label="Default scan range"
@@ -3423,8 +3740,9 @@ function SettingsPage({ onSaved }) {
         <Text size="xs" c="dimmed">
           The interval starts after each scan completes. Restart the scanner container after changing scan interval or timezone.
         </Text>
+        </Stack>
 
-        <Stack gap="sm">
+        <Stack className="settings-category" gap="sm">
           <Text fw={700}>Notification rules</Text>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Switch
@@ -3488,9 +3806,7 @@ function SettingsPage({ onSaved }) {
           </Checkbox.Group>
         </Stack>
 
-        <Divider />
-
-        <Stack gap="sm">
+        <Stack className="settings-category" gap="sm">
           <Group justify="space-between">
             <Group gap="sm">
               <Text fw={700}>Discord</Text>
@@ -3535,7 +3851,7 @@ function SettingsPage({ onSaved }) {
           </Group>
         </Stack>
 
-        <Stack gap="sm">
+        <Stack className="settings-category" gap="sm">
           <Group justify="space-between">
             <Group gap="sm">
               <Text fw={700}>Telegram</Text>
@@ -3583,9 +3899,112 @@ function SettingsPage({ onSaved }) {
           </Group>
         </Stack>
 
-        <Divider />
+        <Stack className="settings-category" gap="sm">
+          <Group justify="space-between" align="flex-start">
+            <Box>
+              <Group gap="sm">
+                <Text fw={700}>AdGuard Home</Text>
+                <Switch
+                  label="Enabled"
+                  checked={adguardEnabled}
+                  onChange={(event) => setAdguardEnabled(event.currentTarget.checked)}
+                />
+              </Group>
+              <Text size="sm" c="dimmed" mt={4}>
+                Sync aggregated DNS destinations to device pages. LanGuard stores domain counters, not raw DNS responses.
+              </Text>
+            </Box>
+            <Badge color={adguardConfigured && adguardEnabled ? 'teal' : 'gray'} variant="light">
+              {adguardConfigured ? 'Configured' : 'Not configured'}
+            </Badge>
+          </Group>
 
-        <Group justify="space-between" align="flex-start">
+          <SimpleGrid cols={{ base: 1, md: 3 }}>
+            <TextInput
+              label="AdGuard Home URL"
+              placeholder="http://192.168.1.2:3000"
+              value={adguardUrl}
+              onChange={(event) => setAdguardUrl(event.currentTarget.value)}
+              disabled={!adguardEnabled}
+            />
+            <TextInput
+              label="Username"
+              placeholder="admin"
+              value={adguardUsername}
+              onChange={(event) => setAdguardUsername(event.currentTarget.value)}
+              disabled={!adguardEnabled}
+            />
+            <PasswordInput
+              label="Password"
+              placeholder={adguardConfigured ? 'Saved password' : 'Password'}
+              value={adguardPassword}
+              onChange={(event) => setAdguardPassword(event.currentTarget.value)}
+              disabled={!adguardEnabled}
+            />
+          </SimpleGrid>
+          {adguardConfigured && (
+            <Text size="xs" c="dimmed">Leave the password blank to keep the saved password.</Text>
+          )}
+
+          <Group justify="space-between" align="flex-end" wrap="wrap">
+            <Group align="flex-end" wrap="wrap">
+              <NumberInput
+                w={170}
+                label="Sync interval"
+                value={adguardSyncInterval}
+                onChange={(value) => setAdguardSyncInterval(Number(value) || 5)}
+                min={1}
+                max={1440}
+                suffix=" min"
+                disabled={!adguardEnabled}
+              />
+              <NumberInput
+                w={170}
+                label="Activity retention"
+                value={adguardRetentionDays}
+                onChange={(value) => setAdguardRetentionDays(Number(value) || 90)}
+                min={1}
+                max={3650}
+                suffix=" days"
+                disabled={!adguardEnabled}
+              />
+              <Box pb={6}>
+                <Text size="xs" c="dimmed">
+                  {adguardLastSyncAt
+                    ? `Last sync: ${formatDate(adguardLastSyncAt, timeZone)}`
+                    : 'Not synced yet'}
+                </Text>
+                {adguardLastError && (
+                  <Text size="xs" c="red" maw={420} className="wrap-text">
+                    Last error: {adguardLastError}
+                  </Text>
+                )}
+              </Box>
+            </Group>
+            <Group gap="sm">
+              <Button
+                variant="default"
+                leftSection={<IconSend size={18} />}
+                onClick={testAdguardConnection}
+                loading={testingAdguard}
+                disabled={!adguardEnabled || !adguardUrl.trim() || syncingAdguard}
+              >
+                Test connection
+              </Button>
+              <Button
+                variant="light"
+                leftSection={<IconRefresh size={18} />}
+                onClick={syncAdguardNow}
+                loading={syncingAdguard}
+                disabled={!adguardEnabled || !adguardConfigured || testingAdguard}
+              >
+                Sync now
+              </Button>
+            </Group>
+          </Group>
+        </Stack>
+
+        <Group className="settings-category" justify="space-between" align="flex-start">
           <Box>
             <Text fw={700}>Activity cleanup</Text>
             <Text size="sm" c="dimmed">
@@ -3629,12 +4048,19 @@ function SettingsPage({ onSaved }) {
             >
               Clean notifications
             </Button>
+            <Button
+              color="red"
+              variant="light"
+              leftSection={<IconTrash size={18} />}
+              onClick={() => openCleanupConfirm('dns_activity')}
+              loading={cleaningActivity === 'dns_activity'}
+            >
+              Clean DNS activity
+            </Button>
           </Group>
         </Group>
 
-        <Divider />
-
-        <Group justify="space-between" align="flex-start">
+        <Group className="settings-category" justify="space-between" align="flex-start">
           <Box>
             <Text fw={700}>Device inventory</Text>
             <Text size="sm" c="dimmed">
@@ -3665,9 +4091,7 @@ function SettingsPage({ onSaved }) {
           </Group>
         </Group>
 
-        <Divider />
-
-        <Group justify="space-between" align="flex-start">
+        <Group className="settings-category" justify="space-between" align="flex-start">
           <Box>
             <Text fw={700}>WatchYourLAN migration</Text>
             <Text size="sm" c="dimmed">
@@ -3688,7 +4112,6 @@ function SettingsPage({ onSaved }) {
           </FileButton>
         </Group>
 
-        <Divider />
         <Group justify="flex-end" className="settings-page-actions">
           <Button onClick={saveSettings} loading={saving}>
             Save
@@ -3712,6 +4135,9 @@ function SettingsPage({ onSaved }) {
               : ''}
             {cleanupTarget === 'scan_runs'
               ? ' Running scans are never deleted.'
+              : ''}
+            {cleanupTarget === 'dns_activity'
+              ? ' Both device DNS aggregates and unmatched-client diagnostics are included.'
               : ''}
             {' '}Clean all deletes every record of this type and cannot be undone.
           </Text>
@@ -4034,6 +4460,195 @@ function ScanComparisonModal({ opened, onClose, scanRuns, timeZone }) {
   );
 }
 
+function DNSActivityPage({ timeZone, onSelectDevice }) {
+  const [activity, setActivity] = useState([]);
+  const [activityPagination, setActivityPagination] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [integration, setIntegration] = useState(null);
+  const [unmatchedClients, setUnmatchedClients] = useState([]);
+  const [unmatchedPagination, setUnmatchedPagination] = useState(null);
+  const [unmatchedSummary, setUnmatchedSummary] = useState(null);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [ordering, setOrdering] = useState('-last_seen');
+  const [loading, setLoading] = useState(true);
+  const [loadingMoreActivity, setLoadingMoreActivity] = useState(false);
+  const [loadingMoreUnmatched, setLoadingMoreUnmatched] = useState(false);
+  const [error, setError] = useState('');
+
+  async function loadActivity({ offset = 0, append = false } = {}) {
+    const params = { limit: 100, offset, search: search.trim(), ordering };
+    if (filter === 'blocked') params.blocked = true;
+    if (filter === 'allowed') params.blocked = false;
+    const payload = await apiRequest('dns-activity/', { params });
+    const nextActivity = payload.data || [];
+    setActivity((current) => append ? appendUniqueById(current, nextActivity) : nextActivity);
+    setActivityPagination(payload.pagination || null);
+    setSummary(payload.summary || null);
+    setIntegration(payload.integration || null);
+  }
+
+  async function loadUnmatched({ offset = 0, append = false } = {}) {
+    const payload = await apiRequest('dns-activity/unmatched/', {
+      params: { limit: 100, offset, search: search.trim(), ordering: '-last_seen' },
+    });
+    const nextClients = payload.data || [];
+    setUnmatchedClients((current) => append ? appendUniqueById(current, nextClients) : nextClients);
+    setUnmatchedPagination(payload.pagination || null);
+    setUnmatchedSummary(payload.summary || null);
+  }
+
+  useEffect(() => {
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setLoading(true);
+      setError('');
+      Promise.all([loadActivity(), loadUnmatched()])
+        .catch((err) => { if (active) setError(err.message); })
+        .finally(() => { if (active) setLoading(false); });
+    }, 250);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [search, filter, ordering]);
+
+  async function loadMoreActivity() {
+    if (!hasNextActivityPage(activityPagination) || loadingMoreActivity) return;
+    setLoadingMoreActivity(true);
+    try {
+      await loadActivity({ offset: activityPagination.next_offset, append: true });
+    } catch (err) {
+      showErrorNotification('Could not load more DNS activity', err.message);
+    } finally {
+      setLoadingMoreActivity(false);
+    }
+  }
+
+  async function loadMoreUnmatched() {
+    if (!hasNextActivityPage(unmatchedPagination) || loadingMoreUnmatched) return;
+    setLoadingMoreUnmatched(true);
+    try {
+      await loadUnmatched({ offset: unmatchedPagination.next_offset, append: true });
+    } catch (err) {
+      showErrorNotification('Could not load more unmatched clients', err.message);
+    } finally {
+      setLoadingMoreUnmatched(false);
+    }
+  }
+
+  const number = (value) => Number(value || 0).toLocaleString();
+
+  return (
+    <Stack gap="lg">
+      <Group justify="space-between" align="flex-end">
+        <Group gap="sm">
+          <span className="page-icon"><IconWorldSearch size={26} /></span>
+          <Box>
+            <Title order={2}>DNS Activity</Title>
+            <Text c="dimmed">AdGuard Home destinations grouped by device</Text>
+          </Box>
+        </Group>
+        <Group gap="xs">
+          <Badge variant="light">{number(summary?.unique_domains)} domains</Badge>
+          <Badge variant="light" color="teal">{number(summary?.active_devices)} devices</Badge>
+        </Group>
+      </Group>
+
+      {error && <Alert color="red" icon={<IconAlertCircle size={18} />}>{error}</Alert>}
+      {!integration?.enabled && !loading && (
+        <Alert color="blue" icon={<IconWorldSearch size={18} />}>
+          Enable and configure AdGuard Home in Settings to collect DNS activity.
+        </Alert>
+      )}
+      {integration?.last_error && (
+        <Alert color="red" icon={<IconAlertCircle size={18} />}>
+          Last synchronization failed: {integration.last_error}
+        </Alert>
+      )}
+
+      <SimpleGrid cols={{ base: 2, md: 4 }}>
+        <Box className="device-field"><Text size="xs" c="dimmed">DNS queries</Text><Text fw={700} size="xl">{number(summary?.total_queries)}</Text></Box>
+        <Box className="device-field"><Text size="xs" c="dimmed">Blocked queries</Text><Text fw={700} size="xl">{number(summary?.blocked_queries)}</Text></Box>
+        <Box className="device-field"><Text size="xs" c="dimmed">Unmatched clients</Text><Text fw={700} size="xl">{number(unmatchedSummary?.clients)}</Text></Box>
+        <Box className="device-field"><Text size="xs" c="dimmed">Last sync</Text><Text fw={600}>{formatDate(integration?.last_sync_at, timeZone)}</Text></Box>
+      </SimpleGrid>
+
+      <Group justify="space-between" align="flex-end" wrap="wrap">
+        <TextInput
+          w={{ base: '100%', sm: 320 }}
+          label="Search"
+          placeholder="Domain, device, IP, or MAC"
+          leftSection={<IconSearch size={17} />}
+          value={search}
+          onChange={(event) => setSearch(event.currentTarget.value)}
+        />
+        <Group align="flex-end" wrap="wrap">
+          <SegmentedControl value={filter} onChange={setFilter} data={[
+            { value: 'all', label: 'All' },
+            { value: 'allowed', label: 'Allowed' },
+            { value: 'blocked', label: 'Blocked' },
+          ]} />
+          <Select w={180} label="Sort" value={ordering} onChange={(value) => setOrdering(value || '-last_seen')} data={[
+            { value: '-last_seen', label: 'Latest activity' },
+            { value: '-query_count', label: 'Most queries' },
+            { value: '-blocked_count', label: 'Most blocked' },
+            { value: 'domain', label: 'Domain' },
+            { value: 'device__name', label: 'Device' },
+          ]} />
+        </Group>
+      </Group>
+
+      <ActivityTablePanel hasMore={hasNextActivityPage(activityPagination)} loadingMore={loadingMoreActivity} onLoadMore={loadMoreActivity}>
+        <LoadingOverlay visible={loading} />
+        <Table verticalSpacing="sm">
+          <Table.Thead><Table.Tr><Table.Th>Domain</Table.Th><Table.Th>Device</Table.Th><Table.Th>Type</Table.Th><Table.Th>Queries</Table.Th><Table.Th>Blocked</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>Last seen</Table.Th></Table.Tr></Table.Thead>
+          <Table.Tbody>
+            {activity.map((item) => (
+              <Table.Tr key={item.id}>
+                <Table.Td><Text fw={600}>{item.domain}</Text></Table.Td>
+                <Table.Td><UnstyledButton onClick={() => onSelectDevice({ id: item.device_id })}><Text fw={600} c="blue">{item.device_name}</Text><Text size="xs" c="dimmed">{item.device_ip}</Text></UnstyledButton></Table.Td>
+                <Table.Td>{item.query_type || '-'}</Table.Td>
+                <Table.Td>{number(item.query_count)}</Table.Td>
+                <Table.Td><Badge color={item.blocked_count ? 'red' : 'gray'} variant="light">{number(item.blocked_count)}</Badge></Table.Td>
+                <Table.Td style={{ whiteSpace: 'nowrap' }}>{formatDate(item.last_seen, timeZone)}</Table.Td>
+              </Table.Tr>
+            ))}
+            {!loading && activity.length === 0 && (
+              <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center" py="xl">No DNS activity matches these filters.</Text></Table.Td></Table.Tr>
+            )}
+          </Table.Tbody>
+        </Table>
+      </ActivityTablePanel>
+
+      <Divider />
+      <Box>
+        <Group justify="space-between" align="flex-end">
+          <Box><Title order={3}>Unmatched clients</Title><Text c="dimmed" size="sm">AdGuard client identifiers that do not match a current LanGuard device IP.</Text></Box>
+          <Badge color={unmatchedSummary?.clients ? 'orange' : 'gray'} variant="light">{number(unmatchedSummary?.clients)} clients</Badge>
+        </Group>
+        <Alert color="blue" mt="sm" icon={<IconAlertCircle size={18} />}>
+          Check DHCP, DNS forwarding, or stale client addresses. Activity can only be assigned when AdGuard records the device IP directly.
+        </Alert>
+      </Box>
+
+      <ActivityTablePanel hasMore={hasNextActivityPage(unmatchedPagination)} loadingMore={loadingMoreUnmatched} onLoadMore={loadMoreUnmatched}>
+        <Table verticalSpacing="sm">
+          <Table.Thead><Table.Tr><Table.Th>Client</Table.Th><Table.Th>Queries</Table.Th><Table.Th>Blocked</Table.Th><Table.Th>Last domain</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>Last seen</Table.Th></Table.Tr></Table.Thead>
+          <Table.Tbody>
+            {unmatchedClients.map((client) => (
+              <Table.Tr key={client.id}><Table.Td><Text fw={600}>{client.client}</Text></Table.Td><Table.Td>{number(client.query_count)}</Table.Td><Table.Td>{number(client.blocked_count)}</Table.Td><Table.Td>{client.last_domain || '-'}</Table.Td><Table.Td style={{ whiteSpace: 'nowrap' }}>{formatDate(client.last_seen, timeZone)}</Table.Td></Table.Tr>
+            ))}
+            {!loading && unmatchedClients.length === 0 && (
+              <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" ta="center" py="xl">All recorded AdGuard clients are matched.</Text></Table.Td></Table.Tr>
+            )}
+          </Table.Tbody>
+        </Table>
+      </ActivityTablePanel>
+    </Stack>
+  );
+}
+
 function ScanHistoryPage({ scanRuns, timeZone, pagination, loadingMore, onLoadMore }) {
   const [comparisonOpened, comparison] = useDisclosure(false);
   const comparableRunCount = scanRuns.filter(
@@ -4173,6 +4788,7 @@ const mainViewPaths = {
   events: '/events',
   history: '/scan-history',
   notifications: '/notifications',
+  dns: '/dns-activity',
   settings: '/settings',
 };
 
@@ -4993,6 +5609,16 @@ function Dashboard({
             >
               Notifications
             </Button>
+            <Button
+              className="sidebar-nav-button"
+              variant={!devicePageId && mainView === 'dns' ? 'filled' : 'subtle'}
+              justify="flex-start"
+              leftSection={<IconWorldSearch size={18} />}
+              onClick={() => navigateToView('dns')}
+              fullWidth
+            >
+              DNS Activity
+            </Button>
             {canManageUsers && (
               <>
                 <Divider my={4} />
@@ -5039,6 +5665,7 @@ function Dashboard({
               onBack={returnFromDevicePage}
               onSaved={async () => loadData({ quiet: true })}
               onDeleted={async () => {
+                await loadData({ quiet: true });
                 storeDashboardNavigationState({ mainView: 'dashboard', scrollY: 0 });
                 window.history.replaceState(
                   { languardMainView: 'dashboard' },
@@ -5089,6 +5716,8 @@ function Dashboard({
               loadingMore={activityLoadingMore.notifications}
               onLoadMore={loadMoreNotificationsData}
             />
+          ) : mainView === 'dns' ? (
+            <DNSActivityPage timeZone={displayTimeZone} onSelectDevice={openDevicePage} />
           ) : (
             <>
           <DashboardStatusCards counters={counters} />

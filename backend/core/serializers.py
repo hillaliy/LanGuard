@@ -6,8 +6,10 @@ from rest_framework import serializers
 from django.contrib.auth.models import User
 from .datetime_utils import utc_isoformat
 from .models import (
+    AdGuardUnmatchedClient,
     AppSettings,
     Device,
+    DeviceDNSActivity,
     DevicePort,
     NetworkEvent,
     NotificationDelivery,
@@ -112,6 +114,62 @@ class DevicePortSerializer(serializers.ModelSerializer):
         model = DevicePort
         fields = "__all__"
         read_only_fields = ("device", "firstseen", "lastseen")
+
+
+class DeviceDNSActivitySerializer(serializers.ModelSerializer):
+    first_seen = UTCDateTimeField(read_only=True)
+    last_seen = UTCDateTimeField(read_only=True)
+
+    class Meta:
+        model = DeviceDNSActivity
+        fields = (
+            "id",
+            "domain",
+            "query_type",
+            "query_count",
+            "blocked_count",
+            "first_seen",
+            "last_seen",
+            "last_status",
+            "last_reason",
+            "last_service_name",
+        )
+        read_only_fields = fields
+
+
+class GlobalDNSActivitySerializer(DeviceDNSActivitySerializer):
+    device_id = serializers.IntegerField(source="device.id", read_only=True)
+    device_name = serializers.CharField(source="device.name", read_only=True)
+    device_ip = serializers.CharField(source="device.ip", read_only=True)
+    device_mac = serializers.CharField(source="device.mac", read_only=True)
+
+    class Meta(DeviceDNSActivitySerializer.Meta):
+        fields = DeviceDNSActivitySerializer.Meta.fields + (
+            "device_id",
+            "device_name",
+            "device_ip",
+            "device_mac",
+        )
+
+
+class AdGuardUnmatchedClientSerializer(serializers.ModelSerializer):
+    first_seen = UTCDateTimeField(read_only=True)
+    last_seen = UTCDateTimeField(read_only=True)
+
+    class Meta:
+        model = AdGuardUnmatchedClient
+        fields = (
+            "id",
+            "client",
+            "query_count",
+            "blocked_count",
+            "first_seen",
+            "last_seen",
+            "last_domain",
+            "last_status",
+            "last_reason",
+        )
+        read_only_fields = fields
 
 
 RISKY_PORTS = {
@@ -477,10 +535,35 @@ class NotificationTestSerializer(serializers.Serializer):
         return attrs
 
 
+class AdGuardConnectionSerializer(serializers.Serializer):
+    url = serializers.URLField(max_length=2048)
+    username = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    password = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+    def validate(self, attrs):
+        username = attrs.get("username", "").strip()
+        password = attrs.get("password", "")
+        if username and not password:
+            saved = AppSettings.load()
+            if not saved.adguard_password:
+                raise serializers.ValidationError(
+                    {"password": "Enter the AdGuard Home password."}
+                )
+        return attrs
+
+
 class AppSettingsSerializer(serializers.ModelSerializer):
     updated_at = UTCDateTimeField(read_only=True)
+    adguard_last_sync_at = UTCDateTimeField(read_only=True)
     discord_configured = serializers.SerializerMethodField()
     telegram_configured = serializers.SerializerMethodField()
+    adguard_configured = serializers.SerializerMethodField()
+    adguard_password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=255,
+    )
 
     class Meta:
         model = AppSettings
@@ -506,6 +589,15 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "notification_quiet_hours_end",
             "notification_quiet_hours_days",
             "activity_cleanup_retention_days",
+            "adguard_enabled",
+            "adguard_url",
+            "adguard_username",
+            "adguard_password",
+            "adguard_configured",
+            "adguard_sync_interval",
+            "adguard_retention_days",
+            "adguard_last_sync_at",
+            "adguard_last_error",
             "home_map_layout",
             "updated_at",
         )
@@ -513,6 +605,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "discord_webhook": {"required": False, "allow_blank": True},
             "telegram_token": {"required": False, "allow_blank": True},
             "telegram_user_id": {"required": False, "allow_blank": True},
+            "adguard_url": {"required": False, "allow_blank": True},
+            "adguard_username": {"required": False, "allow_blank": True},
+            "adguard_last_sync_at": {"read_only": True},
+            "adguard_last_error": {"read_only": True},
             "updated_at": {"read_only": True},
         }
 
@@ -523,6 +619,40 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.BooleanField)
     def get_telegram_configured(self, obj):
         return bool(obj.telegram_token and obj.telegram_user_id)
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_adguard_configured(self, obj):
+        return bool(obj.adguard_url and (not obj.adguard_username or obj.adguard_password))
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        enabled = attrs.get(
+            "adguard_enabled",
+            self.instance.adguard_enabled if self.instance else False,
+        )
+        url = attrs.get("adguard_url", self.instance.adguard_url if self.instance else "")
+        username = attrs.get(
+            "adguard_username",
+            self.instance.adguard_username if self.instance else "",
+        ).strip()
+        password = attrs.get(
+            "adguard_password",
+            self.instance.adguard_password if self.instance else "",
+        )
+        if enabled and not url:
+            raise serializers.ValidationError(
+                {"adguard_url": "Configure the AdGuard Home URL before enabling sync."}
+            )
+        if enabled and username and not password:
+            raise serializers.ValidationError(
+                {"adguard_password": "Enter the AdGuard Home password."}
+            )
+        return attrs
+
+    def update(self, instance, validated_data):
+        if not validated_data.get("adguard_username", instance.adguard_username):
+            validated_data.setdefault("adguard_password", "")
+        return super().update(instance, validated_data)
 
     def validate_home_map_layout(self, value):
         validate_home_map_layout_value(value)
@@ -564,6 +694,20 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Activity cleanup retention must be at least 1 day.")
         if value > 3650:
             raise serializers.ValidationError("Activity cleanup retention must be 3650 days or less.")
+        return value
+
+    def validate_adguard_sync_interval(self, value):
+        if value < 1:
+            raise serializers.ValidationError("AdGuard sync interval must be at least 1 minute.")
+        if value > 1440:
+            raise serializers.ValidationError("AdGuard sync interval must be 1440 minutes or less.")
+        return value
+
+    def validate_adguard_retention_days(self, value):
+        if value < 1:
+            raise serializers.ValidationError("AdGuard retention must be at least 1 day.")
+        if value > 3650:
+            raise serializers.ValidationError("AdGuard retention must be 3650 days or less.")
         return value
 
     def validate_notification_quiet_hours_start(self, value):

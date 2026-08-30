@@ -111,6 +111,66 @@ class DevicePort(models.Model):
         return f"{self.device.name} {self.protocol}/{self.port} {status}"
 
 
+class DeviceDNSActivity(models.Model):
+    device = models.ForeignKey(
+        Device,
+        related_name="dns_activity",
+        on_delete=models.CASCADE,
+    )
+    domain = models.CharField(max_length=253)
+    query_type = models.CharField(max_length=16, blank=True, default="")
+    query_count = models.PositiveBigIntegerField(default=0)
+    blocked_count = models.PositiveBigIntegerField(default=0)
+    first_seen = models.DateTimeField()
+    last_seen = models.DateTimeField()
+    last_status = models.CharField(max_length=32, blank=True, default="")
+    last_reason = models.CharField(max_length=64, blank=True, default="")
+    last_service_name = models.CharField(max_length=128, blank=True, default="")
+
+    class Meta:
+        ordering = ["-last_seen", "domain", "query_type"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device", "domain", "query_type"],
+                name="unique_device_dns_domain_type",
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["device", "-last_seen"],
+                name="core_dns_device_seen_idx",
+            ),
+            models.Index(
+                fields=["device", "-blocked_count"],
+                name="core_dns_device_blocked_idx",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.device.name} - {self.domain} ({self.query_type or 'DNS'})"
+
+
+class AdGuardUnmatchedClient(models.Model):
+    client = models.CharField(max_length=255, unique=True)
+    query_count = models.PositiveBigIntegerField(default=0)
+    blocked_count = models.PositiveBigIntegerField(default=0)
+    first_seen = models.DateTimeField()
+    last_seen = models.DateTimeField()
+    last_domain = models.CharField(max_length=253, blank=True, default="")
+    last_status = models.CharField(max_length=32, blank=True, default="")
+    last_reason = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        ordering = ["-last_seen", "client"]
+        indexes = [
+            models.Index(fields=["-last_seen"], name="core_ag_unmatched_seen_idx"),
+            models.Index(fields=["-query_count"], name="core_ag_unmatched_query_idx"),
+        ]
+
+    def __str__(self):
+        return self.client
+
+
 class ScanRun(models.Model):
     class Status(models.TextChoices):
         RUNNING = "running", "Running"
@@ -253,6 +313,14 @@ class AppSettings(models.Model):
         blank=True,
     )
     activity_cleanup_retention_days = models.PositiveIntegerField(default=90)
+    adguard_enabled = models.BooleanField(default=False)
+    adguard_url = models.URLField(max_length=2048, blank=True, default="")
+    adguard_username = models.CharField(max_length=255, blank=True, default="")
+    adguard_password = models.CharField(max_length=255, blank=True, default="")
+    adguard_sync_interval = models.PositiveIntegerField(default=5)
+    adguard_retention_days = models.PositiveIntegerField(default=90)
+    adguard_last_sync_at = models.DateTimeField(blank=True, null=True)
+    adguard_last_error = models.TextField(blank=True, default="")
     home_map_layout = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -288,6 +356,14 @@ class AppSettings(models.Model):
             "notification_quiet_hours_end": "07:00",
             "notification_quiet_hours_days": default_quiet_hours_days(),
             "activity_cleanup_retention_days": 90,
+            "adguard_enabled": False,
+            "adguard_url": "",
+            "adguard_username": "",
+            "adguard_password": "",
+            "adguard_sync_interval": 5,
+            "adguard_retention_days": 90,
+            "adguard_last_sync_at": None,
+            "adguard_last_error": "",
             "home_map_layout": {},
         }
         config, _ = cls.objects.get_or_create(singleton_key=1, defaults=defaults)
