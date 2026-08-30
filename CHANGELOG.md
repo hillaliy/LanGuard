@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added dedicated Docker routes for Dashboard, Home Map, Events, Scan history, Notifications, and Settings with working refresh and browser Back/Forward navigation.
+- Added a dedicated Not Found page and proper HTTP 404 responses for unknown Docker routes.
+
 ## 1.8.1 - 2026-08-30
 
 - **Docker/web only:** Fixed backend health checks being rejected when custom `ALLOWED_HOSTS` omitted the internal loopback address, which could prevent dependent containers from starting or staying available.

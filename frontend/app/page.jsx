@@ -4167,6 +4167,33 @@ function NotificationsPage({
 
 const activityPageLimit = 500;
 const dashboardStateStorageKey = 'languard_dashboard_navigation_state';
+const mainViewPaths = {
+  dashboard: '/dashboard',
+  'home-map': '/home-map',
+  events: '/events',
+  history: '/scan-history',
+  notifications: '/notifications',
+  settings: '/settings',
+};
+
+function mainViewPath(view) {
+  return mainViewPaths[view] || mainViewPaths.dashboard;
+}
+
+function mainViewFromPath(pathname) {
+  const normalizedPath = pathname.replace(/\/+$/, '') || '/';
+  if (normalizedPath === '/') {
+    return 'dashboard';
+  }
+  return (
+    Object.entries(mainViewPaths).find(([, path]) => path === normalizedPath)?.[0]
+    || 'dashboard'
+  );
+}
+
+function deviceIdFromPath(pathname) {
+  return pathname.match(/^\/devices\/(\d+)\/?$/)?.[1] || '';
+}
 
 function activityRecordLabel(pagination, loadedCount) {
   const total = pagination?.count ?? loadedCount;
@@ -4194,7 +4221,13 @@ function appendUniqueById(current, incoming) {
   ];
 }
 
-function Dashboard({ user, onLogout, onUserUpdated, initialDeviceId = null }) {
+function Dashboard({
+  user,
+  onLogout,
+  onUserUpdated,
+  initialDeviceId = null,
+  initialView = 'dashboard',
+}) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
@@ -4229,7 +4262,7 @@ function Dashboard({ user, onLogout, onUserUpdated, initialDeviceId = null }) {
   const [deviceStatus, setDeviceStatus] = useState('');
   const [firstSeenPeriod, setFirstSeenPeriod] = useState('');
   const [inventoryView, setInventoryView] = useState('table');
-  const [mainView, setMainView] = useState('dashboard');
+  const [mainView, setMainView] = useState(initialView);
   const [deviceOrdering, setDeviceOrdering] = useState('');
   const [eventType, setEventType] = useState('');
   const [devicePageId, setDevicePageId] = useState(
@@ -4290,32 +4323,55 @@ function Dashboard({ user, onLogout, onUserUpdated, initialDeviceId = null }) {
     );
   }
 
+  function storeCurrentHistoryState() {
+    window.history.replaceState(
+      {
+        ...window.history.state,
+        languardMainView: mainView,
+        scrollY: window.scrollY,
+        deviceListScrollTop: deviceListRef.current?.scrollTop || 0,
+      },
+      '',
+      window.location.href
+    );
+  }
+
   function openDevicePage(device) {
     if (!device?.id) {
       return;
     }
     storeDashboardNavigationState();
+    storeCurrentHistoryState();
     window.history.pushState({ languardDevicePage: true }, '', `/devices/${device.id}`);
     setDevicePageId(String(device.id));
     window.setTimeout(() => window.scrollTo({ top: 0 }), 0);
   }
 
   function navigateToView(view) {
+    const targetPath = mainViewPath(view);
     if (devicePageId) {
       storeDashboardNavigationState({ mainView: view, scrollY: 0 });
-      window.history.pushState({}, '', '/');
+      window.history.pushState({ languardMainView: view, scrollY: 0 }, '', targetPath);
       setDevicePageId('');
       setMainView(view);
+      window.setTimeout(() => window.scrollTo({ top: 0 }), 0);
       return;
     }
+    if (mainView === view && window.location.pathname === targetPath) {
+      return;
+    }
+    storeCurrentHistoryState();
+    window.history.pushState({ languardMainView: view, scrollY: 0 }, '', targetPath);
     setMainView(view);
+    window.setTimeout(() => window.scrollTo({ top: 0 }), 0);
   }
 
   function returnFromDevicePage() {
     if (window.history.state?.languardDevicePage) {
       window.history.back();
     } else {
-      window.history.replaceState({}, '', '/');
+      const targetPath = mainViewPath(mainView);
+      window.history.replaceState({ languardMainView: mainView }, '', targetPath);
       setDevicePageId('');
     }
   }
@@ -4324,13 +4380,29 @@ function Dashboard({ user, onLogout, onUserUpdated, initialDeviceId = null }) {
     const previousScrollRestoration = window.history.scrollRestoration;
     window.history.scrollRestoration = 'manual';
 
-    function deviceIdFromPath() {
-      return window.location.pathname.match(/^\/devices\/(\d+)\/?$/)?.[1] || '';
+    const initialPathDeviceId = deviceIdFromPath(window.location.pathname);
+    const pathView = mainViewFromPath(window.location.pathname);
+    setDevicePageId((current) => current || initialPathDeviceId);
+    if (!initialPathDeviceId) {
+      setMainView(pathView);
+      window.history.replaceState(
+        { ...window.history.state, languardMainView: pathView },
+        '',
+        mainViewPath(pathView)
+      );
     }
 
-    setDevicePageId((current) => current || deviceIdFromPath());
-    function handlePopState() {
-      setDevicePageId(deviceIdFromPath());
+    function handlePopState(event) {
+      const nextDeviceId = deviceIdFromPath(window.location.pathname);
+      setDevicePageId(nextDeviceId);
+      if (!nextDeviceId) {
+        setMainView(mainViewFromPath(window.location.pathname));
+        pendingDashboardScrollRef.current = Math.max(Number(event.state?.scrollY) || 0, 0);
+        pendingDeviceListScrollRef.current = Math.max(
+          Number(event.state?.deviceListScrollTop) || 0,
+          0
+        );
+      }
     }
     window.addEventListener('popstate', handlePopState);
     return () => {
@@ -4570,7 +4642,7 @@ function Dashboard({ user, onLogout, onUserUpdated, initialDeviceId = null }) {
       setDeviceStatus(state.deviceStatus || '');
       setFirstSeenPeriod(state.firstSeenPeriod || '');
       setInventoryView(state.inventoryView || 'table');
-      setMainView(state.mainView || 'dashboard');
+      setMainView(mainViewFromPath(window.location.pathname));
       setDeviceOrdering(state.deviceOrdering || '');
       setEventType(state.eventType || '');
       tableStateRef.current = {
@@ -4968,7 +5040,11 @@ function Dashboard({ user, onLogout, onUserUpdated, initialDeviceId = null }) {
               onSaved={async () => loadData({ quiet: true })}
               onDeleted={async () => {
                 storeDashboardNavigationState({ mainView: 'dashboard', scrollY: 0 });
-                window.history.replaceState({}, '', '/');
+                window.history.replaceState(
+                  { languardMainView: 'dashboard' },
+                  '',
+                  mainViewPath('dashboard')
+                );
                 setDevicePageId('');
                 setMainView('dashboard');
               }}
@@ -5358,7 +5434,10 @@ function Dashboard({ user, onLogout, onUserUpdated, initialDeviceId = null }) {
 }
 
 
-export function LanGuardApplication({ initialDeviceId = null }) {
+export function LanGuardApplication({
+  initialDeviceId = null,
+  initialView = 'dashboard',
+}) {
   const [user, setUser] = useState(null);
   const [ready, setReady] = useState(false);
 
@@ -5381,10 +5460,11 @@ export function LanGuardApplication({ initialDeviceId = null }) {
       onLogout={() => setUser(null)}
       onUserUpdated={setUser}
       initialDeviceId={initialDeviceId}
+      initialView={initialView}
     />
   );
 }
 
 export default function Home() {
-  return <LanGuardApplication />;
+  return <LanGuardApplication initialView="dashboard" />;
 }
