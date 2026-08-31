@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.9.2 - 2026-08-31
+
+- **Docker/web only:** Added configurable backend port support through `BACKEND_LISTEN_PORT`, including matching health-check and frontend proxy configuration for hosts where port `8000` is already occupied.
+
 ## 1.9.1 - 2026-08-31
 
 - **Docker/web only:** Disabled the frontend Caddy administration endpoint to prevent host-network port `2019` conflicts with existing Caddy installations.

@@ -102,11 +102,12 @@ services:
     environment:
       - SECRET_KEY=change-this-to-a-long-random-secret
       - ALLOWED_HOSTS=192.168.1.10,languard.local,127.0.0.1
+      - BACKEND_LISTEN_PORT=${BACKEND_LISTEN_PORT:-8000}
     volumes:
       - languard_database:/data
       - languard_static:/static
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/', timeout=3).read()"]
+      test: ["CMD", "python", "-c", "import os, urllib.request; port = os.environ.get('BACKEND_LISTEN_PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/api/v1/health/', timeout=3).read()"]
       interval: 10s
       timeout: 5s
       retries: 6
@@ -136,7 +137,7 @@ services:
     container_name: languard-frontend
     network_mode: host
     environment:
-      - BACKEND_UPSTREAM=127.0.0.1:8000
+      - BACKEND_UPSTREAM=127.0.0.1:${BACKEND_LISTEN_PORT:-8000}
       - FRONTEND_LISTEN_ADDRESS=:8080
     restart: unless-stopped
     depends_on:
@@ -168,6 +169,19 @@ The frontend uses host networking so it can reach the backend reliably at
 `127.0.0.1:8000` without depending on Docker bridge routing. It listens on port
 `8080` by default. To use another UI port, change `FRONTEND_LISTEN_ADDRESS`, for
 example to `:8090`.
+
+The backend listens on port `8000` by default. If that port is already used on
+the Docker host, add `BACKEND_LISTEN_PORT=8010` under **Stack environment
+variables** in Portainer before deploying or updating the stack. The Compose
+definition applies that value to the backend server, its health check, and the
+frontend proxy together. This is useful when Portainer's optional Edge Agent
+tunnel already occupies port `8000`.
+
+When hard-coding the value directly in YAML instead, set
+`BACKEND_LISTEN_PORT: 8010` in the backend environment and
+`BACKEND_UPSTREAM: 127.0.0.1:8010` in the frontend environment. Do not change
+only the backend value, because the frontend proxy must use the same port. The
+health check reads `BACKEND_LISTEN_PORT` automatically.
 
 ### Scheduler tasks
 
