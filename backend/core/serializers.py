@@ -512,9 +512,11 @@ class NotificationTestSerializer(serializers.Serializer):
         choices=(
             NotificationDelivery.Channel.DISCORD,
             NotificationDelivery.Channel.TELEGRAM,
+            NotificationDelivery.Channel.WEBHOOK,
         )
     )
     discord_webhook = serializers.URLField(required=False, allow_blank=True)
+    webhook_url = serializers.URLField(required=False, allow_blank=True, max_length=2048)
     telegram_token = serializers.CharField(
         required=False,
         allow_blank=True,
@@ -533,9 +535,10 @@ class NotificationTestSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"discord_webhook": "Enter a Discord webhook URL."}
                 )
-        elif not attrs.get("telegram_token", "").strip() or not attrs.get(
-            "telegram_user_id", ""
-        ).strip():
+        elif channel == NotificationDelivery.Channel.TELEGRAM and (
+            not attrs.get("telegram_token", "").strip()
+            or not attrs.get("telegram_user_id", "").strip()
+        ):
             raise serializers.ValidationError(
                 {
                     "telegram": (
@@ -543,6 +546,11 @@ class NotificationTestSerializer(serializers.Serializer):
                     )
                 }
             )
+        elif channel == NotificationDelivery.Channel.WEBHOOK:
+            if not attrs.get("webhook_url", "").strip():
+                raise serializers.ValidationError(
+                    {"webhook_url": "Enter a webhook URL."}
+                )
         return attrs
 
 
@@ -568,6 +576,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     adguard_last_sync_at = UTCDateTimeField(read_only=True)
     discord_configured = serializers.SerializerMethodField()
     telegram_configured = serializers.SerializerMethodField()
+    webhook_configured = serializers.SerializerMethodField()
     adguard_configured = serializers.SerializerMethodField()
     adguard_password = serializers.CharField(
         write_only=True,
@@ -596,6 +605,9 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "telegram_token",
             "telegram_user_id",
             "telegram_configured",
+            "webhook_enabled",
+            "webhook_url",
+            "webhook_configured",
             "notify_new_devices",
             "notify_device_online",
             "notify_device_offline",
@@ -621,6 +633,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "discord_webhook": {"required": False, "allow_blank": True},
             "telegram_token": {"required": False, "allow_blank": True},
             "telegram_user_id": {"required": False, "allow_blank": True},
+            "webhook_url": {"required": False, "allow_blank": True},
             "adguard_url": {"required": False, "allow_blank": True},
             "adguard_username": {"required": False, "allow_blank": True},
             "adguard_last_sync_at": {"read_only": True},
@@ -637,11 +650,28 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return bool(obj.telegram_token and obj.telegram_user_id)
 
     @extend_schema_field(serializers.BooleanField)
+    def get_webhook_configured(self, obj):
+        return bool(obj.webhook_url)
+
+    @extend_schema_field(serializers.BooleanField)
     def get_adguard_configured(self, obj):
         return bool(obj.adguard_url and (not obj.adguard_username or obj.adguard_password))
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        webhook_enabled = attrs.get(
+            "webhook_enabled",
+            self.instance.webhook_enabled if self.instance else False,
+        )
+        webhook_url = attrs.get(
+            "webhook_url",
+            self.instance.webhook_url if self.instance else "",
+        )
+        if webhook_enabled and not webhook_url:
+            raise serializers.ValidationError(
+                {"webhook_url": "Configure the webhook URL before enabling delivery."}
+            )
+
         enabled = attrs.get(
             "adguard_enabled",
             self.instance.adguard_enabled if self.instance else False,

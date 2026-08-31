@@ -24,11 +24,13 @@ from .models import (
 )
 from .notifications import (
     format_discord_payload,
+    format_webhook_payload,
     notify_event,
     quiet_hours_active,
     retry_failed_notifications,
     send_discord_test,
     send_telegram_test,
+    send_webhook_test,
 )
 from .serializers import device_identity
 from .views import parse_inventory_datetime
@@ -1450,6 +1452,47 @@ class NotificationTests(TestCase):
             post.call_args.kwargs["json"]["text"],
         )
 
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
+    def test_webhook_test_uses_structured_payload(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+
+        send_webhook_test("https://automation.example/webhook/languard")
+
+        post.assert_called_once()
+        self.assertEqual(
+            post.call_args.args[0],
+            "https://automation.example/webhook/languard",
+        )
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["source"], "languard")
+        self.assertEqual(payload["kind"], "test")
+        self.assertIn("channel is working", payload["message"])
+        self.assertTrue(payload["created_at"].endswith("Z"))
+
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
+    def test_webhook_notification_delivery_is_recorded(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        AppSettings.objects.create(
+            webhook_enabled=True,
+            webhook_url="https://automation.example/webhook/languard",
+        )
+
+        deliveries = notify_event(self.event)
+
+        self.assertEqual(len(deliveries), 1)
+        delivery = NotificationDelivery.objects.get(event=self.event)
+        self.assertEqual(delivery.channel, NotificationDelivery.Channel.WEBHOOK)
+        self.assertEqual(delivery.status, NotificationDelivery.Status.SENT)
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload, format_webhook_payload(self.event))
+        self.assertEqual(payload["source"], "languard")
+        self.assertEqual(payload["kind"], "network_event")
+        self.assertEqual(payload["event"]["type"], "new_device")
+        self.assertEqual(payload["device"]["mac"], "11:22:33:44:55:66")
+        self.assertEqual(payload["device"]["ip"], "192.168.1.50")
+
     @override_settings(
         NOTIFICATIONS_ENABLED=True,
         DISCORD_WEBHOOK="https://discord.example/webhook",
@@ -2011,6 +2054,33 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         send_test.assert_called_once_with("bot-token", "123456")
 
+    @patch("core.views.send_webhook_test")
+    def test_notification_test_endpoint_sends_webhook(self, send_test):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "webhook",
+                "webhook_url": "https://automation.example/webhook/languard",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["channel"], "webhook")
+        send_test.assert_called_once_with(
+            "https://automation.example/webhook/languard"
+        )
+
+    def test_notification_test_endpoint_rejects_missing_webhook_url(self):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {"channel": "webhook"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("webhook_url", response.data)
+
     def test_notification_test_endpoint_rejects_incomplete_credentials(self):
         response = self.client.post(
             "/api/v1/notifications/test/",
@@ -2119,6 +2189,7 @@ class ScanApiTests(TestCase):
                 "version_check_interval": 3600,
                 "discord_enabled": False,
                 "telegram_enabled": True,
+                "webhook_enabled": True,
                 "notify_new_devices": True,
                 "notify_device_online": True,
                 "notify_device_offline": True,
@@ -2131,6 +2202,7 @@ class ScanApiTests(TestCase):
                 "discord_webhook": "https://discord.example/webhook",
                 "telegram_token": "token",
                 "telegram_user_id": "123",
+                "webhook_url": "https://automation.example/webhook/languard",
                 "home_map_layout": {
                     "order": ["Floor", "Bedroom"],
                     "parents": {"Bedroom": "Floor"},
@@ -2147,6 +2219,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(config.version_check_interval, 3600)
         self.assertFalse(config.discord_enabled)
         self.assertTrue(config.telegram_enabled)
+        self.assertTrue(config.webhook_enabled)
         self.assertTrue(config.notify_new_devices)
         self.assertTrue(config.notify_device_online)
         self.assertTrue(config.notify_device_offline)
@@ -2164,6 +2237,10 @@ class ScanApiTests(TestCase):
         self.assertEqual(config.telegram_token, "token")
         self.assertEqual(config.telegram_user_id, "123")
         self.assertEqual(
+            config.webhook_url,
+            "https://automation.example/webhook/languard",
+        )
+        self.assertEqual(
             response.data["data"]["discord_webhook"],
             "https://discord.example/webhook",
         )
@@ -2171,6 +2248,8 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["data"]["telegram_user_id"], "123")
         self.assertFalse(response.data["data"]["discord_enabled"])
         self.assertTrue(response.data["data"]["telegram_enabled"])
+        self.assertTrue(response.data["data"]["webhook_enabled"])
+        self.assertTrue(response.data["data"]["webhook_configured"])
         self.assertTrue(response.data["data"]["discord_configured"])
         self.assertEqual(response.data["data"]["version_check_interval"], 3600)
         self.assertTrue(response.data["data"]["notify_device_online"])
@@ -2198,6 +2277,16 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("version_check_interval", response.data)
+
+    def test_settings_endpoint_rejects_enabled_webhook_without_url(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"webhook_enabled": True, "webhook_url": ""},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("webhook_url", response.data)
 
     def test_settings_endpoint_rejects_bad_quiet_hours(self):
         response = self.client.put(

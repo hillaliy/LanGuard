@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Licensed LanGuard under the Apache License 2.0 with matching contributor terms and documentation.
+- Added a generic automation webhook notification channel with structured JSON payloads, connection testing, delivery history, and automatic retries for tools such as n8n and Home Assistant.
 
 ## 1.10.0 - 2026-09-01
 

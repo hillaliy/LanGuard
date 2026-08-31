@@ -26,8 +26,8 @@
 </p>
 
 LanGuard finds devices, tracks online and offline state, scans common ports,
-keeps network history, and can send Discord or Telegram alerts when new devices
-appear.
+keeps network history, and can send Discord, Telegram, or automation webhook
+alerts when new devices appear.
 
 ## Preview
 
@@ -65,7 +65,7 @@ appear.
 
 **Notify and integrate**
 
-- Send Discord or Telegram alerts for new devices and important changes
+- Send Discord, Telegram, or generic webhook alerts for new devices and important changes
 - Sync per-device DNS destinations and blocked-query totals from AdGuard Home
 - Use Swagger, ReDoc, and the OpenAPI schema for integrations
 - Create the initial administrator directly from first-user setup
@@ -234,7 +234,7 @@ You normally do not need `CORS_ALLOWED_ORIGINS` in the Portainer stack. The fron
 
 Open `http://<docker-host-ip>:8080` and create the first user. That user becomes admin. There is no default admin password.
 
-After sign in, open Settings to change the scan range, scan interval, timezone, Discord webhook, or Telegram settings.
+After sign in, open Settings to change the scan range, scan interval, timezone, and notification channels.
 
 The scanner waits for the configured scan interval after a scan completes before starting the next scheduled scan. For example, with a 5 minute interval, a scan that finishes at 20:14 will schedule the next scan for about 20:19.
 
@@ -278,6 +278,51 @@ integration is included in a release.
 > Home only sees the router IP, LanGuard can only associate that activity with
 > the router. Configure clients or DHCP to use AdGuard Home directly when you
 > need device-level activity.
+
+## Automation webhooks
+
+LanGuard can send each enabled network event as structured JSON to n8n, Home
+Assistant, or another automation service that accepts HTTP webhooks.
+
+1. Create a webhook trigger in the automation service and copy its production URL.
+2. In LanGuard, open **Settings > Notifications**.
+3. Enable **Automation webhook**, paste the URL, and use the test action.
+4. Save Settings and enable the event rules that should be delivered.
+
+Event deliveries use this structure:
+
+```json
+{
+  "source": "languard",
+  "kind": "network_event",
+  "event": {
+    "id": 42,
+    "type": "new_device",
+    "label": "New device",
+    "message": "Found new device Office laptop at 192.168.1.50",
+    "created_at": "2026-08-31T08:15:00Z",
+    "metadata": {}
+  },
+  "device": {
+    "id": 12,
+    "name": "Office laptop",
+    "hostname": "office-laptop",
+    "ip": "192.168.1.50",
+    "mac": "02:00:00:00:00:12",
+    "vendor": "Example Vendor",
+    "role": "laptop",
+    "room": "Office",
+    "known": false,
+    "online": true,
+    "status": "online"
+  },
+  "scan_run_id": 18
+}
+```
+
+The webhook follows the same event rules and quiet hours as Discord and
+Telegram. A non-success HTTP response is recorded as a failed notification and
+the scheduler retries it with the existing notification retry policy.
 
 ## Migrate from WatchYourLAN
 

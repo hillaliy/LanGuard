@@ -96,6 +96,7 @@ import {
   IconWifi,
   IconWindmill,
   IconWindow,
+  IconWebhook,
   IconWorldSearch,
   IconX,
 } from '@tabler/icons-react';
@@ -3350,11 +3351,14 @@ function SettingsPage({ onSaved }) {
   const [timeZone, setTimeZone] = useState('UTC');
   const [discordEnabled, setDiscordEnabled] = useState(true);
   const [telegramEnabled, setTelegramEnabled] = useState(true);
+  const [webhookEnabled, setWebhookEnabled] = useState(false);
   const [discordConfigured, setDiscordConfigured] = useState(false);
   const [telegramConfigured, setTelegramConfigured] = useState(false);
+  const [webhookConfigured, setWebhookConfigured] = useState(false);
   const [discordWebhook, setDiscordWebhook] = useState('');
   const [telegramToken, setTelegramToken] = useState('');
   const [telegramUserId, setTelegramUserId] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('');
   const [adguardEnabled, setAdguardEnabled] = useState(false);
   const [adguardConfigured, setAdguardConfigured] = useState(false);
   const [adguardUrl, setAdguardUrl] = useState('');
@@ -3398,11 +3402,14 @@ function SettingsPage({ onSaved }) {
       setTimeZone(data.time_zone || 'UTC');
       setDiscordEnabled(Boolean(data.discord_enabled));
       setTelegramEnabled(Boolean(data.telegram_enabled));
+      setWebhookEnabled(Boolean(data.webhook_enabled));
       setDiscordConfigured(Boolean(data.discord_configured));
       setTelegramConfigured(Boolean(data.telegram_configured));
+      setWebhookConfigured(Boolean(data.webhook_configured));
       setDiscordWebhook(data.discord_webhook || '');
       setTelegramToken(data.telegram_token || '');
       setTelegramUserId(data.telegram_user_id || '');
+      setWebhookUrl(data.webhook_url || '');
       setAdguardEnabled(Boolean(data.adguard_enabled));
       setAdguardConfigured(Boolean(data.adguard_configured));
       setAdguardUrl(data.adguard_url || '');
@@ -3447,6 +3454,7 @@ function SettingsPage({ onSaved }) {
         time_zone: timeZone,
         discord_enabled: discordEnabled,
         telegram_enabled: telegramEnabled,
+        webhook_enabled: webhookEnabled,
         notify_new_devices: notifyNewDevices,
         notify_device_online: notifyDeviceOnline,
         notify_device_offline: notifyDeviceOffline,
@@ -3465,6 +3473,7 @@ function SettingsPage({ onSaved }) {
       body.discord_webhook = discordWebhook;
       body.telegram_token = telegramToken;
       body.telegram_user_id = telegramUserId;
+      body.webhook_url = webhookUrl.trim();
       if (adguardPassword) {
         body.adguard_password = adguardPassword;
       }
@@ -3485,14 +3494,18 @@ function SettingsPage({ onSaved }) {
     setTestingChannel(channel);
     setError('');
     try {
-      const body =
-        channel === 'discord'
-          ? { channel, discord_webhook: discordWebhook.trim() }
-          : {
-              channel,
-              telegram_token: telegramToken.trim(),
-              telegram_user_id: telegramUserId.trim(),
-            };
+      let body;
+      if (channel === 'discord') {
+        body = { channel, discord_webhook: discordWebhook.trim() };
+      } else if (channel === 'telegram') {
+        body = {
+          channel,
+          telegram_token: telegramToken.trim(),
+          telegram_user_id: telegramUserId.trim(),
+        };
+      } else {
+        body = { channel, webhook_url: webhookUrl.trim() };
+      }
       const payload = await apiRequest('notifications/test/', { method: 'POST', body });
       showServerNotification(payload);
     } catch (err) {
@@ -3917,6 +3930,50 @@ function SettingsPage({ onSaved }) {
                   Boolean(testingChannel && testingChannel !== 'telegram')
                 }
                 onClick={() => testNotificationChannel('telegram')}
+              >
+                <IconSend size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Stack>
+
+        <Stack className="settings-subsection" gap="sm">
+          <Group justify="space-between">
+            <Group gap="sm">
+              <Group gap={6}>
+                <IconWebhook size={18} />
+                <Text fw={700}>Automation webhook</Text>
+              </Group>
+              <Switch
+                label="Enabled"
+                checked={webhookEnabled}
+                onChange={(event) => setWebhookEnabled(event.currentTarget.checked)}
+              />
+            </Group>
+            <Badge color={webhookConfigured && webhookEnabled ? 'teal' : 'gray'} variant="light">
+              {webhookConfigured ? 'Configured' : 'Not configured'}
+            </Badge>
+          </Group>
+          <Group align="flex-end" wrap="nowrap">
+            <TextInput
+              style={{ flex: 1 }}
+              label="Webhook URL"
+              description="Send structured network events to n8n, Home Assistant, or another automation service."
+              placeholder="https://automation.example/webhook/languard"
+              value={webhookUrl}
+              onChange={(event) => setWebhookUrl(event.currentTarget.value)}
+            />
+            <Tooltip label="Send test notification">
+              <ActionIcon
+                size={36}
+                variant="light"
+                aria-label="Send webhook test notification"
+                loading={testingChannel === 'webhook'}
+                disabled={
+                  !webhookUrl.trim() ||
+                  Boolean(testingChannel && testingChannel !== 'webhook')
+                }
+                onClick={() => testNotificationChannel('webhook')}
               >
                 <IconSend size={18} />
               </ActionIcon>

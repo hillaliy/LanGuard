@@ -29,6 +29,8 @@ def configured_channels(app_config=None):
         channels.append(NotificationDelivery.Channel.DISCORD)
     if app_config.telegram_enabled and app_config.telegram_token and app_config.telegram_user_id:
         channels.append(NotificationDelivery.Channel.TELEGRAM)
+    if app_config.webhook_enabled and app_config.webhook_url:
+        channels.append(NotificationDelivery.Channel.WEBHOOK)
     return channels
 
 
@@ -162,6 +164,8 @@ def send_delivery(delivery, app_config=None):
             send_discord(delivery.event, app_config)
         elif delivery.channel == NotificationDelivery.Channel.TELEGRAM:
             send_telegram(delivery.event, app_config)
+        elif delivery.channel == NotificationDelivery.Channel.WEBHOOK:
+            send_webhook(delivery.event, app_config)
         else:
             delivery.status = NotificationDelivery.Status.SKIPPED
             delivery.error = f"Unsupported channel: {delivery.channel}"
@@ -207,6 +211,15 @@ def send_telegram(event, app_config):
     response.raise_for_status()
 
 
+def send_webhook(event, app_config):
+    response = requests.post(
+        app_config.webhook_url,
+        json=format_webhook_payload(event),
+        timeout=settings.NOTIFICATION_TIMEOUT,
+    )
+    response.raise_for_status()
+
+
 def send_discord_test(webhook):
     response = requests.post(
         webhook,
@@ -229,6 +242,20 @@ def send_telegram_test(token, user_id):
     response.raise_for_status()
 
 
+def send_webhook_test(webhook_url):
+    response = requests.post(
+        webhook_url,
+        json={
+            "source": "languard",
+            "kind": "test",
+            "message": TEST_NOTIFICATION_MESSAGE,
+            "created_at": utc_isoformat(timezone.now()),
+        },
+        timeout=settings.NOTIFICATION_TIMEOUT,
+    )
+    response.raise_for_status()
+
+
 def format_event_message(event):
     device = event.device
     lines = [
@@ -241,6 +268,36 @@ def format_event_message(event):
     if device.vendor:
         lines.append(f"Vendor: {device.vendor}")
     return "\n".join(lines)
+
+
+def format_webhook_payload(event):
+    device = event.device
+    return {
+        "source": "languard",
+        "kind": "network_event",
+        "event": {
+            "id": event.id,
+            "type": event.event_type,
+            "label": event.get_event_type_display(),
+            "message": event.message,
+            "created_at": utc_isoformat(event.created_at),
+            "metadata": event.metadata or {},
+        },
+        "device": {
+            "id": device.id,
+            "name": device.name,
+            "hostname": device.hostname,
+            "ip": device.ip,
+            "mac": device.mac,
+            "vendor": device.vendor,
+            "role": device.role,
+            "room": device.room,
+            "known": device.known,
+            "online": device.online,
+            "status": device.status,
+        },
+        "scan_run_id": event.scan_run_id,
+    }
 
 
 def format_discord_test_payload():

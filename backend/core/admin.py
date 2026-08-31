@@ -104,6 +104,7 @@ class AppSettingsAdmin(admin.ModelAdmin):
         "adguard_retention_days",
         "time_zone",
         "notifications_enabled",
+        "webhook_enabled",
         "updated_at",
     )
     readonly_fields = ("singleton_key", "updated_at")

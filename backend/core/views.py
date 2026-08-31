@@ -67,7 +67,7 @@ from .api import (
     parse_int_param,
 )
 from .scan import detect_web_interface, scan, validate_ip_range
-from .notifications import send_discord_test, send_telegram_test
+from .notifications import send_discord_test, send_telegram_test, send_webhook_test
 from .adguard import AdGuardError, sync_adguard_query_log, test_adguard_connection
 from .diagnostics import build_diagnostics_report
 from .user_messages import error_response, scan_error_message, success_response
@@ -1077,11 +1077,13 @@ def test_notification_channel(request):
     try:
         if channel == NotificationDelivery.Channel.DISCORD:
             send_discord_test(data["discord_webhook"].strip())
-        else:
+        elif channel == NotificationDelivery.Channel.TELEGRAM:
             send_telegram_test(
                 data["telegram_token"].strip(),
                 data["telegram_user_id"].strip(),
             )
+        else:
+            send_webhook_test(data["webhook_url"].strip())
     except requests.Timeout:
         return error_response(
             "Test notification failed",
