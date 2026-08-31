@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 1.9.1 - 2026-08-31
+
+- **Docker/web only:** Disabled the frontend Caddy administration endpoint to prevent host-network port `2019` conflicts with existing Caddy installations.
+
 ## 1.9.0 - 2026-08-31
 
 - **Docker deployment change:** Moved the frontend to host networking so its backend proxy connects directly through `127.0.0.1`, avoiding login and API failures when Docker bridge-to-host traffic is unavailable. The UI continues to listen on port `8080` by default.
