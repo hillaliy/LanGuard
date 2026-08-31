@@ -31,7 +31,7 @@ echo "Starting backend web server..."
 exec granian \
     --interface wsgi \
     --host 0.0.0.0 \
-    --port 8000 \
+    --port "${BACKEND_LISTEN_PORT:-8000}" \
     --workers "${GRANIAN_WORKERS:-1}" \
     --blocking-threads "${GRANIAN_BLOCKING_THREADS:-4}" \
     --backpressure "${GRANIAN_BACKPRESSURE:-32}" \
