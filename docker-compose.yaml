@@ -43,12 +43,10 @@ services:
   frontend:
     image: ghcr.io/hillaliy/languard-frontend:latest
     container_name: languard-frontend
+    network_mode: host
     environment:
-      BACKEND_UPSTREAM: host.docker.internal:8000
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    ports:
-      - "8080:80"
+      BACKEND_UPSTREAM: 127.0.0.1:8000
+      FRONTEND_LISTEN_ADDRESS: :8080
     restart: unless-stopped
     depends_on:
       backend:

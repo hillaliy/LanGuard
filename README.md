@@ -134,12 +134,10 @@ services:
   frontend:
     image: ghcr.io/hillaliy/languard-frontend:latest
     container_name: languard-frontend
+    network_mode: host
     environment:
-      - BACKEND_UPSTREAM=host.docker.internal:8000
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    ports:
-      - 8080:80
+      - BACKEND_UPSTREAM=127.0.0.1:8000
+      - FRONTEND_LISTEN_ADDRESS=:8080
     restart: unless-stopped
     depends_on:
       backend:
@@ -151,12 +149,25 @@ volumes:
   languard_static:
 ```
 
+> [!IMPORTANT]
+> When upgrading an existing deployment to version 1.9.0 or newer, replace the
+> `frontend` service in your Compose or Portainer stack with the definition
+> above and recreate the stack once. The frontend now uses host networking and
+> listens on `:8080` through `FRONTEND_LISTEN_ADDRESS`; remove its previous
+> `ports` and `extra_hosts` entries. This does not change the database or static
+> volumes, so stored LanGuard data is preserved.
+
 The scanner uses its own `languard-scheduler` image. It does not call the web
 backend, but both services share the database and schema, so Compose keeps their
 startup and update order coordinated. Both images are built from the same LanGuard
 source release and should be updated together. Always update and recreate the
 backend, scheduler, and frontend containers as one release, even when the scheduler
 service itself has no visible feature change.
+
+The frontend uses host networking so it can reach the backend reliably at
+`127.0.0.1:8000` without depending on Docker bridge routing. It listens on port
+`8080` by default. To use another UI port, change `FRONTEND_LISTEN_ADDRESS`, for
+example to `:8090`.
 
 ### Scheduler tasks
 
