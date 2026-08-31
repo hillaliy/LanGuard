@@ -1,4 +1,4 @@
-:80 {
+{$FRONTEND_LISTEN_ADDRESS::80} {
 	encode zstd gzip
 
 	handle /api/v1/* {

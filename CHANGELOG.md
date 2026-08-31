@@ -2,10 +2,14 @@
 
 ## Unreleased
 
+## 1.9.0 - 2026-08-31
+
+- **Docker deployment change:** Moved the frontend to host networking so its backend proxy connects directly through `127.0.0.1`, avoiding login and API failures when Docker bridge-to-host traffic is unavailable. The UI continues to listen on port `8080` by default.
 - Added an optional Docker AdGuard Home integration with scheduled query-log synchronization, per-device and network-wide DNS activity, blocked-query totals, filtering, unmatched-client diagnostics, manual cleanup, and configurable aggregate retention.
 - Reorganized Docker settings into focused Scanning, Notifications, Add-ons, Data & migration, and Maintenance categories, and refreshed the device inventory immediately after deleting a device.
 - Added dedicated Docker routes for Dashboard, Home Map, Events, Scan history, Notifications, and Settings with working refresh and browser Back/Forward navigation.
 - Added a dedicated Not Found page and proper HTTP 404 responses for unknown Docker routes.
+- Updated Next.js and `eslint-config-next` to 16.3.3.
 
 ## 1.8.1 - 2026-08-30
 
