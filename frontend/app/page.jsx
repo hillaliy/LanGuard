@@ -2322,7 +2322,15 @@ function DeviceIconPicker({ value, onChange, label = 'Icon' }) {
   );
 }
 
-function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roomOptions }) {
+function DeviceDetailsPage({
+  deviceId,
+  onBack,
+  onSaved,
+  onDeleted,
+  timeZone,
+  roomOptions,
+  dnsActivityEnabled,
+}) {
   const [device, setDevice] = useState(null);
   const [events, setEvents] = useState([]);
   const [eventPagination, setEventPagination] = useState(null);
@@ -2487,6 +2495,12 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
     }, 250);
     return () => window.clearTimeout(timer);
   }, [activeDeviceTab, deviceId, dnsSearch, dnsFilter, dnsOrdering]);
+
+  useEffect(() => {
+    if (!dnsActivityEnabled && activeDeviceTab === 'dns') {
+      setActiveDeviceTab('overview');
+    }
+  }, [activeDeviceTab, dnsActivityEnabled]);
 
   useEffect(() => {
     if (!device) {
@@ -2686,7 +2700,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
               {!editing && (
                 <Tabs.Tab value="history" leftSection={<IconHistory size={17} />}>History</Tabs.Tab>
               )}
-              {!editing && (
+              {!editing && dnsActivityEnabled && (
                 <Tabs.Tab value="dns" leftSection={<IconWorldSearch size={17} />}>DNS activity</Tabs.Tab>
               )}
             </Tabs.List>
@@ -2875,7 +2889,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
               </Stack>
             </Tabs.Panel>
 
-            <Tabs.Panel value="dns" pt="lg">
+            {dnsActivityEnabled && <Tabs.Panel value="dns" pt="lg">
               <Stack gap="md">
                 <Group justify="space-between" align="flex-start" wrap="wrap">
                   <Box>
@@ -3013,7 +3027,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
                   </Group>
                 )}
               </Stack>
-            </Tabs.Panel>
+            </Tabs.Panel>}
           </Tabs>
         )}
       </Stack>
@@ -5851,6 +5865,7 @@ function Dashboard({
               }}
               timeZone={displayTimeZone}
               roomOptions={roomOptions}
+              dnsActivityEnabled={showDnsActivity}
             />
           ) : mainView === 'home-map' ? (
             <HomeMap
