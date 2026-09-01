@@ -16,6 +16,7 @@ from .models import (
     QUIET_HOURS_DAY_KEYS,
     ScanRun,
 )
+from .user_messages import stored_error_message
 
 
 def capitalize_name(value):
@@ -461,6 +462,11 @@ class DeviceSerializer(serializers.ModelSerializer):
 class ScanRunSerializer(serializers.ModelSerializer):
     started_at = UTCDateTimeField(read_only=True)
     finished_at = UTCDateTimeField(read_only=True)
+    error = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.CharField)
+    def get_error(self, obj):
+        return stored_error_message("scan", obj.error)
 
     class Meta:
         model = ScanRun
@@ -490,6 +496,11 @@ class NotificationDeliverySerializer(serializers.ModelSerializer):
         source="get_status_display",
         read_only=True,
     )
+    error = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.CharField)
+    def get_error(self, obj):
+        return stored_error_message("notification", obj.error)
 
     class Meta:
         model = NotificationDelivery
@@ -564,6 +575,11 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         allow_blank=True,
         max_length=255,
     )
+    adguard_last_error = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.CharField)
+    def get_adguard_last_error(self, obj):
+        return stored_error_message("adguard", obj.adguard_last_error)
 
     class Meta:
         model = AppSettings

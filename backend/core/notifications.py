@@ -13,6 +13,7 @@ from .models import (
     NotificationDelivery,
     QUIET_HOURS_DAY_KEYS,
 )
+from .user_messages import external_service_error
 
 
 LOGGER = logging.getLogger(__name__)
@@ -167,9 +168,14 @@ def send_delivery(delivery, app_config=None):
             delivery.save(update_fields=["attempts", "status", "error"])
             return
     except requests.RequestException as exc:
-        LOGGER.warning("Notification delivery failed: %s", exc)
+        response_status = getattr(getattr(exc, "response", None), "status_code", None)
+        LOGGER.warning(
+            "Notification delivery failed: channel=%s status=%s",
+            delivery.channel,
+            response_status or "unavailable",
+        )
         delivery.status = NotificationDelivery.Status.FAILED
-        delivery.error = str(exc)
+        delivery.error = external_service_error(delivery.get_channel_display(), exc)
         delivery.save(update_fields=["attempts", "status", "error"])
         return
 

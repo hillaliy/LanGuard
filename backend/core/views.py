@@ -69,6 +69,8 @@ from .api import (
 from .scan import detect_web_interface, scan, validate_ip_range
 from .notifications import send_discord_test, send_telegram_test
 from .adguard import AdGuardError, sync_adguard_query_log, test_adguard_connection
+from .diagnostics import build_diagnostics_report
+from .user_messages import error_response, scan_error_message, success_response
 
 LOGGER = logging.getLogger(__name__)
 
@@ -253,7 +255,7 @@ def paginated_device_payload(request, devices):
     )
 
 
-def auth_payload(user, token):
+def auth_payload(user, token, *, account_created=False):
     return {
         "id": user.id,
         "username": user.username,
@@ -262,6 +264,10 @@ def auth_payload(user, token):
         "token": token.key,
         "is_staff": user.is_staff,
         "is_superuser": user.is_superuser,
+        "notification": {
+            "title": "Account created" if account_created else "Signed in",
+            "message": "Your LanGuard session is ready.",
+        },
     }
 
 
@@ -689,6 +695,10 @@ def inventory_export_response():
             "version": 1,
             "exported_at": utc_isoformat(timezone.now()),
             "devices": [inventory_device_payload(device) for device in devices],
+            "notification": {
+                "title": "Inventory exported",
+                "message": "The device inventory file is ready.",
+            },
         }
     )
 
@@ -724,6 +734,13 @@ def inventory_import_response(payload, source="LanGuard"):
                 f"{result['updated']} existing devices."
             ),
             "data": result,
+            "notification": {
+                "title": "Inventory imported",
+                "message": (
+                    f"Created {result['created']}, updated {result['updated']}, "
+                    f"and skipped {result['skipped']} devices."
+                ),
+            },
         },
         status=status.HTTP_200_OK,
     )
@@ -775,7 +792,11 @@ def app_settings(request):
     serializer = AppSettingsSerializer(config, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     serializer.save()
-    return Response({"data": AppSettingsSerializer(config).data})
+    return success_response(
+        AppSettingsSerializer(config).data,
+        "Settings saved",
+        "Scanner, notification, and integration settings were updated.",
+    )
 
 
 @extend_schema(request=AdGuardConnectionSerializer, responses=OpenApiTypes.OBJECT)
@@ -794,11 +815,17 @@ def test_adguard(request):
             password,
         )
     except AdGuardError as exc:
-        return Response(
-            {"detail": str(exc)},
-            status=status.HTTP_502_BAD_GATEWAY,
+        return error_response(
+            "AdGuard Home connection failed",
+            str(exc),
+            response_status=status.HTTP_502_BAD_GATEWAY,
         )
-    return Response({"data": result}, status=status.HTTP_200_OK)
+    query_log = "enabled" if result.get("query_log_enabled") else "disabled"
+    return success_response(
+        result,
+        "AdGuard Home connected",
+        f"Connection succeeded. Query log is {query_log}.",
+    )
 
 
 @extend_schema(request=None, responses=OpenApiTypes.OBJECT)
@@ -808,11 +835,19 @@ def sync_adguard(request):
     try:
         result = sync_adguard_query_log()
     except AdGuardError as exc:
-        return Response(
-            {"detail": str(exc)},
-            status=status.HTTP_502_BAD_GATEWAY,
+        return error_response(
+            "AdGuard Home sync failed",
+            str(exc),
+            response_status=status.HTTP_502_BAD_GATEWAY,
         )
-    return Response({"data": result}, status=status.HTTP_200_OK)
+    return success_response(
+        result,
+        "AdGuard Home synced",
+        (
+            f"Matched {result.get('matched', 0)} queries across "
+            f"{result.get('domains_updated', 0)} device domains."
+        ),
+    )
 
 
 @extend_schema(responses=OpenApiTypes.OBJECT)
@@ -1048,27 +1083,54 @@ def test_notification_channel(request):
                 data["telegram_user_id"].strip(),
             )
     except requests.Timeout:
-        return Response(
-            {"detail": f"{channel.title()} did not respond before the timeout."},
-            status=status.HTTP_502_BAD_GATEWAY,
+        return error_response(
+            "Test notification failed",
+            f"{channel.title()} did not respond before the timeout.",
+            response_status=status.HTTP_502_BAD_GATEWAY,
         )
     except requests.RequestException as exc:
         response_status = getattr(getattr(exc, "response", None), "status_code", None)
-        detail = f"{channel.title()} rejected the test notification."
-        if response_status:
-            detail = f"{detail} HTTP {response_status}."
-        return Response(
-            {"detail": detail},
-            status=status.HTTP_502_BAD_GATEWAY,
+        LOGGER.warning(
+            "Notification channel test failed: channel=%s status=%s",
+            channel,
+            response_status or "unavailable",
+        )
+        if channel == NotificationDelivery.Channel.TELEGRAM:
+            if response_status == 400:
+                detail = (
+                    "Telegram rejected the chat. Check the chat ID and send /start "
+                    "to the bot before testing. HTTP 400."
+                )
+            elif response_status == 401:
+                detail = "Telegram rejected the bot token. HTTP 401."
+            elif response_status == 403:
+                detail = (
+                    "Telegram cannot send to this chat. Check whether the bot is "
+                    "blocked or lacks permission. HTTP 403."
+                )
+            elif response_status == 429:
+                detail = "Telegram rate-limited the test notification. Try again later."
+            elif response_status:
+                detail = f"Telegram rejected the test notification. HTTP {response_status}."
+            else:
+                detail = "LanGuard could not connect to Telegram."
+        else:
+            detail = f"{channel.title()} rejected the test notification."
+            if response_status:
+                detail = f"{detail} HTTP {response_status}."
+            else:
+                detail = f"LanGuard could not connect to {channel.title()}."
+        return error_response(
+            "Test notification failed",
+            detail,
+            response_status=status.HTTP_502_BAD_GATEWAY,
         )
 
-    return Response(
-        {
-            "data": {
-                "channel": channel,
-                "message": f"Test notification sent to {channel.title()}.",
-            }
-        }
+    message = f"Test notification sent to {channel.title()}."
+    return success_response(
+        {"channel": channel, "message": message},
+        "Test notification sent",
+        message,
     )
 
 
@@ -1093,7 +1155,11 @@ def home_map_layout(request):
     serializer.is_valid(raise_exception=True)
     config.home_map_layout = serializer.validated_data["layout"]
     config.save(update_fields=["home_map_layout", "updated_at"])
-    return Response({"data": {"layout": config.home_map_layout or {}}})
+    return success_response(
+        {"layout": config.home_map_layout or {}},
+        "Layout saved",
+        "Home map layout was updated.",
+    )
 
 
 @extend_schema(
@@ -1130,9 +1196,29 @@ def maintenance_cleanup(request):
         if older_than_days < 1 or older_than_days > 3650:
             raise ValidationError({"older_than_days": "Must be between 1 and 3650 days."})
 
-    return Response(
-        {"data": cleanup_activity(target, older_than_days, clean_all=clean_all)},
-        status=status.HTTP_200_OK,
+    result = cleanup_activity(target, older_than_days, clean_all=clean_all)
+    deleted = result.get("deleted", {})
+    labels = {
+        "events": "Events",
+        "scan_runs": "Scan history",
+        "notifications": "Notifications",
+        "dns_activity": "DNS activity",
+    }
+    if target == "dns_activity":
+        message = (
+            f"Deleted {deleted.get('dns_activity', 0)} DNS records and "
+            f"{deleted.get('dns_unmatched_clients', 0)} unmatched client records."
+        )
+    else:
+        message = (
+            f"Deleted {deleted.get('events', 0)} events, "
+            f"{deleted.get('scan_runs', 0)} scan runs, and "
+            f"{deleted.get('notifications', 0)} notifications."
+        )
+    return success_response(
+        result,
+        f"{labels[target]} cleaned",
+        message,
     )
 
 
@@ -1174,7 +1260,10 @@ class UserRegistrationView(generics.CreateAPIView):
         token, created = Token.objects.get_or_create(user=user)
 
         # Return the username and token in the response
-        return Response(auth_payload(user, token), status=status.HTTP_201_CREATED)
+        return Response(
+            auth_payload(user, token, account_created=True),
+            status=status.HTTP_201_CREATED,
+        )
 
 
 @permission_classes([AllowAny])
@@ -1284,9 +1373,11 @@ def users(request):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
         LOGGER.info("User created - %s", user.username)
-        return Response(
-            {"data": UserManagementSerializer(user).data},
-            status=status.HTTP_201_CREATED,
+        return success_response(
+            UserManagementSerializer(user).data,
+            "User created",
+            f"{user.username} can now sign in.",
+            response_status=status.HTTP_201_CREATED,
         )
 
     id_ = parse_int_param(request.query_params, "id", default=0, minimum=1)
@@ -1317,9 +1408,10 @@ def users(request):
                 )
         user = serializer.save()
         LOGGER.info("User updated - %s", user.username)
-        return Response(
-            {"data": UserManagementSerializer(user).data},
-            status=status.HTTP_200_OK,
+        return success_response(
+            UserManagementSerializer(user).data,
+            "User saved",
+            f"{user.username} was updated.",
         )
 
     if not is_staff:
@@ -1345,7 +1437,12 @@ def users(request):
     username = user.username
     user.delete()
     LOGGER.info("User deleted - %s", username)
-    return Response({"status": "OK", "info": "User deleted."}, status=status.HTTP_200_OK)
+    return success_response(
+        {},
+        "User deleted",
+        f"{username} was removed.",
+        status="OK",
+    )
 
 
 # Endpoint for managing devices (GET, PUT, DELETE)
@@ -1459,9 +1556,12 @@ def device(request):
             LOGGER.info(
                 f"Device ({device.id}) updated - Name: {device.name} / Icon: {device.icon} / Known: {device.known}"
             )
-            return Response(
-                {"status": "OK", "info": f"Device ({device.id}) updated successfully"},
-                status=status.HTTP_202_ACCEPTED,
+            return success_response(
+                {"id": device.id},
+                "Device saved",
+                f"{device.name} was updated.",
+                response_status=status.HTTP_202_ACCEPTED,
+                status="OK",
             )
         else:
             return Response(
@@ -1488,12 +1588,12 @@ def device(request):
             f"Device ({device.id}) {device.name} - deleted successfully",
         )
         device.delete()
-        return Response(
-            {
-                "status": "OK",
-                "info": "Device deleted successfully",
-            },
-            status=status.HTTP_202_ACCEPTED,
+        return success_response(
+            {"id": id_},
+            "Device deleted",
+            "The device was removed.",
+            response_status=status.HTTP_202_ACCEPTED,
+            status="OK",
         )
 
 
@@ -1520,28 +1620,38 @@ def scan_now(request):
     except Exception as exc:
         LOGGER.exception("Scan failed for %s", ip_range)
         failed_scan = ScanRun.objects.filter(ip_range=ip_range).first()
-        message = str(exc)
-        if "Permission denied" in message and "/dev/bpf" in message:
-            message = (
-                "Network scan needs packet-capture permissions. Run the scanner "
-                "with sudo locally or use the privileged Docker scanner service."
-            )
-        return Response(
-            {
-                "status": "Error",
-                "info": message,
-                "data": ScanRunSerializer(failed_scan).data if failed_scan else None,
-            },
-            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        message = scan_error_message(exc)
+        return error_response(
+            "Scan failed",
+            message,
+            response_status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            data=ScanRunSerializer(failed_scan).data if failed_scan else None,
+            status="Error",
+            info=message,
         )
 
-    return Response(
+    return success_response(
+        ScanRunSerializer(scan_run).data,
+        "Scan completed",
+        "LanGuard finished scanning the configured network range.",
+        response_status=status.HTTP_202_ACCEPTED,
+        status="OK",
+    )
+
+
+@extend_schema(responses=OpenApiTypes.OBJECT)
+@api_view(["GET"])
+@permission_classes([permissions.IsAdminUser])
+def export_diagnostics(request):
+    generated_at = timezone.now()
+    filename = f"languard-diagnostics-{generated_at.strftime('%Y%m%d-%H%M%S')}.json"
+    return success_response(
         {
-            "status": "OK",
-            "info": f"Scan completed for {ip_range}",
-            "data": ScanRunSerializer(scan_run).data,
+            "filename": filename,
+            "report": build_diagnostics_report(),
         },
-        status=status.HTTP_202_ACCEPTED,
+        "Diagnostics ready",
+        "A sanitized diagnostics report was generated.",
     )
 
 

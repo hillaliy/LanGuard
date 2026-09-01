@@ -1,8 +1,10 @@
 import AppKit
+import OSLog
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct SettingsView: View {
+    private let logger = Logger(subsystem: "com.hillaliy.LanGuardMac", category: "Settings")
     @Environment(AppModel.self) private var appModel
     @State private var defaultScanRange = AppSettings.default.defaultScanRange
     @State private var scanIntervalMinutes = AppSettings.default.scanIntervalMinutes
@@ -389,9 +391,10 @@ struct SettingsView: View {
             inventoryTransferMessage = "Device inventory exported successfully."
             inventoryTransferIsError = false
         } catch {
-            validationMessage = "Could not export device inventory: \(error.localizedDescription)"
+            logger.error("Inventory export failed: \(error.localizedDescription, privacy: .private)")
+            validationMessage = "The device inventory could not be exported. Check the selected folder."
             validationMessageIsError = true
-            inventoryTransferMessage = "Export failed: \(error.localizedDescription)"
+            inventoryTransferMessage = "Export failed. Check the selected folder and try again."
             inventoryTransferIsError = true
         }
     }
@@ -414,9 +417,10 @@ struct SettingsView: View {
             inventoryTransferMessage = "Import completed: \(result.created) new, \(result.updated) updated, \(result.skipped) skipped."
             inventoryTransferIsError = false
         } catch {
-            validationMessage = "Could not import device inventory: \(error.localizedDescription)"
+            logger.error("Inventory import failed: \(error.localizedDescription, privacy: .private)")
+            validationMessage = "The device inventory could not be imported. Choose a valid LanGuard JSON file."
             validationMessageIsError = true
-            inventoryTransferMessage = "Import failed: \(error.localizedDescription)"
+            inventoryTransferMessage = "Import failed. Choose a valid LanGuard JSON file."
             inventoryTransferIsError = true
         }
     }
@@ -448,7 +452,8 @@ struct SettingsView: View {
             validationMessage = "Cloud backup written."
             validationMessageIsError = false
         } catch {
-            validationMessage = "Could not write cloud backup: \(error.localizedDescription)"
+            logger.error("Cloud backup failed: \(error.localizedDescription, privacy: .private)")
+            validationMessage = "The cloud backup could not be written. Check the selected folder."
             validationMessageIsError = true
         }
     }
@@ -518,7 +523,8 @@ struct SettingsView: View {
             validationMessageIsError = false
         } catch {
             launchAtLoginEnabled = LaunchAtLoginService.isEnabled
-            validationMessage = "Could not update login item: \(error.localizedDescription)"
+            logger.error("Updating login item failed: \(error.localizedDescription, privacy: .private)")
+            validationMessage = "The login item could not be updated. Check Login Items in System Settings."
             validationMessageIsError = true
         }
     }

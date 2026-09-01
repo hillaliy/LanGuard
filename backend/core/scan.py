@@ -18,6 +18,7 @@ from urllib3.exceptions import InsecureRequestWarning
 
 from .models import Device, DevicePort, NetworkEvent, ScanRun
 from .notifications import notify_event
+from .user_messages import scan_error_message
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1438,7 +1439,7 @@ def scan(ip_range, scan_run=None):
     except Exception as exc:
         scan_run.status = ScanRun.Status.FAILED
         scan_run.finished_at = timezone.now()
-        scan_run.error = str(exc)
+        scan_run.error = scan_error_message(exc)
         scan_run.save(update_fields=["status", "finished_at", "error"])
         raise
 

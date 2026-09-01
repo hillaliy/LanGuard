@@ -12,6 +12,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from .models import AdGuardUnmatchedClient, AppSettings, Device, DeviceDNSActivity
+from .user_messages import stored_error_message
 
 
 LOGGER = logging.getLogger(__name__)
@@ -379,6 +380,6 @@ def sync_adguard_query_log(config=None, max_entries=MAX_SYNC_ENTRIES):
             "last_sync_at": config.adguard_last_sync_at,
         }
     except AdGuardError as exc:
-        config.adguard_last_error = str(exc)
+        config.adguard_last_error = stored_error_message("adguard", str(exc))
         config.save(update_fields=["adguard_last_error", "updated_at"])
         raise
