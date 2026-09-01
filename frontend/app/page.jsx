@@ -860,7 +860,7 @@ function isHomeMapDescendant(room, maybeDescendant, parents) {
   return false;
 }
 
-function HomeMap({ devices = [], onSelectDevice }) {
+function HomeMap({ devices = [], onSelectDevice, canEditLayout }) {
   const [deviceFilter, setDeviceFilter] = useState('all');
   const rooms = useMemo(() => buildHomeMapRooms(devices, deviceFilter), [deviceFilter, devices]);
   const assignedRooms = useMemo(
@@ -981,6 +981,12 @@ function HomeMap({ devices = [], onSelectDevice }) {
       setDropTarget(null);
     }
   }, [layoutEditMode]);
+
+  useEffect(() => {
+    if (!canEditLayout && layoutEditMode) {
+      setLayoutEditMode(false);
+    }
+  }, [canEditLayout, layoutEditMode]);
 
   const updateHomeMapLayout = (updater) => {
     setLayout((currentLayout) => {
@@ -1171,7 +1177,7 @@ function HomeMap({ devices = [], onSelectDevice }) {
                 onChange={setDeviceFilter}
                 size="xs"
               />
-              <Group gap="xs">
+              {canEditLayout && <Group gap="xs">
                 {layoutEditMode && (
                   <Button
                     variant="subtle"
@@ -1192,7 +1198,7 @@ function HomeMap({ devices = [], onSelectDevice }) {
               >
                 {layoutEditMode ? 'Done' : 'Edit layout'}
               </Button>
-              </Group>
+              </Group>}
             </Group>
             <section className="home-map-building">
               <div
@@ -2330,6 +2336,7 @@ function DeviceDetailsPage({
   timeZone,
   roomOptions,
   dnsActivityEnabled,
+  canEditDevices,
 }) {
   const [device, setDevice] = useState(null);
   const [events, setEvents] = useState([]);
@@ -2672,7 +2679,7 @@ function DeviceDetailsPage({
               )}
             </Box>
           </Group>
-          {device && (
+          {device && canEditDevices && (
             editing ? (
               <Group gap="xs">
                 <Button variant="default" onClick={cancelEditing} disabled={saving}>Cancel</Button>
@@ -2767,7 +2774,7 @@ function DeviceDetailsPage({
                       onChange={(event) => setAttentionAcknowledged(event.currentTarget.checked)}
                     />
                   </Group>
-                  <Group>
+                  {canEditDevices && <Group>
                     <Button
                       color="red"
                       variant="light"
@@ -2776,7 +2783,7 @@ function DeviceDetailsPage({
                     >
                       Delete device
                     </Button>
-                  </Group>
+                  </Group>}
                 </Stack>
               ) : (
                 <Stack gap="xl">
@@ -3071,6 +3078,9 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [isStaff, setIsStaff] = useState(false);
+  const [canEditDevices, setCanEditDevices] = useState(true);
+  const [canEditHomeMap, setCanEditHomeMap] = useState(true);
+  const [canRunScans, setCanRunScans] = useState(true);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -3116,12 +3126,18 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
       setLastName(selectedUser.last_name || '');
       setIsActive(Boolean(selectedUser.is_active));
       setIsStaff(Boolean(selectedUser.is_staff));
+      setCanEditDevices(Boolean(selectedUser.can_edit_devices));
+      setCanEditHomeMap(Boolean(selectedUser.can_edit_home_map));
+      setCanRunScans(Boolean(selectedUser.can_run_scans));
     } else {
       setUsername('');
       setFirstName('');
       setLastName('');
       setIsActive(true);
       setIsStaff(false);
+      setCanEditDevices(true);
+      setCanEditHomeMap(true);
+      setCanRunScans(true);
     }
     setPassword('');
     setPasswordConfirm('');
@@ -3138,6 +3154,9 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
         last_name: capitalizeName(lastName),
         is_active: isActive,
         is_staff: isStaff,
+        can_edit_devices: isStaff || canEditDevices,
+        can_edit_home_map: isStaff || canEditHomeMap,
+        can_run_scans: isStaff || canRunScans,
         ...(password ? { password, password_confirm: passwordConfirm } : {}),
       };
       const saved = selectedUser
@@ -3158,6 +3177,9 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
             first_name: savedUser.first_name,
             last_name: savedUser.last_name,
             is_staff: savedUser.is_staff,
+            can_edit_devices: savedUser.can_edit_devices,
+            can_edit_home_map: savedUser.can_edit_home_map,
+            can_run_scans: savedUser.can_run_scans,
           });
         } else {
           clearStoredUser();
@@ -3292,6 +3314,33 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
                     checked={isStaff}
                     onChange={(event) => setIsStaff(event.currentTarget.checked)}
                   />
+                  <Divider label="Permissions" labelPosition="left" />
+                  <Switch
+                    label="Edit devices"
+                    description="Update device details and delete devices."
+                    checked={isStaff || canEditDevices}
+                    disabled={isStaff}
+                    onChange={(event) => setCanEditDevices(event.currentTarget.checked)}
+                  />
+                  <Switch
+                    label="Edit Home Map"
+                    description="Rearrange rooms and reset the saved layout."
+                    checked={isStaff || canEditHomeMap}
+                    disabled={isStaff}
+                    onChange={(event) => setCanEditHomeMap(event.currentTarget.checked)}
+                  />
+                  <Switch
+                    label="Run scans"
+                    description="Start manual network scans."
+                    checked={isStaff || canRunScans}
+                    disabled={isStaff}
+                    onChange={(event) => setCanRunScans(event.currentTarget.checked)}
+                  />
+                  {isStaff && (
+                    <Text size="xs" c="dimmed">
+                      Admin users always have all permissions.
+                    </Text>
+                  )}
                 </>
               )}
             </Stack>
@@ -5049,6 +5098,11 @@ function Dashboard({
   const [scanStatus, setScanStatus] = useState(null);
   const [scanVisibility, setScanVisibility] = useState(null);
   const [integrationStatus, setIntegrationStatus] = useState({});
+  const [accessCapabilities, setAccessCapabilities] = useState({
+    can_edit_devices: Boolean(user?.is_staff || user?.is_superuser || user?.can_edit_devices),
+    can_edit_home_map: Boolean(user?.is_staff || user?.is_superuser || user?.can_edit_home_map),
+    can_run_scans: Boolean(user?.is_staff || user?.is_superuser || user?.can_run_scans),
+  });
   const [scanRuns, setScanRuns] = useState([]);
   const [scanRunPagination, setScanRunPagination] = useState(null);
   const [dashboardEvents, setDashboardEvents] = useState([]);
@@ -5102,6 +5156,9 @@ function Dashboard({
   const selectedDeviceStatus =
     deviceStatusOptions.find((option) => option.value === deviceStatus) || null;
   const canManageUsers = Boolean(user?.is_staff || user?.is_superuser);
+  const canEditDevices = canManageUsers || Boolean(accessCapabilities.can_edit_devices);
+  const canEditHomeMap = canManageUsers || Boolean(accessCapabilities.can_edit_home_map);
+  const canRunScans = canManageUsers || Boolean(accessCapabilities.can_run_scans);
   const hasUnreadChangelog = seenChangelogVersion !== APP_VERSION;
   const hasVersionUpdate = isNewerVersion(latestVersion, APP_VERSION);
   const hasVersionIndicator = hasUnreadChangelog || hasVersionUpdate;
@@ -5113,6 +5170,21 @@ function Dashboard({
     integrationStatus?.adguard?.enabled && integrationStatus?.adguard?.configured
   );
   const showFirstSeen = deviceOrdering === 'firstseen' || deviceOrdering === '-firstseen';
+
+  useEffect(() => {
+    setAccessCapabilities({
+      can_edit_devices: Boolean(user?.is_staff || user?.is_superuser || user?.can_edit_devices),
+      can_edit_home_map: Boolean(user?.is_staff || user?.is_superuser || user?.can_edit_home_map),
+      can_run_scans: Boolean(user?.is_staff || user?.is_superuser || user?.can_run_scans),
+    });
+  }, [
+    user?.is_staff,
+    user?.is_superuser,
+    user?.can_edit_devices,
+    user?.can_edit_home_map,
+    user?.can_run_scans,
+  ]);
+
   function storeDashboardNavigationState(overrides = {}) {
     window.sessionStorage.setItem(
       dashboardStateStorageKey,
@@ -5287,6 +5359,7 @@ function Dashboard({
       setScanStatus(statusData.data || statusData.active_scan || null);
       setScanVisibility(statusData.visibility || null);
       setIntegrationStatus(statusData.integrations || {});
+      setAccessCapabilities(statusData.permissions || {});
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
       }
@@ -5316,6 +5389,8 @@ function Dashboard({
       const statusData = await apiRequest('scan/status/');
       setScanStatus(statusData.data || statusData.active_scan || null);
       setScanVisibility(statusData.visibility || null);
+      setIntegrationStatus(statusData.integrations || {});
+      setAccessCapabilities(statusData.permissions || {});
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
       }
@@ -5701,7 +5776,7 @@ function Dashboard({
                 </Box>
               </Group>
               <ColorSchemeControl />
-              <Button
+              {canRunScans && <Button
                 size="sm"
                 leftSection={<IconRefresh size={17} />}
                 onClick={runScan}
@@ -5709,7 +5784,7 @@ function Dashboard({
                 className="topbar-scan-button"
               >
                 Run Scan
-              </Button>
+              </Button>}
               <Tooltip label="Refresh">
                 <ActionIcon
                   variant="light"
@@ -5866,11 +5941,13 @@ function Dashboard({
               timeZone={displayTimeZone}
               roomOptions={roomOptions}
               dnsActivityEnabled={showDnsActivity}
+              canEditDevices={canEditDevices}
             />
           ) : mainView === 'home-map' ? (
             <HomeMap
               devices={mapDevices}
               onSelectDevice={openDevicePage}
+              canEditLayout={canEditHomeMap}
             />
           ) : mainView === 'settings' && canManageUsers ? (
             <SettingsPage

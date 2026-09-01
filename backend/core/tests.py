@@ -24,6 +24,7 @@ from .models import (
     NetworkEvent,
     NotificationDelivery,
     ScanRun,
+    UserAccess,
 )
 from .notifications import (
     format_discord_payload,
@@ -1929,6 +1930,117 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertTrue(User.objects.filter(username="viewer").exists())
         self.assertEqual(response.data["data"]["username"], "viewer")
+
+    def test_admin_can_assign_user_capabilities(self):
+        response = self.client.post(
+            "/api/v1/users/",
+            {
+                "username": "viewer",
+                "password": "secret-password",
+                "password_confirm": "secret-password",
+                "can_edit_devices": False,
+                "can_edit_home_map": True,
+                "can_run_scans": False,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertFalse(response.data["data"]["can_edit_devices"])
+        self.assertTrue(response.data["data"]["can_edit_home_map"])
+        self.assertFalse(response.data["data"]["can_run_scans"])
+
+    def test_regular_user_cannot_change_own_capabilities(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        UserAccess.objects.create(
+            user=regular_user,
+            can_edit_devices=False,
+            can_edit_home_map=False,
+            can_run_scans=False,
+        )
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.put(
+            f"/api/v1/users/?id={regular_user.id}",
+            {
+                "can_edit_devices": True,
+                "can_edit_home_map": True,
+                "can_run_scans": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        access = UserAccess.objects.get(user=regular_user)
+        self.assertFalse(access.can_edit_devices)
+        self.assertFalse(access.can_edit_home_map)
+        self.assertFalse(access.can_run_scans)
+
+    def test_restricted_user_can_view_but_cannot_edit_devices(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        UserAccess.objects.create(user=regular_user, can_edit_devices=False)
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        get_response = regular_client.get("/api/v1/device/", {"id": self.device.id})
+        put_response = regular_client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"name": "Changed"},
+            format="json",
+        )
+        delete_response = regular_client.delete(f"/api/v1/device/?id={self.device.id}")
+
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(put_response.status_code, 403)
+        self.assertEqual(delete_response.status_code, 403)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.name, "Laptop")
+
+    def test_restricted_user_cannot_edit_home_map_or_run_scan(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        UserAccess.objects.create(
+            user=regular_user,
+            can_edit_home_map=False,
+            can_run_scans=False,
+        )
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        get_response = regular_client.get("/api/v1/home-map-layout/")
+        put_response = regular_client.put(
+            "/api/v1/home-map-layout/",
+            {"layout": {"order": ["Office"], "parents": {}}},
+            format="json",
+        )
+        scan_response = regular_client.post("/api/v1/scan/", {}, format="json")
+
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(put_response.status_code, 403)
+        self.assertEqual(scan_response.status_code, 403)
+
+    def test_scan_status_returns_effective_capabilities(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        UserAccess.objects.create(
+            user=regular_user,
+            can_edit_devices=False,
+            can_edit_home_map=True,
+            can_run_scans=False,
+        )
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["permissions"],
+            {
+                "can_edit_devices": False,
+                "can_edit_home_map": True,
+                "can_run_scans": False,
+            },
+        )
 
     def test_users_endpoint_updates_user(self):
         user = User.objects.create_user(username="viewer", password="old-password")

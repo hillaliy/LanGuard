@@ -4,6 +4,7 @@ import json
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from .access_control import ACCESS_FIELDS, update_user_capabilities, user_capabilities
 from .datetime_utils import utc_isoformat
 from .models import (
     AdGuardUnmatchedClient,
@@ -59,6 +60,9 @@ class UserSerializer(serializers.ModelSerializer):
 class UserManagementSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     password_confirm = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    can_edit_devices = serializers.BooleanField(write_only=True, required=False, default=True)
+    can_edit_home_map = serializers.BooleanField(write_only=True, required=False, default=True)
+    can_run_scans = serializers.BooleanField(write_only=True, required=False, default=True)
 
     class Meta:
         model = User
@@ -71,6 +75,9 @@ class UserManagementSerializer(serializers.ModelSerializer):
             "password_confirm",
             "is_active",
             "is_staff",
+            "can_edit_devices",
+            "can_edit_home_map",
+            "can_run_scans",
             "date_joined",
             "last_login",
         )
@@ -93,18 +100,36 @@ class UserManagementSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         password = validated_data.pop("password")
         validated_data.pop("password_confirm", None)
-        return User.objects.create_user(password=password, **validated_data)
+        capability_values = {
+            field: validated_data.pop(field)
+            for field in ACCESS_FIELDS
+            if field in validated_data
+        }
+        user = User.objects.create_user(password=password, **validated_data)
+        update_user_capabilities(user, capability_values)
+        return user
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", "")
         validated_data.pop("password_confirm", None)
+        capability_values = {
+            field: validated_data.pop(field)
+            for field in ACCESS_FIELDS
+            if field in validated_data
+        }
 
         for field, value in validated_data.items():
             setattr(instance, field, value)
         if password:
             instance.set_password(password)
         instance.save()
+        update_user_capabilities(instance, capability_values)
         return instance
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data.update(user_capabilities(instance))
+        return data
 
 
 class DevicePortSerializer(serializers.ModelSerializer):

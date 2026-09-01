@@ -62,6 +62,7 @@ alerts when new devices appear.
 - Assign names, icons, rooms, roles, and expected device behavior
 - Arrange rooms and devices in the Docker Home Map view
 - Export and import device inventory between LanGuard installations
+- Grant each Docker user permission to edit devices, change the Home Map layout, or run manual scans
 
 **Notify and integrate**
 

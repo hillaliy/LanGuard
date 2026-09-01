@@ -290,6 +290,24 @@ class NotificationDelivery(models.Model):
         return f"{self.channel} {self.status} - {self.event_id}"
 
 
+class UserAccess(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        related_name="languard_access",
+        on_delete=models.CASCADE,
+    )
+    can_edit_devices = models.BooleanField(default=True)
+    can_edit_home_map = models.BooleanField(default=True)
+    can_run_scans = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "User access"
+        verbose_name_plural = "User access"
+
+    def __str__(self):
+        return f"LanGuard access for {self.user}"
+
+
 class AppSettings(models.Model):
     singleton_key = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
     ip_range = models.CharField(max_length=64, default="192.168.1.0/24")

@@ -30,6 +30,13 @@ import requests
 
 from django.utils import timezone
 from .datetime_utils import utc_isoformat
+from .access_control import (
+    ACCESS_FIELDS,
+    CanEditDevices,
+    CanEditHomeMap,
+    CanRunScans,
+    user_capabilities,
+)
 from .maintenance import cleanup_activity
 from .serializers import (
     AdGuardUnmatchedClientSerializer,
@@ -264,6 +271,7 @@ def auth_payload(user, token, *, account_created=False):
         "token": token.key,
         "is_staff": user.is_staff,
         "is_superuser": user.is_superuser,
+        **user_capabilities(user),
         "notification": {
             "title": "Account created" if account_created else "Signed in",
             "message": "Your LanGuard session is ready.",
@@ -1152,7 +1160,7 @@ def test_notification_channel(request):
     responses=HomeMapLayoutSerializer,
 )
 @api_view(["GET", "PUT"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, CanEditHomeMap])
 def home_map_layout(request):
     config = AppSettings.load()
 
@@ -1402,6 +1410,8 @@ def users(request):
             data.pop("is_staff", None)
             data.pop("is_superuser", None)
             data.pop("is_active", None)
+            for field in ACCESS_FIELDS:
+                data.pop(field, None)
         serializer = UserManagementSerializer(user, data=request.data, partial=True)
         if not is_staff:
             serializer = UserManagementSerializer(user, data=data, partial=True)
@@ -1468,7 +1478,7 @@ def users(request):
     responses=OpenApiTypes.OBJECT,
 )
 @api_view(["GET", "PUT", "DELETE"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, CanEditDevices])
 def device(request):
     all_devices = Device.objects.all().count()
     online_devices = Device.objects.exclude(status=Device.Status.OFFLINE).count()
@@ -1615,7 +1625,7 @@ def device(request):
     responses=OpenApiTypes.OBJECT,
 )
 @api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, CanRunScans])
 def scan_now(request):
     ip_range = request.data.get("ip_range") or AppSettings.load().ip_range
     try:
@@ -1753,6 +1763,7 @@ def scan_status(request):
                     ),
                 },
             },
+            "permissions": user_capabilities(request.user),
             "counters": {
                 "all_devices": Device.objects.count(),
                 "online_devices": Device.objects.exclude(status=Device.Status.OFFLINE).count(),
