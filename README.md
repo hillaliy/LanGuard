@@ -343,7 +343,7 @@ Development setup, checks, and release metadata instructions are documented in
 
 ## License
 
-Copyright 2026 Yossi Hillali.
+Copyright © 2026 Yossi Hillali.
 
 LanGuard is licensed under the [Apache License 2.0](LICENSE). Third-party
 components remain subject to their respective licenses.
