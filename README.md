@@ -237,6 +237,16 @@ After sign in, open Settings to change the scan range, scan interval, timezone, 
 
 The scanner waits for the configured scan interval after a scan completes before starting the next scheduled scan. For example, with a 5 minute interval, a scan that finishes at 20:14 will schedule the next scan for about 20:19.
 
+### Support diagnostics
+
+Admins can open **Settings > Maintenance** and select **Export diagnostics**
+when reporting a problem. The JSON report includes the LanGuard version,
+runtime and database details, configuration state, aggregate record counts,
+and recent scan outcomes. It intentionally omits credentials, service URLs,
+usernames, device names, IP and MAC addresses, network ranges, and raw exception
+text. Attach this report to a GitHub issue; only provide container logs when
+requested and review them for private network details first.
+
 ## AdGuard Home
 
 Docker installations can sync AdGuard Home query-log activity into LanGuard.

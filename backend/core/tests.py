@@ -1543,6 +1543,7 @@ class NotificationTests(TestCase):
         delivery = NotificationDelivery.objects.get(event=self.event)
         self.assertEqual(delivery.status, NotificationDelivery.Status.FAILED)
         self.assertEqual(delivery.attempts, 1)
+        self.assertNotIn("temporary failure", delivery.error)
 
         retried = retry_failed_notifications()
         delivery.refresh_from_db()
@@ -1898,6 +1899,67 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_diagnostics_export_requires_admin_user(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.get("/api/v1/diagnostics/export/")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_diagnostics_export_omits_secrets_and_device_identifiers(self):
+        config = AppSettings.load()
+        config.discord_webhook = "https://discord.example/super-secret-webhook"
+        config.telegram_token = "super-secret-bot-token"
+        config.telegram_user_id = "987654321"
+        config.adguard_enabled = True
+        config.adguard_url = "http://10.20.30.40:3000"
+        config.adguard_username = "private-admin"
+        config.adguard_password = "super-secret-password"
+        config.adguard_last_error = "Connection failed at http://10.20.30.40/private"
+        config.save()
+        self.scan_run.error = "Failed on 192.168.1.20 with aa:aa:aa:aa:aa:aa"
+        self.scan_run.save(update_fields=["error"])
+        self.delivery.error = (
+            "POST https://api.telegram.org/botsuper-secret-bot-token/sendMessage failed"
+        )
+        self.delivery.save(update_fields=["error"])
+
+        response = self.client.get("/api/v1/diagnostics/export/")
+
+        self.assertEqual(response.status_code, 200)
+        serialized = str(response.data)
+        for private_value in (
+            "super-secret-webhook",
+            "super-secret-bot-token",
+            "super-secret-password",
+            "private-admin",
+            "10.20.30.40",
+            "192.168.1.20",
+            "aa:aa:aa:aa:aa:aa",
+            "Laptop",
+        ):
+            self.assertNotIn(private_value, serialized)
+        self.assertEqual(
+            response.data["data"]["report"]["report"]["format"],
+            "languard-diagnostics",
+        )
+        self.assertIn("notification", response.data)
+
+    def test_old_raw_errors_are_sanitized_in_api_responses(self):
+        self.scan_run.error = "Internal path /private/app and 192.168.1.20"
+        self.scan_run.save(update_fields=["error"])
+        self.delivery.error = "https://discord.example/private-webhook"
+        self.delivery.save(update_fields=["error"])
+
+        scans = self.client.get("/api/v1/scan/runs/").data
+        deliveries = self.client.get("/api/v1/notifications/").data
+
+        self.assertNotIn("/private/app", str(scans))
+        self.assertNotIn("192.168.1.20", str(scans))
+        self.assertNotIn("private-webhook", str(deliveries))
+
     def test_notification_test_endpoint_requires_admin_user(self):
         regular_user = User.objects.create_user(username="viewer", password="password")
         regular_client = APIClient()
@@ -1982,6 +2044,34 @@ class ScanApiTests(TestCase):
             "Discord rejected the test notification. HTTP 401.",
         )
         self.assertNotIn("secret-webhook", response.data["detail"])
+
+    @patch("core.views.send_telegram_test")
+    def test_notification_test_endpoint_explains_missing_telegram_chat(self, send_test):
+        upstream_response = Mock(status_code=400)
+        send_test.side_effect = requests.HTTPError(
+            "Telegram request failed with a secret bot token",
+            response=upstream_response,
+        )
+
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "telegram",
+                "telegram_token": "secret-bot-token",
+                "telegram_user_id": "123456",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(
+            response.data["detail"],
+            (
+                "Telegram rejected the chat. Check the chat ID and send /start "
+                "to the bot before testing. HTTP 400."
+            ),
+        )
+        self.assertNotIn("secret-bot-token", response.data["detail"])
 
     def test_home_map_layout_endpoint_requires_authentication(self):
         client = APIClient()

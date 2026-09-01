@@ -647,7 +647,7 @@ textarea {
   gap: 10px;
   grid-template-columns:
     minmax(76px, 0.65fr)
-    minmax(108px, 0.8fr)
+    minmax(132px, 0.85fr)
     minmax(70px, 0.65fr)
     minmax(82px, 0.75fr)
     minmax(146px, 0.9fr)
@@ -669,7 +669,7 @@ textarea {
 
 .device-list-ip-value {
   display: block;
-  min-width: 108px;
+  min-width: 132px;
   overflow-wrap: normal;
   white-space: nowrap;
 }
@@ -684,7 +684,7 @@ textarea {
   white-space: normal;
 }
 
-@container (max-width: 1030px) {
+@container (max-width: 1100px) {
   .devices-content-panel .device-list,
   .devices-content-panel .device-list-toolbar {
     display: none;

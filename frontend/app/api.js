@@ -2,6 +2,22 @@ const CONFIGURED_API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 export const BACKEND_UNAVAILABLE_MESSAGE =
   'LanGuard cannot reach the server right now. Wait a moment, then try again.';
 
+function apiError(message, notification = null) {
+  const safeMessage =
+    typeof message === 'string' && message.trim()
+      ? message
+      : notification?.message || 'The request could not be completed.';
+  const error = new Error(safeMessage);
+  error.notification = notification || {
+    title:
+      safeMessage === BACKEND_UNAVAILABLE_MESSAGE
+        ? 'Server unavailable'
+        : 'Request failed',
+    message: safeMessage,
+  };
+  return error;
+}
+
 function getApiBase() {
   if (CONFIGURED_API_BASE) {
     return CONFIGURED_API_BASE;
@@ -114,11 +130,7 @@ export async function apiRequest(path, options = {}) {
       body: options.body ? JSON.stringify(options.body) : undefined,
     });
   } catch (error) {
-    throw new Error(BACKEND_UNAVAILABLE_MESSAGE);
-  }
-
-  if (response.status >= 500) {
-    throw new Error(BACKEND_UNAVAILABLE_MESSAGE);
+    throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
   }
 
   let payload = null;
@@ -130,13 +142,14 @@ export async function apiRequest(path, options = {}) {
       const contentType = response.headers.get('content-type') || '';
       if (contentType.includes('text/html') || text.trim().startsWith('<')) {
         if (!response.ok) {
-          throw new Error(BACKEND_UNAVAILABLE_MESSAGE);
+          throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
         }
-        throw new Error(
-          `Backend returned an HTML page instead of API data from ${url.pathname}.`
-        );
+        throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
       }
-      throw new Error(`Backend returned an unreadable API response from ${url.pathname}.`);
+      if (response.status >= 500) {
+        throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
+      }
+      throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
     }
   }
 
@@ -144,9 +157,14 @@ export async function apiRequest(path, options = {}) {
     const message =
       payload?.detail ||
       payload?.error ||
-      payload?.info ||
-      'Request failed';
-    throw new Error(message);
+      payload?.info;
+    if (message) {
+      throw apiError(message, payload?.notification);
+    }
+    if (response.status >= 500) {
+      throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
+    }
+    throw apiError('The request could not be completed.', payload?.notification);
   }
 
   return payload;

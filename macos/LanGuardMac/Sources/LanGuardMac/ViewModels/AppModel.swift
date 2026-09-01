@@ -1,9 +1,11 @@
 import Foundation
 import Observation
+import OSLog
 
 @MainActor
 @Observable
 final class AppModel {
+    private let logger = Logger(subsystem: "com.hillaliy.LanGuardMac", category: "Application")
     private let scanner: NetworkScanning
     private let storage: AppStorageServicing
     private let notifications: NotificationServicing
@@ -80,8 +82,10 @@ final class AppModel {
                 await notifyScanChanges(mergeResult)
                 saveCurrentState()
             } catch {
-                lastErrorMessage = error.localizedDescription
-                completeScan(id: scanID, status: .failed, errorMessage: error.localizedDescription)
+                logger.error("Network scan failed: \(error.localizedDescription, privacy: .private)")
+                let message = "The network scan could not be completed. Check the scan settings and try again."
+                lastErrorMessage = message
+                completeScan(id: scanID, status: .failed, errorMessage: message)
                 saveCurrentState()
             }
 
@@ -116,8 +120,10 @@ final class AppModel {
                 }
                 completeGuestScan(status: .completed, count: discoveredDevices.count)
             } catch {
-                guestErrorMessage = error.localizedDescription
-                completeGuestScan(status: .failed, errorMessage: error.localizedDescription)
+                logger.error("Guest network scan failed: \(error.localizedDescription, privacy: .private)")
+                let message = "The guest network scan could not be completed. Check the range and try again."
+                guestErrorMessage = message
+                completeGuestScan(status: .failed, errorMessage: message)
             }
 
             isGuestScanning = false
@@ -151,8 +157,9 @@ final class AppModel {
             try await notifications.notifyTest()
             return NotificationTestResult(message: "Test notification sent.", isError: false)
         } catch {
+            logger.error("Test notification failed: \(error.localizedDescription, privacy: .private)")
             return NotificationTestResult(
-                message: "Could not send test notification: \(error.localizedDescription)",
+                message: "The test notification could not be sent. Check macOS notification permission.",
                 isError: true
             )
         }
@@ -269,7 +276,8 @@ final class AppModel {
                 runInitialVersionCheckIfNeeded()
                 lastErrorMessage = nil
             } catch {
-                lastErrorMessage = "Could not load saved LanGuard data: \(error.localizedDescription)"
+                logger.error("Loading saved data failed: \(error.localizedDescription, privacy: .private)")
+                lastErrorMessage = "LanGuard could not load its saved data. Restart the app and try again."
             }
 
             isLoading = false
@@ -324,14 +332,16 @@ final class AppModel {
             do {
                 try await storage.save(snapshot)
             } catch {
-                lastErrorMessage = "Could not save LanGuard data: \(error.localizedDescription)"
+                logger.error("Saving local data failed: \(error.localizedDescription, privacy: .private)")
+                lastErrorMessage = "LanGuard could not save its local data. Check available disk space."
                 return
             }
 
             do {
                 try Self.writeCloudBackup(devices: snapshot.devices, settings: snapshot.settings)
             } catch {
-                lastErrorMessage = "Could not write cloud backup: \(error.localizedDescription)"
+                logger.error("Writing cloud backup failed: \(error.localizedDescription, privacy: .private)")
+                lastErrorMessage = "LanGuard could not write the cloud backup. Check the selected folder."
             }
         }
     }

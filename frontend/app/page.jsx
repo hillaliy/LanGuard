@@ -285,19 +285,31 @@ const quietHoursDayOptions = [
 ];
 const allQuietHoursDays = quietHoursDayOptions.map(({ value }) => value);
 
-function showSuccessNotification(title, message) {
+function showServerNotification(payload, color = 'teal') {
+  const serverNotification = payload?.notification;
+  if (!serverNotification?.title || !serverNotification?.message) {
+    return false;
+  }
   notifications.show({
-    title,
-    message,
-    color: 'teal',
-    icon: <IconShieldCheck size={18} />,
+    title: serverNotification.title,
+    message: serverNotification.message,
+    color,
+    icon: color === 'red' ? <IconAlertCircle size={18} /> : <IconShieldCheck size={18} />,
   });
+  return true;
 }
 
-function showErrorNotification(title, message) {
+function showErrorNotification(titleOrError, message) {
+  if (titleOrError instanceof Error) {
+    if (showServerNotification({ notification: titleOrError.notification }, 'red')) {
+      return;
+    }
+    message = titleOrError.message;
+    titleOrError = 'Request failed';
+  }
   const backendUnavailable = message === BACKEND_UNAVAILABLE_MESSAGE;
   notifications.show({
-    title: backendUnavailable ? 'Server unavailable' : title,
+    title: backendUnavailable ? 'Server unavailable' : titleOrError,
     message,
     color: 'red',
     icon: <IconAlertCircle size={18} />,
@@ -937,7 +949,7 @@ function HomeMap({ devices = [], onSelectDevice }) {
       } catch (err) {
         if (!cancelled) {
           setLayoutLoaded(true);
-          showErrorNotification('Could not load home map layout', err.message);
+          showErrorNotification(err);
         }
       }
     }
@@ -980,7 +992,7 @@ function HomeMap({ devices = [], onSelectDevice }) {
     const nextLayout = normalizeHomeMapLayout(layout, assignedRooms);
     setLayoutSaving(true);
     try {
-      await apiRequest('home-map-layout/', {
+      const payload = await apiRequest('home-map-layout/', {
         method: 'PUT',
         body: { layout: nextLayout },
       });
@@ -991,9 +1003,9 @@ function HomeMap({ devices = [], onSelectDevice }) {
       } catch {
         // Ignore cleanup failures; DB storage is authoritative.
       }
-      showSuccessNotification('Layout saved', 'Home map layout was updated.');
+      showServerNotification(payload);
     } catch (err) {
-      showErrorNotification('Could not save home map layout', err.message);
+      showErrorNotification(err);
     } finally {
       setLayoutSaving(false);
     }
@@ -1653,14 +1665,11 @@ function AuthScreen({ onLogin }) {
         body: { username, password },
       });
       storeUser(user);
-      showSuccessNotification(
-        mode === 'register' ? 'Account created' : 'Signed in',
-        `Welcome, ${userDisplayName(user)}.`
-      );
+      showServerNotification(user);
       onLogin(user);
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Authentication failed', err.message);
+      showErrorNotification(err);
     } finally {
       setLoading(false);
     }
@@ -2056,7 +2065,7 @@ function DashboardEventRow({ event, timeZone, device, onSelectDevice }) {
         onSelectDevice(payload.data);
       }
     } catch (err) {
-      showErrorNotification('Could not open device', err.message);
+      showErrorNotification(err);
     }
   }
 
@@ -2472,7 +2481,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
     }
     const timer = window.setTimeout(() => {
       loadDnsActivity().catch((err) => {
-        showErrorNotification('Could not load DNS activity', err.message);
+        showErrorNotification(err);
       });
     }, 250);
     return () => window.clearTimeout(timer);
@@ -2528,7 +2537,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
       return;
     }
     try {
-      await apiRequest(`device/?id=${device.id}`, {
+      const payload = await apiRequest(`device/?id=${device.id}`, {
         method: 'PUT',
         body: {
           icon,
@@ -2544,11 +2553,11 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
       });
       const updatedDevice = await loadDevice({ quiet: true });
       await onSaved(updatedDevice);
-      showSuccessNotification('Device saved', `${name || device.name} was updated.`);
+      showServerNotification(payload);
       setEditing(false);
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Could not save device', err.message);
+      showErrorNotification(err);
     } finally {
       setSaving(false);
     }
@@ -2560,15 +2569,14 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
     }
     setSaving(true);
     setError('');
-    const deletedName = device.name;
     try {
-      await apiRequest(`device/?id=${device.id}`, { method: 'DELETE' });
-      showSuccessNotification('Device deleted', `${deletedName} was removed.`);
+      const payload = await apiRequest(`device/?id=${device.id}`, { method: 'DELETE' });
+      showServerNotification(payload);
       deleteConfirm.close();
       await onDeleted();
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Could not delete device', err.message);
+      showErrorNotification(err);
     } finally {
       setSaving(false);
     }
@@ -2588,7 +2596,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
     try {
       await loadDeviceEvents({ offset: eventPagination.next_offset, append: true });
     } catch (err) {
-      showErrorNotification('Could not load device history', err.message);
+      showErrorNotification(err);
     } finally {
       setLoadingMoreEvents(false);
     }
@@ -2606,7 +2614,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
         quiet: true,
       });
     } catch (err) {
-      showErrorNotification('Could not load DNS activity', err.message);
+      showErrorNotification(err);
     } finally {
       setLoadingMoreDnsActivity(false);
     }
@@ -3074,7 +3082,7 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
       }
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Could not load users', err.message);
+      showErrorNotification(err);
     } finally {
       setLoading(false);
     }
@@ -3124,10 +3132,7 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
 
       await loadUsers();
       setSelectedUserId(String(savedUser.id));
-      showSuccessNotification(
-        selectedUser ? 'User saved' : 'User created',
-        `${savedUser.username} was ${selectedUser ? 'updated' : 'created'}.`
-      );
+      showServerNotification(saved);
 
       if (currentUser?.username === selectedUser?.username) {
         if (savedUser.is_active) {
@@ -3146,7 +3151,7 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
       }
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Could not save user', err.message);
+      showErrorNotification(err);
     } finally {
       setSaving(false);
     }
@@ -3159,10 +3164,10 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
     setSaving(true);
     setError('');
     try {
-      await apiRequest(`users/?id=${deleteTarget.id}`, { method: 'DELETE' });
+      const payload = await apiRequest(`users/?id=${deleteTarget.id}`, { method: 'DELETE' });
       await loadUsers();
       setSelectedUserId('new');
-      showSuccessNotification('User deleted', `${deleteTarget.username} was removed.`);
+      showServerNotification(payload);
       if (currentUser?.username === deleteTarget.username) {
         clearStoredUser();
         onCurrentUserUpdated(null);
@@ -3170,7 +3175,7 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
       setDeleteTarget(null);
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Could not delete user', err.message);
+      showErrorNotification(err);
     } finally {
       setSaving(false);
     }
@@ -3373,6 +3378,7 @@ function SettingsPage({ onSaved }) {
   const [testingAdguard, setTestingAdguard] = useState(false);
   const [syncingAdguard, setSyncingAdguard] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [exportingDiagnostics, setExportingDiagnostics] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importingWatchYourLan, setImportingWatchYourLan] = useState(false);
   const [cleanupDays, setCleanupDays] = useState(90);
@@ -3421,7 +3427,7 @@ function SettingsPage({ onSaved }) {
       setCleanupDays(Number(data.activity_cleanup_retention_days ?? 90));
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Could not load settings', err.message);
+      showErrorNotification(err);
     } finally {
       setLoading(false);
     }
@@ -3466,10 +3472,10 @@ function SettingsPage({ onSaved }) {
       const savedSettings = await apiRequest('settings/', { method: 'PUT', body });
       await loadSettings();
       await onSaved(savedSettings.data || {});
-      showSuccessNotification('Settings saved', 'Scanner, notification, and integration settings were updated.');
+      showServerNotification(savedSettings);
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Could not save settings', err.message);
+      showErrorNotification(err);
     } finally {
       setSaving(false);
     }
@@ -3488,13 +3494,10 @@ function SettingsPage({ onSaved }) {
               telegram_user_id: telegramUserId.trim(),
             };
       const payload = await apiRequest('notifications/test/', { method: 'POST', body });
-      showSuccessNotification(
-        'Test notification sent',
-        payload?.data?.message || `Check your ${channel} channel.`
-      );
+      showServerNotification(payload);
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Test notification failed', err.message);
+      showErrorNotification(err);
     } finally {
       setTestingChannel('');
     }
@@ -3515,14 +3518,10 @@ function SettingsPage({ onSaved }) {
         method: 'POST',
         body,
       });
-      const data = payload.data || {};
-      showSuccessNotification(
-        'AdGuard Home connected',
-        `${data.version || 'Server detected'} · Query log ${data.query_log_enabled ? 'enabled' : 'disabled'}.`
-      );
+      showServerNotification(payload);
     } catch (err) {
       setError(err.message);
-      showErrorNotification('AdGuard Home connection failed', err.message);
+      showErrorNotification(err);
     } finally {
       setTestingAdguard(false);
     }
@@ -3533,15 +3532,11 @@ function SettingsPage({ onSaved }) {
     setError('');
     try {
       const payload = await apiRequest('integrations/adguard/sync/', { method: 'POST' });
-      const data = payload.data || {};
       await loadSettings();
-      showSuccessNotification(
-        'AdGuard Home synced',
-        `Matched ${data.matched || 0} queries across ${data.domains_updated || 0} device domains.`
-      );
+      showServerNotification(payload);
     } catch (err) {
       setError(err.message);
-      showErrorNotification('AdGuard Home sync failed', err.message);
+      showErrorNotification(err);
     } finally {
       setSyncingAdguard(false);
     }
@@ -3552,7 +3547,8 @@ function SettingsPage({ onSaved }) {
     setError('');
     try {
       const payload = await apiRequest('devices/export/');
-      const json = JSON.stringify(payload, null, 2);
+      const { notification: exportNotification, ...inventory } = payload;
+      const json = JSON.stringify(inventory, null, 2);
       const blob = new Blob([json], { type: 'application/json' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -3563,12 +3559,37 @@ function SettingsPage({ onSaved }) {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      showSuccessNotification('Inventory exported', 'Device names, icons, vendors, IPs, and ports were exported.');
+      showServerNotification({ notification: exportNotification });
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Could not export inventory', err.message);
+      showErrorNotification(err);
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function exportDiagnostics() {
+    setExportingDiagnostics(true);
+    setError('');
+    try {
+      const payload = await apiRequest('diagnostics/export/');
+      const data = payload.data || {};
+      const json = JSON.stringify(data.report || {}, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = data.filename || 'languard-diagnostics.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showServerNotification(payload);
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification(err);
+    } finally {
+      setExportingDiagnostics(false);
     }
   }
 
@@ -3587,11 +3608,7 @@ function SettingsPage({ onSaved }) {
         body: payload,
       });
       await onSaved({});
-      const summary = result.data || {};
-      showSuccessNotification(
-        'Inventory imported',
-        `Created ${summary.created || 0}, updated ${summary.updated || 0}, skipped ${summary.skipped || 0}.`
-      );
+      showServerNotification(result);
     } catch (err) {
       const message = err instanceof SyntaxError ? 'Choose a valid LanGuard JSON inventory file.' : err.message;
       setError(message);
@@ -3616,11 +3633,7 @@ function SettingsPage({ onSaved }) {
         body: payload,
       });
       await onSaved({});
-      const summary = result.data || {};
-      showSuccessNotification(
-        'WatchYourLAN migration complete',
-        `Created ${summary.created || 0}, updated ${summary.updated || 0}, skipped ${summary.skipped || 0}.`
-      );
+      showServerNotification(result);
     } catch (err) {
       const message =
         err instanceof SyntaxError
@@ -3655,18 +3668,11 @@ function SettingsPage({ onSaved }) {
           : { target: cleanupTarget, older_than_days: cleanupDays },
       });
       await onSaved({});
-      const deleted = result.data?.deleted || {};
-      const targetLabel = cleanupTargetLabels[cleanupTarget] || 'Activity';
-      showSuccessNotification(
-        `${targetLabel} cleaned`,
-        cleanupTarget === 'dns_activity'
-          ? `Deleted ${deleted.dns_activity || 0} DNS records and ${deleted.dns_unmatched_clients || 0} unmatched client records.`
-          : `Deleted ${deleted.events || 0} events, ${deleted.scan_runs || 0} scan runs, and ${deleted.notifications || 0} notifications.`
-      );
+      showServerNotification(result);
       return true;
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Could not clean activity', err.message);
+      showErrorNotification(err);
       return false;
     } finally {
       setCleaningActivity('');
@@ -4042,6 +4048,23 @@ function SettingsPage({ onSaved }) {
             <Title order={3}>Maintenance</Title>
             <Text c="dimmed">Manage retained activity without changing device inventory.</Text>
           </Box>
+        <Group justify="space-between" align="center" wrap="wrap">
+          <Box>
+            <Text fw={700}>Diagnostics report</Text>
+            <Text size="sm" c="dimmed">
+              Export a sanitized report for support without credentials or device identifiers.
+            </Text>
+          </Box>
+          <Button
+            variant="default"
+            leftSection={<IconDownload size={18} />}
+            onClick={exportDiagnostics}
+            loading={exportingDiagnostics}
+          >
+            Export diagnostics
+          </Button>
+        </Group>
+        <Divider />
         <Group justify="space-between" align="flex-start" wrap="wrap">
           <Box>
             <Text fw={700}>Activity cleanup</Text>
@@ -4298,7 +4321,7 @@ function EventsPage({
         onSelectDevice(payload.data);
       }
     } catch (err) {
-      showErrorNotification('Could not open device', err.message);
+      showErrorNotification(err);
     }
   }
 
@@ -4570,7 +4593,7 @@ function DNSActivityPage({ timeZone, onSelectDevice }) {
     try {
       await loadActivity({ offset: activityPagination.next_offset, append: true });
     } catch (err) {
-      showErrorNotification('Could not load more DNS activity', err.message);
+      showErrorNotification(err);
     } finally {
       setLoadingMoreActivity(false);
     }
@@ -4582,7 +4605,7 @@ function DNSActivityPage({ timeZone, onSelectDevice }) {
     try {
       await loadUnmatched({ offset: unmatchedPagination.next_offset, append: true });
     } catch (err) {
-      showErrorNotification('Could not load more unmatched clients', err.message);
+      showErrorNotification(err);
     } finally {
       setLoadingMoreUnmatched(false);
     }
@@ -5089,7 +5112,7 @@ function Dashboard({
     };
   }, [search, deviceStatus, firstSeenPeriod, deviceOrdering]);
 
-  async function loadData({ quiet = false, notifyOnError = false, notifyOnSuccess = false } = {}) {
+  async function loadData({ quiet = false, notifyOnError = false } = {}) {
     if (quiet) {
       setRefreshing(true);
     } else {
@@ -5152,15 +5175,12 @@ function Dashboard({
       if (settingsData.data) {
         setAppSettings(settingsData.data);
       }
-      if (notifyOnSuccess) {
-        showSuccessNotification('Dashboard refreshed', 'Latest device and scan data loaded.');
-      }
     } catch (err) {
       setError(quiet ? '' : err.message);
       if (notifyOnError) {
-        showErrorNotification('Refresh failed', err.message);
+        showErrorNotification(err);
       } else if (quiet) {
-        showErrorNotification('Backend unavailable', err.message);
+        showErrorNotification(err);
       }
       if (err.message.toLowerCase().includes('credential')) {
         clearStoredUser();
@@ -5172,7 +5192,7 @@ function Dashboard({
     }
   }
 
-  async function loadScanData({ notifyOnError = false, notifyOnSuccess = false } = {}) {
+  async function loadScanData({ notifyOnError = false } = {}) {
     try {
       const statusData = await apiRequest('scan/status/');
       setScanStatus(statusData.data || statusData.active_scan || null);
@@ -5180,12 +5200,9 @@ function Dashboard({
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
       }
-      if (notifyOnSuccess) {
-        showSuccessNotification('Scan refreshed', 'Latest scan status loaded.');
-      }
     } catch (err) {
       if (notifyOnError) {
-        showErrorNotification('Scan refresh failed', err.message);
+        showErrorNotification(err);
       }
     }
   }
@@ -5204,7 +5221,7 @@ function Dashboard({
       setEventPagination(payload.pagination || null);
     } catch (err) {
       if (notifyOnError) {
-        showErrorNotification('Events refresh failed', err.message);
+        showErrorNotification(err);
       }
     }
   }
@@ -5222,7 +5239,7 @@ function Dashboard({
       setScanRunPagination(payload.pagination || null);
     } catch (err) {
       if (notifyOnError) {
-        showErrorNotification('Scan history refresh failed', err.message);
+        showErrorNotification(err);
       }
     }
   }
@@ -5242,7 +5259,7 @@ function Dashboard({
       setNotificationPagination(payload.pagination || null);
     } catch (err) {
       if (notifyOnError) {
-        showErrorNotification('Notifications refresh failed', err.message);
+        showErrorNotification(err);
       }
     }
   }
@@ -5478,22 +5495,21 @@ function Dashboard({
     setRefreshing(true);
     setError('');
     try {
-      await apiRequest('scan/', {
+      const payload = await apiRequest('scan/', {
         method: 'POST',
         body: {},
       });
       await loadData({ quiet: true });
-      showSuccessNotification('Scan started', 'LanGuard is scanning the selected network range.');
+      showServerNotification(payload);
     } catch (err) {
       setError(err.message);
-      showErrorNotification('Scan failed', err.message);
+      showErrorNotification(err);
     } finally {
       setRefreshing(false);
     }
   }
 
   function logout() {
-    showSuccessNotification('Signed out', 'Your LanGuard session has ended.');
     clearStoredUser();
     onLogout();
   }
@@ -5579,7 +5595,7 @@ function Dashboard({
                 <ActionIcon
                   variant="light"
                   size="lg"
-                  onClick={() => loadData({ quiet: true, notifyOnError: true, notifyOnSuccess: true })}
+                  onClick={() => loadData({ quiet: true, notifyOnError: true })}
                   loading={refreshing}
                 >
                   <IconRefresh size={19} />
@@ -5938,7 +5954,7 @@ function Dashboard({
                           </Box>
                           <Box>
                             <Text size="xs" c="dimmed">IP</Text>
-                            <Text fw={700} className="mobile-mono-value device-list-ip-value">{device.ip}</Text>
+                            <Text size="sm" fw={700} className="mobile-mono-value device-list-ip-value">{device.ip}</Text>
                           </Box>
                           <Box>
                             <Text size="xs" c="dimmed">Room</Text>

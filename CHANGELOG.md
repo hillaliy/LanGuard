@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.10.0 - 2026-09-01
+
+- Fixed long IPv4 addresses being clipped in the Docker device list.
+- Improved notification test diagnostics so safe backend errors remain visible in the Docker UI, with actionable Telegram guidance for invalid tokens, missing chats, permissions, and rate limits.
+- Standardized Docker user notifications around server-provided titles and messages displayed through Mantine Notifications.
+- Sanitized stored scan, notification-delivery, and AdGuard Home failures so API responses do not expose raw exceptions, credentials, service URLs, or internal paths.
+- Added an admin-only diagnostics export with application health and aggregate counts while omitting credentials and device or network identifiers.
+- Improved macOS scan, notification, inventory, backup, and storage errors with safe actionable messages while retaining private details in system logs.
+
 ## 1.9.2 - 2026-08-31
 
 - **Docker/web only:** Added configurable backend port support through `BACKEND_LISTEN_PORT`, including matching health-check and frontend proxy configuration for hosts where port `8000` is already occupied.
