@@ -1741,6 +1741,18 @@ def scan_status(request):
                 "last_error": visible_scan.error if visible_scan and visible_scan.error else "",
             },
             "time_zone": app_config.time_zone,
+            "integrations": {
+                "adguard": {
+                    "enabled": app_config.adguard_enabled,
+                    "configured": bool(
+                        app_config.adguard_url
+                        and (
+                            not app_config.adguard_username
+                            or app_config.adguard_password
+                        )
+                    ),
+                },
+            },
             "counters": {
                 "all_devices": Device.objects.count(),
                 "online_devices": Device.objects.exclude(status=Device.Status.OFFLINE).count(),

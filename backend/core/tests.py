@@ -2642,6 +2642,10 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["counters"]["offline_devices"], 1)
         self.assertEqual(response.data["counters"]["unnotified_events"], 1)
         self.assertEqual(response.data["time_zone"], "UTC")
+        self.assertEqual(
+            response.data["integrations"]["adguard"],
+            {"enabled": False, "configured": False},
+        )
         self.assertFalse(response.data["visibility"]["is_scanning"])
         self.assertEqual(response.data["visibility"]["current_range"], "192.168.1.0/24")
         self.assertTrue(response.data["data"]["started_at"].endswith("Z"))
@@ -2649,6 +2653,24 @@ class ScanApiTests(TestCase):
         self.assertTrue(response.data["visibility"]["started_at"].endswith("Z"))
         self.assertTrue(response.data["visibility"]["finished_at"].endswith("Z"))
         self.assertGreaterEqual(response.data["visibility"]["duration_seconds"], 119)
+
+    def test_scan_status_exposes_safe_active_adguard_state(self):
+        config = AppSettings.load()
+        config.adguard_enabled = True
+        config.adguard_url = "http://192.168.1.2:3000"
+        config.adguard_username = "admin"
+        config.adguard_password = "secret-password"
+        config.save()
+
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["integrations"]["adguard"],
+            {"enabled": True, "configured": True},
+        )
+        self.assertNotIn("adguard_url", str(response.data))
+        self.assertNotIn("secret-password", str(response.data))
 
     def test_scan_status_endpoint_returns_active_scan_visibility(self):
         running_scan = ScanRun.objects.create(

@@ -5034,6 +5034,7 @@ function Dashboard({
   const [counters, setCounters] = useState({});
   const [scanStatus, setScanStatus] = useState(null);
   const [scanVisibility, setScanVisibility] = useState(null);
+  const [integrationStatus, setIntegrationStatus] = useState({});
   const [scanRuns, setScanRuns] = useState([]);
   const [scanRunPagination, setScanRunPagination] = useState(null);
   const [dashboardEvents, setDashboardEvents] = useState([]);
@@ -5094,6 +5095,9 @@ function Dashboard({
     ? `New version v${latestVersion} is available`
     : 'Version history';
   const displayTimeZone = appSettings?.time_zone || dashboardTimeZone || undefined;
+  const showDnsActivity = Boolean(
+    integrationStatus?.adguard?.enabled && integrationStatus?.adguard?.configured
+  );
   const showFirstSeen = deviceOrdering === 'firstseen' || deviceOrdering === '-firstseen';
   function storeDashboardNavigationState(overrides = {}) {
     window.sessionStorage.setItem(
@@ -5268,6 +5272,7 @@ function Dashboard({
       setCounters(deviceData.counters || {});
       setScanStatus(statusData.data || statusData.active_scan || null);
       setScanVisibility(statusData.visibility || null);
+      setIntegrationStatus(statusData.integrations || {});
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
       }
@@ -5776,16 +5781,18 @@ function Dashboard({
             >
               Notifications
             </Button>
-            <Button
-              className="sidebar-nav-button"
-              variant={!devicePageId && mainView === 'dns' ? 'filled' : 'subtle'}
-              justify="flex-start"
-              leftSection={<IconWorldSearch size={18} />}
-              onClick={() => navigateToView('dns')}
-              fullWidth
-            >
-              DNS Activity
-            </Button>
+            {showDnsActivity && (
+              <Button
+                className="sidebar-nav-button"
+                variant={!devicePageId && mainView === 'dns' ? 'filled' : 'subtle'}
+                justify="flex-start"
+                leftSection={<IconWorldSearch size={18} />}
+                onClick={() => navigateToView('dns')}
+                fullWidth
+              >
+                DNS Activity
+              </Button>
+            )}
             {canManageUsers && (
               <>
                 <Divider my={4} />
