@@ -21,7 +21,8 @@
   <a href="#features">Features</a> &middot;
   <a href="#portainer">Docker setup</a> &middot;
   <a href="macos/LanGuardMac/README.md">macOS</a> &middot;
-  <a href="#migrate-from-watchyourlan">Migration</a>
+  <a href="#migrate-from-watchyourlan">Migration</a> &middot;
+  <a href="#license">License</a>
 </p>
 
 LanGuard finds devices, tracks online and offline state, scans common ports,
@@ -339,3 +340,10 @@ Change the image tags in the Portainer stack and redeploy. Do not delete the `la
 
 Development setup, checks, and release metadata instructions are documented in
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## License
+
+Copyright 2026 Yossi Hillali.
+
+LanGuard is licensed under the [Apache License 2.0](LICENSE). Third-party
+components remain subject to their respective licenses.

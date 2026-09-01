@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Licensed LanGuard under the Apache License 2.0 with matching contributor terms and documentation.
+
 ## 1.10.0 - 2026-09-01
 
 - Fixed long IPv4 addresses being clipped in the Docker device list.

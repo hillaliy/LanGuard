@@ -3,6 +3,12 @@
 Thank you for helping improve LanGuard. Keep changes focused, follow the existing
 project patterns, and include tests appropriate to the behavior being changed.
 
+## Licensing
+
+LanGuard is licensed under the [Apache License 2.0](LICENSE). Unless you
+explicitly state otherwise, contributions intentionally submitted for inclusion
+in LanGuard are provided under the same license, without additional terms.
+
 ## Development
 
 Create and start the backend environment:
