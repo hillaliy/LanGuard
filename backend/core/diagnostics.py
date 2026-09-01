@@ -91,6 +91,9 @@ def build_diagnostics_report():
             "discord_configured": bool(config.discord_webhook),
             "telegram_enabled": config.telegram_enabled,
             "telegram_configured": bool(config.telegram_token and config.telegram_user_id),
+            "webhook_enabled": config.webhook_enabled,
+            "webhook_configured": bool(config.webhook_url),
+            "webhook_signature_configured": bool(config.webhook_secret),
             "adguard_enabled": config.adguard_enabled,
             "adguard_configured": bool(
                 config.adguard_url

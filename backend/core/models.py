@@ -304,6 +304,7 @@ class AppSettings(models.Model):
     telegram_user_id = models.CharField(max_length=64, blank=True, default="")
     webhook_enabled = models.BooleanField(default=False)
     webhook_url = models.URLField(max_length=2048, blank=True, default="")
+    webhook_secret = models.CharField(max_length=255, blank=True, default="")
     notify_new_devices = models.BooleanField(default=True)
     notify_device_online = models.BooleanField(default=False)
     notify_device_offline = models.BooleanField(default=False)
@@ -349,6 +350,7 @@ class AppSettings(models.Model):
             "telegram_user_id": settings.TELEGRAM_USERID or "",
             "webhook_enabled": False,
             "webhook_url": "",
+            "webhook_secret": "",
             "notify_new_devices": "new_device" in settings.NOTIFICATION_EVENT_TYPES,
             "notify_device_online": "device_online" in settings.NOTIFICATION_EVENT_TYPES,
             "notify_device_offline": "device_offline" in settings.NOTIFICATION_EVENT_TYPES,

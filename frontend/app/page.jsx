@@ -3355,10 +3355,13 @@ function SettingsPage({ onSaved }) {
   const [discordConfigured, setDiscordConfigured] = useState(false);
   const [telegramConfigured, setTelegramConfigured] = useState(false);
   const [webhookConfigured, setWebhookConfigured] = useState(false);
+  const [webhookSignatureConfigured, setWebhookSignatureConfigured] = useState(false);
   const [discordWebhook, setDiscordWebhook] = useState('');
   const [telegramToken, setTelegramToken] = useState('');
   const [telegramUserId, setTelegramUserId] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
+  const [clearWebhookSecret, setClearWebhookSecret] = useState(false);
   const [adguardEnabled, setAdguardEnabled] = useState(false);
   const [adguardConfigured, setAdguardConfigured] = useState(false);
   const [adguardUrl, setAdguardUrl] = useState('');
@@ -3406,10 +3409,13 @@ function SettingsPage({ onSaved }) {
       setDiscordConfigured(Boolean(data.discord_configured));
       setTelegramConfigured(Boolean(data.telegram_configured));
       setWebhookConfigured(Boolean(data.webhook_configured));
+      setWebhookSignatureConfigured(Boolean(data.webhook_signature_configured));
       setDiscordWebhook(data.discord_webhook || '');
       setTelegramToken(data.telegram_token || '');
       setTelegramUserId(data.telegram_user_id || '');
       setWebhookUrl(data.webhook_url || '');
+      setWebhookSecret('');
+      setClearWebhookSecret(false);
       setAdguardEnabled(Boolean(data.adguard_enabled));
       setAdguardConfigured(Boolean(data.adguard_configured));
       setAdguardUrl(data.adguard_url || '');
@@ -3474,6 +3480,12 @@ function SettingsPage({ onSaved }) {
       body.telegram_token = telegramToken;
       body.telegram_user_id = telegramUserId;
       body.webhook_url = webhookUrl.trim();
+      if (webhookSecret) {
+        body.webhook_secret = webhookSecret;
+      }
+      if (clearWebhookSecret) {
+        body.clear_webhook_secret = true;
+      }
       if (adguardPassword) {
         body.adguard_password = adguardPassword;
       }
@@ -3504,7 +3516,11 @@ function SettingsPage({ onSaved }) {
           telegram_user_id: telegramUserId.trim(),
         };
       } else {
-        body = { channel, webhook_url: webhookUrl.trim() };
+        body = {
+          channel,
+          webhook_url: webhookUrl.trim(),
+          webhook_secret: webhookSecret,
+        };
       }
       const payload = await apiRequest('notifications/test/', { method: 'POST', body });
       showServerNotification(payload);
@@ -3950,18 +3966,38 @@ function SettingsPage({ onSaved }) {
                 onChange={(event) => setWebhookEnabled(event.currentTarget.checked)}
               />
             </Group>
-            <Badge color={webhookConfigured && webhookEnabled ? 'teal' : 'gray'} variant="light">
-              {webhookConfigured ? 'Configured' : 'Not configured'}
-            </Badge>
+            <Group gap="xs">
+              {webhookConfigured && (
+                <Badge color={webhookSignatureConfigured ? 'teal' : 'yellow'} variant="light">
+                  {webhookSignatureConfigured ? 'Signed' : 'Unsigned'}
+                </Badge>
+              )}
+              <Badge color={webhookConfigured && webhookEnabled ? 'teal' : 'gray'} variant="light">
+                {webhookConfigured ? 'Configured' : 'Not configured'}
+              </Badge>
+            </Group>
           </Group>
-          <Group align="flex-end" wrap="nowrap">
+          <Group align="flex-end" wrap="wrap">
             <TextInput
-              style={{ flex: 1 }}
+              style={{ flex: '1 1 360px' }}
               label="Webhook URL"
               description="Send structured network events to n8n, Home Assistant, or another automation service."
               placeholder="https://automation.example/webhook/languard"
               value={webhookUrl}
               onChange={(event) => setWebhookUrl(event.currentTarget.value)}
+            />
+            <PasswordInput
+              style={{ flex: '1 1 260px' }}
+              label="Signing secret"
+              description={
+                webhookSignatureConfigured
+                  ? 'Leave blank to keep the saved secret.'
+                  : 'Optional HMAC secret used to verify LanGuard deliveries.'
+              }
+              placeholder={webhookSignatureConfigured ? 'Saved secret' : 'Shared secret'}
+              value={webhookSecret}
+              onChange={(event) => setWebhookSecret(event.currentTarget.value)}
+              disabled={clearWebhookSecret}
             />
             <Tooltip label="Send test notification">
               <ActionIcon
@@ -3979,6 +4015,13 @@ function SettingsPage({ onSaved }) {
               </ActionIcon>
             </Tooltip>
           </Group>
+          {webhookSignatureConfigured && (
+            <Checkbox
+              label="Remove the saved signing secret when settings are saved"
+              checked={clearWebhookSecret}
+              onChange={(event) => setClearWebhookSecret(event.currentTarget.checked)}
+            />
+          )}
         </Stack>
         </Stack>
           </Tabs.Panel>

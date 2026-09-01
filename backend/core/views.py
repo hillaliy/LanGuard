@@ -1066,6 +1066,8 @@ def dns_unmatched_clients(request):
         },
     ),
 )
+
+
 @api_view(["POST"])
 @permission_classes([permissions.IsAdminUser])
 def test_notification_channel(request):
@@ -1083,7 +1085,11 @@ def test_notification_channel(request):
                 data["telegram_user_id"].strip(),
             )
         else:
-            send_webhook_test(data["webhook_url"].strip())
+            saved_secret = AppSettings.load().webhook_secret
+            send_webhook_test(
+                data["webhook_url"].strip(),
+                data.get("webhook_secret", "").strip() or saved_secret,
+            )
     except requests.Timeout:
         return error_response(
             "Test notification failed",

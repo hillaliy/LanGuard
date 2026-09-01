@@ -293,8 +293,10 @@ Event deliveries use this structure:
 
 ```json
 {
+  "schema_version": 1,
   "source": "languard",
   "kind": "network_event",
+  "delivery_id": 73,
   "event": {
     "id": 42,
     "type": "new_device",
@@ -321,8 +323,23 @@ Event deliveries use this structure:
 ```
 
 The webhook follows the same event rules and quiet hours as Discord and
-Telegram. A non-success HTTP response is recorded as a failed notification and
-the scheduler retries it with the existing notification retry policy.
+Telegram. You can independently enable new-device, online, offline, and port
+change events. A non-success HTTP response is recorded in notification history,
+and the scheduler retries it with the existing notification retry policy.
+
+For authenticated delivery, set a **Signing secret** in LanGuard and configure
+the same value in the receiving workflow. Signed requests include these headers:
+
+- `X-LanGuard-Delivery`: a stable delivery identifier for network events.
+- `X-LanGuard-Event`: `network_event` or `test`.
+- `X-LanGuard-Timestamp`: the Unix timestamp used in the signature.
+- `X-LanGuard-Signature`: `sha256=<hex digest>` when a secret is configured.
+
+To verify a request, calculate HMAC-SHA256 over
+`<X-LanGuard-Timestamp>.<raw request body>` with the shared secret, compare it
+to `X-LanGuard-Signature` using a constant-time comparison, and reject stale
+timestamps. The signing secret is write-only in the LanGuard API and is omitted
+from diagnostics exports.
 
 ## Migrate from WatchYourLAN
 

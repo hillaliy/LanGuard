@@ -20,6 +20,11 @@ class Migration(migrations.Migration):
             name='webhook_url',
             field=models.URLField(blank=True, default='', max_length=2048),
         ),
+        migrations.AddField(
+            model_name='appsettings',
+            name='webhook_secret',
+            field=models.CharField(blank=True, default='', max_length=255),
+        ),
         migrations.AlterField(
             model_name='notificationdelivery',
             name='channel',

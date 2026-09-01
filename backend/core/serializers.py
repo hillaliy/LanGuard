@@ -517,6 +517,12 @@ class NotificationTestSerializer(serializers.Serializer):
     )
     discord_webhook = serializers.URLField(required=False, allow_blank=True)
     webhook_url = serializers.URLField(required=False, allow_blank=True, max_length=2048)
+    webhook_secret = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=255,
+        write_only=True,
+    )
     telegram_token = serializers.CharField(
         required=False,
         allow_blank=True,
@@ -577,12 +583,24 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     discord_configured = serializers.SerializerMethodField()
     telegram_configured = serializers.SerializerMethodField()
     webhook_configured = serializers.SerializerMethodField()
+    webhook_signature_configured = serializers.SerializerMethodField()
     adguard_configured = serializers.SerializerMethodField()
     adguard_password = serializers.CharField(
         write_only=True,
         required=False,
         allow_blank=True,
         max_length=255,
+    )
+    webhook_secret = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=255,
+    )
+    clear_webhook_secret = serializers.BooleanField(
+        write_only=True,
+        required=False,
+        default=False,
     )
     adguard_last_error = serializers.SerializerMethodField()
 
@@ -607,7 +625,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "telegram_configured",
             "webhook_enabled",
             "webhook_url",
+            "webhook_secret",
+            "clear_webhook_secret",
             "webhook_configured",
+            "webhook_signature_configured",
             "notify_new_devices",
             "notify_device_online",
             "notify_device_offline",
@@ -654,6 +675,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return bool(obj.webhook_url)
 
     @extend_schema_field(serializers.BooleanField)
+    def get_webhook_signature_configured(self, obj):
+        return bool(obj.webhook_secret)
+
+    @extend_schema_field(serializers.BooleanField)
     def get_adguard_configured(self, obj):
         return bool(obj.adguard_url and (not obj.adguard_username or obj.adguard_password))
 
@@ -696,6 +721,11 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return attrs
 
     def update(self, instance, validated_data):
+        clear_webhook_secret = validated_data.pop("clear_webhook_secret", False)
+        if clear_webhook_secret:
+            validated_data["webhook_secret"] = ""
+        elif not validated_data.get("webhook_secret"):
+            validated_data.pop("webhook_secret", None)
         if not validated_data.get("adguard_username", instance.adguard_username):
             validated_data.setdefault("adguard_password", "")
         return super().update(instance, validated_data)

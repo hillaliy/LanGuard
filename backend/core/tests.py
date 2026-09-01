@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta, timezone as datetime_timezone
+import hashlib
+import hmac
+import json
 import socket
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -1457,18 +1460,34 @@ class NotificationTests(TestCase):
     def test_webhook_test_uses_structured_payload(self, post):
         post.return_value = Mock(raise_for_status=Mock())
 
-        send_webhook_test("https://automation.example/webhook/languard")
+        send_webhook_test(
+            "https://automation.example/webhook/languard",
+            "shared-secret",
+        )
 
         post.assert_called_once()
         self.assertEqual(
             post.call_args.args[0],
             "https://automation.example/webhook/languard",
         )
-        payload = post.call_args.kwargs["json"]
+        body = post.call_args.kwargs["data"]
+        payload = json.loads(body)
         self.assertEqual(payload["source"], "languard")
         self.assertEqual(payload["kind"], "test")
+        self.assertEqual(payload["schema_version"], 1)
         self.assertIn("channel is working", payload["message"])
         self.assertTrue(payload["created_at"].endswith("Z"))
+        headers = post.call_args.kwargs["headers"]
+        self.assertEqual(headers["X-LanGuard-Delivery"], payload["delivery_id"])
+        expected_signature = hmac.new(
+            b"shared-secret",
+            f"{headers['X-LanGuard-Timestamp']}.".encode("utf-8") + body,
+            hashlib.sha256,
+        ).hexdigest()
+        self.assertEqual(
+            headers["X-LanGuard-Signature"],
+            f"sha256={expected_signature}",
+        )
 
     @override_settings(NOTIFICATION_TIMEOUT=1)
     @patch("core.notifications.requests.post")
@@ -1477,6 +1496,7 @@ class NotificationTests(TestCase):
         AppSettings.objects.create(
             webhook_enabled=True,
             webhook_url="https://automation.example/webhook/languard",
+            webhook_secret="shared-secret",
         )
 
         deliveries = notify_event(self.event)
@@ -1485,13 +1505,34 @@ class NotificationTests(TestCase):
         delivery = NotificationDelivery.objects.get(event=self.event)
         self.assertEqual(delivery.channel, NotificationDelivery.Channel.WEBHOOK)
         self.assertEqual(delivery.status, NotificationDelivery.Status.SENT)
-        payload = post.call_args.kwargs["json"]
-        self.assertEqual(payload, format_webhook_payload(self.event))
+        payload = json.loads(post.call_args.kwargs["data"])
+        self.assertEqual(
+            payload,
+            format_webhook_payload(self.event, delivery_id=delivery.id),
+        )
+        self.assertEqual(payload["delivery_id"], delivery.id)
         self.assertEqual(payload["source"], "languard")
         self.assertEqual(payload["kind"], "network_event")
         self.assertEqual(payload["event"]["type"], "new_device")
         self.assertEqual(payload["device"]["mac"], "11:22:33:44:55:66")
         self.assertEqual(payload["device"]["ip"], "192.168.1.50")
+        self.assertIn("X-LanGuard-Signature", post.call_args.kwargs["headers"])
+
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
+    def test_webhook_without_secret_is_delivered_unsigned(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        AppSettings.objects.create(
+            webhook_enabled=True,
+            webhook_url="https://automation.example/webhook/languard",
+        )
+
+        notify_event(self.event)
+
+        self.assertNotIn(
+            "X-LanGuard-Signature",
+            post.call_args.kwargs["headers"],
+        )
 
     @override_settings(
         NOTIFICATIONS_ENABLED=True,
@@ -1617,6 +1658,27 @@ class NotificationTests(TestCase):
         retried = retry_failed_notifications()
 
         self.assertEqual(retried, [])
+        post.assert_not_called()
+
+    @override_settings(NOTIFICATION_MAX_ATTEMPTS=3)
+    @patch("core.notifications.requests.post")
+    def test_failed_delivery_is_skipped_after_channel_is_disabled(self, post):
+        AppSettings.objects.create(
+            webhook_enabled=False,
+            webhook_url="https://automation.example/webhook/languard",
+        )
+        delivery = NotificationDelivery.objects.create(
+            event=self.event,
+            channel=NotificationDelivery.Channel.WEBHOOK,
+            status=NotificationDelivery.Status.FAILED,
+            attempts=1,
+        )
+
+        retried = retry_failed_notifications()
+
+        delivery.refresh_from_db()
+        self.assertEqual(retried, [])
+        self.assertEqual(delivery.status, NotificationDelivery.Status.SKIPPED)
         post.assert_not_called()
 
     @override_settings(
@@ -1956,6 +2018,9 @@ class ScanApiTests(TestCase):
         config.discord_webhook = "https://discord.example/super-secret-webhook"
         config.telegram_token = "super-secret-bot-token"
         config.telegram_user_id = "987654321"
+        config.webhook_enabled = True
+        config.webhook_url = "https://automation.example/private-webhook"
+        config.webhook_secret = "super-secret-signing-key"
         config.adguard_enabled = True
         config.adguard_url = "http://10.20.30.40:3000"
         config.adguard_username = "private-admin"
@@ -1977,6 +2042,8 @@ class ScanApiTests(TestCase):
             "super-secret-webhook",
             "super-secret-bot-token",
             "super-secret-password",
+            "super-secret-signing-key",
+            "private-webhook",
             "private-admin",
             "10.20.30.40",
             "192.168.1.20",
@@ -2056,6 +2123,9 @@ class ScanApiTests(TestCase):
 
     @patch("core.views.send_webhook_test")
     def test_notification_test_endpoint_sends_webhook(self, send_test):
+        config = AppSettings.load()
+        config.webhook_secret = "saved-secret"
+        config.save(update_fields=["webhook_secret"])
         response = self.client.post(
             "/api/v1/notifications/test/",
             {
@@ -2068,7 +2138,8 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["channel"], "webhook")
         send_test.assert_called_once_with(
-            "https://automation.example/webhook/languard"
+            "https://automation.example/webhook/languard",
+            "saved-secret",
         )
 
     def test_notification_test_endpoint_rejects_missing_webhook_url(self):
@@ -2203,6 +2274,7 @@ class ScanApiTests(TestCase):
                 "telegram_token": "token",
                 "telegram_user_id": "123",
                 "webhook_url": "https://automation.example/webhook/languard",
+                "webhook_secret": "shared-secret",
                 "home_map_layout": {
                     "order": ["Floor", "Bedroom"],
                     "parents": {"Bedroom": "Floor"},
@@ -2240,6 +2312,7 @@ class ScanApiTests(TestCase):
             config.webhook_url,
             "https://automation.example/webhook/languard",
         )
+        self.assertEqual(config.webhook_secret, "shared-secret")
         self.assertEqual(
             response.data["data"]["discord_webhook"],
             "https://discord.example/webhook",
@@ -2250,6 +2323,8 @@ class ScanApiTests(TestCase):
         self.assertTrue(response.data["data"]["telegram_enabled"])
         self.assertTrue(response.data["data"]["webhook_enabled"])
         self.assertTrue(response.data["data"]["webhook_configured"])
+        self.assertTrue(response.data["data"]["webhook_signature_configured"])
+        self.assertNotIn("webhook_secret", response.data["data"])
         self.assertTrue(response.data["data"]["discord_configured"])
         self.assertEqual(response.data["data"]["version_check_interval"], 3600)
         self.assertTrue(response.data["data"]["notify_device_online"])
@@ -2287,6 +2362,33 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("webhook_url", response.data)
+
+    def test_settings_endpoint_keeps_or_clears_saved_webhook_secret_explicitly(self):
+        config = AppSettings.load()
+        config.webhook_secret = "saved-secret"
+        config.save(update_fields=["webhook_secret"])
+
+        keep_response = self.client.put(
+            "/api/v1/settings/",
+            {"webhook_secret": ""},
+            format="json",
+        )
+        config.refresh_from_db()
+
+        self.assertEqual(keep_response.status_code, 200)
+        self.assertEqual(config.webhook_secret, "saved-secret")
+
+        clear_response = self.client.put(
+            "/api/v1/settings/",
+            {"clear_webhook_secret": True},
+            format="json",
+        )
+        config.refresh_from_db()
+
+        self.assertEqual(clear_response.status_code, 200)
+        self.assertEqual(config.webhook_secret, "")
+        self.assertFalse(clear_response.data["data"]["webhook_signature_configured"])
+        self.assertNotIn("clear_webhook_secret", clear_response.data["data"])
 
     def test_settings_endpoint_rejects_bad_quiet_hours(self):
         response = self.client.put(
