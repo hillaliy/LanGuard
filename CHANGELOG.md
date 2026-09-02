@@ -2,10 +2,13 @@
 
 ## Unreleased
 
+## 1.11.0 - 2026-09-02
+
 - Licensed LanGuard under the Apache License 2.0 with matching contributor terms and documentation.
 - Added a generic automation webhook notification channel with structured JSON payloads, optional HMAC-SHA256 signing, connection testing, delivery history, and automatic retries for tools such as n8n and Home Assistant.
 - Added per-user permissions for device editing, Home Map layout changes, and manual scans, enforced by both the Docker UI and backend API.
 - Added an optional Docker Speedtest Tracker integration that shows the latest internet performance result on the dashboard with a fixed five-minute backend cache and no local result storage.
+- Hidden the central and per-device DNS Activity views when AdGuard Home is not enabled and configured.
 
 ## 1.10.0 - 2026-09-01
 

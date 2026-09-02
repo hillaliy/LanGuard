@@ -203,11 +203,10 @@ AdGuard Home settings are read from the database during their scheduled loops an
 do not require a restart.
 
 > [!IMPORTANT]
-> The next Docker release includes a Docker deployment change. Existing Compose
-> files remain compatible, but installations should update the stack with the
-> current Compose definition and recreate it once to enable the backend health
-> check and coordinated service restarts. Named volumes are preserved, so this
-> does not delete LanGuard data.
+> When upgrading from version 1.7.0 or earlier, update the stack with the current
+> Compose definition and recreate it once to enable the backend health check and
+> coordinated service restarts. Older Compose files remain compatible and named
+> volumes are preserved, so this does not delete LanGuard data.
 
 > [!IMPORTANT]
 > When upgrading from version 1.4.0 or earlier, change the scanner service image
