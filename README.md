@@ -250,7 +250,17 @@ usernames, device names, IP and MAC addresses, network ranges, and raw exception
 text. Attach this report to a GitHub issue; only provide container logs when
 requested and review them for private network details first.
 
-## AdGuard Home
+## Integrations
+
+Docker installations can connect LanGuard to optional services from
+**Settings > Add-ons**. Each integration is disabled by default.
+
+| Integration | What it adds | Data handling |
+| --- | --- | --- |
+| AdGuard Home | Network-wide and per-device DNS activity | Stores aggregated domain and query counters using the configured retention period |
+| Speedtest Tracker | Latest download, upload, ping, packet loss, and health on the dashboard | Stores connection settings only; the latest result is cached in memory for five minutes |
+
+### AdGuard Home
 
 Docker installations can sync AdGuard Home query-log activity into LanGuard.
 LanGuard stores aggregated counters per device, domain, and DNS query type
@@ -281,7 +291,7 @@ integration is included in a release.
 > the router. Configure clients or DHCP to use AdGuard Home directly when you
 > need device-level activity.
 
-## Speedtest Tracker
+### Speedtest Tracker
 
 Docker installations can show the latest result from an existing Speedtest
 Tracker installation directly on the dashboard. LanGuard displays download,
