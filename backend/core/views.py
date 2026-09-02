@@ -30,6 +30,13 @@ import requests
 
 from django.utils import timezone
 from .datetime_utils import utc_isoformat
+from .access_control import (
+    ACCESS_FIELDS,
+    CanEditDevices,
+    CanEditHomeMap,
+    CanRunScans,
+    user_capabilities,
+)
 from .maintenance import cleanup_activity
 from .serializers import (
     AdGuardUnmatchedClientSerializer,
@@ -43,6 +50,7 @@ from .serializers import (
     NotificationDeliverySerializer,
     NotificationTestSerializer,
     ScanRunSerializer,
+    SpeedtestTrackerConnectionSerializer,
     UserManagementSerializer,
     UserSerializer,
     device_attention_acknowledged,
@@ -67,8 +75,9 @@ from .api import (
     parse_int_param,
 )
 from .scan import detect_web_interface, scan, validate_ip_range
-from .notifications import send_discord_test, send_telegram_test
+from .notifications import send_discord_test, send_telegram_test, send_webhook_test
 from .adguard import AdGuardError, sync_adguard_query_log, test_adguard_connection
+from .speedtest_tracker import SpeedtestTrackerError, latest_speedtest_result
 from .diagnostics import build_diagnostics_report
 from .user_messages import error_response, scan_error_message, success_response
 
@@ -264,6 +273,7 @@ def auth_payload(user, token, *, account_created=False):
         "token": token.key,
         "is_staff": user.is_staff,
         "is_superuser": user.is_superuser,
+        **user_capabilities(user),
         "notification": {
             "title": "Account created" if account_created else "Signed in",
             "message": "Your LanGuard session is ready.",
@@ -850,6 +860,65 @@ def sync_adguard(request):
     )
 
 
+@extend_schema(request=SpeedtestTrackerConnectionSerializer, responses=OpenApiTypes.OBJECT)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def test_speedtest_tracker(request):
+    serializer = SpeedtestTrackerConnectionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    config = AppSettings.load()
+    api_token = data.get("api_token") or config.speedtest_tracker_api_token
+    try:
+        result, _ = latest_speedtest_result(
+            data["url"],
+            api_token,
+            force_refresh=True,
+        )
+    except SpeedtestTrackerError as exc:
+        return error_response(
+            "Speedtest Tracker connection failed",
+            str(exc),
+            response_status=status.HTTP_502_BAD_GATEWAY,
+        )
+    return success_response(
+        result,
+        "Speedtest Tracker connected",
+        "Connection succeeded and the latest result is available.",
+    )
+
+
+@extend_schema(responses=OpenApiTypes.OBJECT)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def speedtest_tracker_latest(request):
+    config = AppSettings.load()
+    configured = bool(
+        config.speedtest_tracker_url and config.speedtest_tracker_api_token
+    )
+    integration = {
+        "enabled": config.speedtest_tracker_enabled,
+        "configured": configured,
+        "available": False,
+        "service_url": config.speedtest_tracker_url if configured else "",
+    }
+    if not config.speedtest_tracker_enabled or not configured:
+        return Response({"data": None, "integration": integration})
+
+    try:
+        result, cached = latest_speedtest_result(
+            config.speedtest_tracker_url,
+            config.speedtest_tracker_api_token,
+            force_refresh=parse_bool_param(request.query_params, "refresh") is True,
+        )
+    except SpeedtestTrackerError as exc:
+        LOGGER.warning("Speedtest Tracker latest-result request failed: %s", exc)
+        return Response({"data": None, "integration": integration})
+
+    integration.update({"available": True, "cached": cached})
+    return Response({"data": result, "integration": integration})
+
+
 @extend_schema(responses=OpenApiTypes.OBJECT)
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
@@ -1066,6 +1135,8 @@ def dns_unmatched_clients(request):
         },
     ),
 )
+
+
 @api_view(["POST"])
 @permission_classes([permissions.IsAdminUser])
 def test_notification_channel(request):
@@ -1077,10 +1148,16 @@ def test_notification_channel(request):
     try:
         if channel == NotificationDelivery.Channel.DISCORD:
             send_discord_test(data["discord_webhook"].strip())
-        else:
+        elif channel == NotificationDelivery.Channel.TELEGRAM:
             send_telegram_test(
                 data["telegram_token"].strip(),
                 data["telegram_user_id"].strip(),
+            )
+        else:
+            saved_secret = AppSettings.load().webhook_secret
+            send_webhook_test(
+                data["webhook_url"].strip(),
+                data.get("webhook_secret", "").strip() or saved_secret,
             )
     except requests.Timeout:
         return error_response(
@@ -1144,7 +1221,7 @@ def test_notification_channel(request):
     responses=HomeMapLayoutSerializer,
 )
 @api_view(["GET", "PUT"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, CanEditHomeMap])
 def home_map_layout(request):
     config = AppSettings.load()
 
@@ -1394,6 +1471,8 @@ def users(request):
             data.pop("is_staff", None)
             data.pop("is_superuser", None)
             data.pop("is_active", None)
+            for field in ACCESS_FIELDS:
+                data.pop(field, None)
         serializer = UserManagementSerializer(user, data=request.data, partial=True)
         if not is_staff:
             serializer = UserManagementSerializer(user, data=data, partial=True)
@@ -1460,7 +1539,7 @@ def users(request):
     responses=OpenApiTypes.OBJECT,
 )
 @api_view(["GET", "PUT", "DELETE"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, CanEditDevices])
 def device(request):
     all_devices = Device.objects.all().count()
     online_devices = Device.objects.exclude(status=Device.Status.OFFLINE).count()
@@ -1607,7 +1686,7 @@ def device(request):
     responses=OpenApiTypes.OBJECT,
 )
 @api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAuthenticated, CanRunScans])
 def scan_now(request):
     ip_range = request.data.get("ip_range") or AppSettings.load().ip_range
     try:
@@ -1733,6 +1812,26 @@ def scan_status(request):
                 "last_error": visible_scan.error if visible_scan and visible_scan.error else "",
             },
             "time_zone": app_config.time_zone,
+            "integrations": {
+                "adguard": {
+                    "enabled": app_config.adguard_enabled,
+                    "configured": bool(
+                        app_config.adguard_url
+                        and (
+                            not app_config.adguard_username
+                            or app_config.adguard_password
+                        )
+                    ),
+                },
+                "speedtest_tracker": {
+                    "enabled": app_config.speedtest_tracker_enabled,
+                    "configured": bool(
+                        app_config.speedtest_tracker_url
+                        and app_config.speedtest_tracker_api_token
+                    ),
+                },
+            },
+            "permissions": user_capabilities(request.user),
             "counters": {
                 "all_devices": Device.objects.count(),
                 "online_devices": Device.objects.exclude(status=Device.Status.OFFLINE).count(),

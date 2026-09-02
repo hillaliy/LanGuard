@@ -61,6 +61,7 @@ import {
   IconDownload,
   IconEdit,
   IconGripVertical,
+  IconGauge,
   IconHistory,
   IconLamp,
   IconLayoutDashboard,
@@ -96,6 +97,7 @@ import {
   IconWifi,
   IconWindmill,
   IconWindow,
+  IconWebhook,
   IconWorldSearch,
   IconX,
 } from '@tabler/icons-react';
@@ -859,7 +861,7 @@ function isHomeMapDescendant(room, maybeDescendant, parents) {
   return false;
 }
 
-function HomeMap({ devices = [], onSelectDevice }) {
+function HomeMap({ devices = [], onSelectDevice, canEditLayout }) {
   const [deviceFilter, setDeviceFilter] = useState('all');
   const rooms = useMemo(() => buildHomeMapRooms(devices, deviceFilter), [deviceFilter, devices]);
   const assignedRooms = useMemo(
@@ -980,6 +982,12 @@ function HomeMap({ devices = [], onSelectDevice }) {
       setDropTarget(null);
     }
   }, [layoutEditMode]);
+
+  useEffect(() => {
+    if (!canEditLayout && layoutEditMode) {
+      setLayoutEditMode(false);
+    }
+  }, [canEditLayout, layoutEditMode]);
 
   const updateHomeMapLayout = (updater) => {
     setLayout((currentLayout) => {
@@ -1170,7 +1178,7 @@ function HomeMap({ devices = [], onSelectDevice }) {
                 onChange={setDeviceFilter}
                 size="xs"
               />
-              <Group gap="xs">
+              {canEditLayout && <Group gap="xs">
                 {layoutEditMode && (
                   <Button
                     variant="subtle"
@@ -1191,7 +1199,7 @@ function HomeMap({ devices = [], onSelectDevice }) {
               >
                 {layoutEditMode ? 'Done' : 'Edit layout'}
               </Button>
-              </Group>
+              </Group>}
             </Group>
             <section className="home-map-building">
               <div
@@ -1947,6 +1955,79 @@ function LatestScanCard({ scanStatus, scanVisibility, timeZone, onOpenDetails })
   );
 }
 
+function formatSpeedtestSpeed(displayValue, numericValue) {
+  if (displayValue) {
+    return displayValue;
+  }
+  if (numericValue === null || numericValue === undefined || numericValue === '') {
+    return '-';
+  }
+  const value = Number(numericValue);
+  return Number.isFinite(value) ? `${value.toFixed(value >= 100 ? 0 : 1)} Mbps` : '-';
+}
+
+function formatSpeedtestNumber(value, suffix) {
+  if (value === null || value === undefined || value === '') {
+    return '-';
+  }
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? `${numberValue.toFixed(1)} ${suffix}` : '-';
+}
+
+function SpeedtestTrackerCard({ payload, timeZone }) {
+  const result = payload?.data || null;
+  const integration = payload?.integration || {};
+  const available = Boolean(integration.available && result);
+  const healthColor = !available ? 'gray' : result.healthy === false ? 'orange' : result.healthy === true ? 'teal' : 'blue';
+  const healthLabel = !available ? 'Unavailable' : result.healthy === false ? 'Degraded' : result.healthy === true ? 'Healthy' : 'Available';
+  const serviceUrl = result?.service_url || integration.service_url;
+  const linkProps = serviceUrl
+    ? { component: 'a', href: serviceUrl, target: '_blank', rel: 'noreferrer' }
+    : {};
+
+  return (
+    <Paper
+      className={`dashboard-summary-card speedtest-tracker-card ${serviceUrl ? 'dashboard-clickable-card' : ''}`}
+      radius="md"
+      {...linkProps}
+    >
+      <Group justify="space-between" align="center" mb="lg" wrap="nowrap">
+        <Group gap="sm" wrap="nowrap">
+          <IconGauge size={28} />
+          <Title order={3}>Speedtest</Title>
+        </Group>
+        <Badge className="dashboard-status-badge" color={healthColor} variant="light">
+          {healthLabel}
+        </Badge>
+      </Group>
+      {available ? (
+        <>
+          <SimpleGrid cols={2} spacing="sm">
+            <SummaryMetric
+              label="Download"
+              value={formatSpeedtestSpeed(result.download_display, result.download_mbps)}
+            />
+            <SummaryMetric
+              label="Upload"
+              value={formatSpeedtestSpeed(result.upload_display, result.upload_mbps)}
+              align="right"
+            />
+            <SummaryMetric label="Ping" value={formatSpeedtestNumber(result.ping_ms, 'ms')} />
+            <SummaryMetric label="Packet loss" value={formatSpeedtestNumber(result.packet_loss_percent, '%')} align="right" />
+          </SimpleGrid>
+          <Text size="xs" c="dimmed" mt="md">
+            Tested {formatDate(result.tested_at, timeZone)}
+          </Text>
+        </>
+      ) : (
+        <Text c="dimmed" size="sm">
+          The latest result could not be loaded from Speedtest Tracker.
+        </Text>
+      )}
+    </Paper>
+  );
+}
+
 function DashboardInsightCards({ events = [], devices = [], onSelectDevice, timeZone }) {
   const recentEvents = events;
   const deviceById = useMemo(
@@ -2321,7 +2402,16 @@ function DeviceIconPicker({ value, onChange, label = 'Icon' }) {
   );
 }
 
-function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roomOptions }) {
+function DeviceDetailsPage({
+  deviceId,
+  onBack,
+  onSaved,
+  onDeleted,
+  timeZone,
+  roomOptions,
+  dnsActivityEnabled,
+  canEditDevices,
+}) {
   const [device, setDevice] = useState(null);
   const [events, setEvents] = useState([]);
   const [eventPagination, setEventPagination] = useState(null);
@@ -2486,6 +2576,12 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
     }, 250);
     return () => window.clearTimeout(timer);
   }, [activeDeviceTab, deviceId, dnsSearch, dnsFilter, dnsOrdering]);
+
+  useEffect(() => {
+    if (!dnsActivityEnabled && activeDeviceTab === 'dns') {
+      setActiveDeviceTab('overview');
+    }
+  }, [activeDeviceTab, dnsActivityEnabled]);
 
   useEffect(() => {
     if (!device) {
@@ -2657,7 +2753,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
               )}
             </Box>
           </Group>
-          {device && (
+          {device && canEditDevices && (
             editing ? (
               <Group gap="xs">
                 <Button variant="default" onClick={cancelEditing} disabled={saving}>Cancel</Button>
@@ -2685,7 +2781,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
               {!editing && (
                 <Tabs.Tab value="history" leftSection={<IconHistory size={17} />}>History</Tabs.Tab>
               )}
-              {!editing && (
+              {!editing && dnsActivityEnabled && (
                 <Tabs.Tab value="dns" leftSection={<IconWorldSearch size={17} />}>DNS activity</Tabs.Tab>
               )}
             </Tabs.List>
@@ -2752,7 +2848,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
                       onChange={(event) => setAttentionAcknowledged(event.currentTarget.checked)}
                     />
                   </Group>
-                  <Group>
+                  {canEditDevices && <Group>
                     <Button
                       color="red"
                       variant="light"
@@ -2761,7 +2857,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
                     >
                       Delete device
                     </Button>
-                  </Group>
+                  </Group>}
                 </Stack>
               ) : (
                 <Stack gap="xl">
@@ -2874,7 +2970,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
               </Stack>
             </Tabs.Panel>
 
-            <Tabs.Panel value="dns" pt="lg">
+            {dnsActivityEnabled && <Tabs.Panel value="dns" pt="lg">
               <Stack gap="md">
                 <Group justify="space-between" align="flex-start" wrap="wrap">
                   <Box>
@@ -3012,7 +3108,7 @@ function DeviceDetailsPage({ deviceId, onBack, onSaved, onDeleted, timeZone, roo
                   </Group>
                 )}
               </Stack>
-            </Tabs.Panel>
+            </Tabs.Panel>}
           </Tabs>
         )}
       </Stack>
@@ -3056,6 +3152,9 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
   const [passwordConfirm, setPasswordConfirm] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [isStaff, setIsStaff] = useState(false);
+  const [canEditDevices, setCanEditDevices] = useState(true);
+  const [canEditHomeMap, setCanEditHomeMap] = useState(true);
+  const [canRunScans, setCanRunScans] = useState(true);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -3101,12 +3200,18 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
       setLastName(selectedUser.last_name || '');
       setIsActive(Boolean(selectedUser.is_active));
       setIsStaff(Boolean(selectedUser.is_staff));
+      setCanEditDevices(Boolean(selectedUser.can_edit_devices));
+      setCanEditHomeMap(Boolean(selectedUser.can_edit_home_map));
+      setCanRunScans(Boolean(selectedUser.can_run_scans));
     } else {
       setUsername('');
       setFirstName('');
       setLastName('');
       setIsActive(true);
       setIsStaff(false);
+      setCanEditDevices(true);
+      setCanEditHomeMap(true);
+      setCanRunScans(true);
     }
     setPassword('');
     setPasswordConfirm('');
@@ -3123,6 +3228,9 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
         last_name: capitalizeName(lastName),
         is_active: isActive,
         is_staff: isStaff,
+        can_edit_devices: isStaff || canEditDevices,
+        can_edit_home_map: isStaff || canEditHomeMap,
+        can_run_scans: isStaff || canRunScans,
         ...(password ? { password, password_confirm: passwordConfirm } : {}),
       };
       const saved = selectedUser
@@ -3143,6 +3251,9 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
             first_name: savedUser.first_name,
             last_name: savedUser.last_name,
             is_staff: savedUser.is_staff,
+            can_edit_devices: savedUser.can_edit_devices,
+            can_edit_home_map: savedUser.can_edit_home_map,
+            can_run_scans: savedUser.can_run_scans,
           });
         } else {
           clearStoredUser();
@@ -3277,6 +3388,33 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
                     checked={isStaff}
                     onChange={(event) => setIsStaff(event.currentTarget.checked)}
                   />
+                  <Divider label="Permissions" labelPosition="left" />
+                  <Switch
+                    label="Edit devices"
+                    description="Update device details and delete devices."
+                    checked={isStaff || canEditDevices}
+                    disabled={isStaff}
+                    onChange={(event) => setCanEditDevices(event.currentTarget.checked)}
+                  />
+                  <Switch
+                    label="Edit Home Map"
+                    description="Rearrange rooms and reset the saved layout."
+                    checked={isStaff || canEditHomeMap}
+                    disabled={isStaff}
+                    onChange={(event) => setCanEditHomeMap(event.currentTarget.checked)}
+                  />
+                  <Switch
+                    label="Run scans"
+                    description="Start manual network scans."
+                    checked={isStaff || canRunScans}
+                    disabled={isStaff}
+                    onChange={(event) => setCanRunScans(event.currentTarget.checked)}
+                  />
+                  {isStaff && (
+                    <Text size="xs" c="dimmed">
+                      Admin users always have all permissions.
+                    </Text>
+                  )}
                 </>
               )}
             </Stack>
@@ -3350,11 +3488,17 @@ function SettingsPage({ onSaved }) {
   const [timeZone, setTimeZone] = useState('UTC');
   const [discordEnabled, setDiscordEnabled] = useState(true);
   const [telegramEnabled, setTelegramEnabled] = useState(true);
+  const [webhookEnabled, setWebhookEnabled] = useState(false);
   const [discordConfigured, setDiscordConfigured] = useState(false);
   const [telegramConfigured, setTelegramConfigured] = useState(false);
+  const [webhookConfigured, setWebhookConfigured] = useState(false);
+  const [webhookSignatureConfigured, setWebhookSignatureConfigured] = useState(false);
   const [discordWebhook, setDiscordWebhook] = useState('');
   const [telegramToken, setTelegramToken] = useState('');
   const [telegramUserId, setTelegramUserId] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookSecret, setWebhookSecret] = useState('');
+  const [clearWebhookSecret, setClearWebhookSecret] = useState(false);
   const [adguardEnabled, setAdguardEnabled] = useState(false);
   const [adguardConfigured, setAdguardConfigured] = useState(false);
   const [adguardUrl, setAdguardUrl] = useState('');
@@ -3364,6 +3508,10 @@ function SettingsPage({ onSaved }) {
   const [adguardRetentionDays, setAdguardRetentionDays] = useState(90);
   const [adguardLastSyncAt, setAdguardLastSyncAt] = useState(null);
   const [adguardLastError, setAdguardLastError] = useState('');
+  const [speedtestTrackerEnabled, setSpeedtestTrackerEnabled] = useState(false);
+  const [speedtestTrackerConfigured, setSpeedtestTrackerConfigured] = useState(false);
+  const [speedtestTrackerUrl, setSpeedtestTrackerUrl] = useState('');
+  const [speedtestTrackerApiToken, setSpeedtestTrackerApiToken] = useState('');
   const [notifyNewDevices, setNotifyNewDevices] = useState(true);
   const [notifyDeviceOnline, setNotifyDeviceOnline] = useState(false);
   const [notifyDeviceOffline, setNotifyDeviceOffline] = useState(false);
@@ -3377,6 +3525,7 @@ function SettingsPage({ onSaved }) {
   const [testingChannel, setTestingChannel] = useState('');
   const [testingAdguard, setTestingAdguard] = useState(false);
   const [syncingAdguard, setSyncingAdguard] = useState(false);
+  const [testingSpeedtestTracker, setTestingSpeedtestTracker] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportingDiagnostics, setExportingDiagnostics] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -3398,11 +3547,17 @@ function SettingsPage({ onSaved }) {
       setTimeZone(data.time_zone || 'UTC');
       setDiscordEnabled(Boolean(data.discord_enabled));
       setTelegramEnabled(Boolean(data.telegram_enabled));
+      setWebhookEnabled(Boolean(data.webhook_enabled));
       setDiscordConfigured(Boolean(data.discord_configured));
       setTelegramConfigured(Boolean(data.telegram_configured));
+      setWebhookConfigured(Boolean(data.webhook_configured));
+      setWebhookSignatureConfigured(Boolean(data.webhook_signature_configured));
       setDiscordWebhook(data.discord_webhook || '');
       setTelegramToken(data.telegram_token || '');
       setTelegramUserId(data.telegram_user_id || '');
+      setWebhookUrl(data.webhook_url || '');
+      setWebhookSecret('');
+      setClearWebhookSecret(false);
       setAdguardEnabled(Boolean(data.adguard_enabled));
       setAdguardConfigured(Boolean(data.adguard_configured));
       setAdguardUrl(data.adguard_url || '');
@@ -3412,6 +3567,10 @@ function SettingsPage({ onSaved }) {
       setAdguardRetentionDays(Number(data.adguard_retention_days || 90));
       setAdguardLastSyncAt(data.adguard_last_sync_at || null);
       setAdguardLastError(data.adguard_last_error || '');
+      setSpeedtestTrackerEnabled(Boolean(data.speedtest_tracker_enabled));
+      setSpeedtestTrackerConfigured(Boolean(data.speedtest_tracker_configured));
+      setSpeedtestTrackerUrl(data.speedtest_tracker_url || '');
+      setSpeedtestTrackerApiToken('');
       setNotifyNewDevices(Boolean(data.notify_new_devices));
       setNotifyDeviceOnline(Boolean(data.notify_device_online));
       setNotifyDeviceOffline(Boolean(data.notify_device_offline));
@@ -3447,6 +3606,7 @@ function SettingsPage({ onSaved }) {
         time_zone: timeZone,
         discord_enabled: discordEnabled,
         telegram_enabled: telegramEnabled,
+        webhook_enabled: webhookEnabled,
         notify_new_devices: notifyNewDevices,
         notify_device_online: notifyDeviceOnline,
         notify_device_offline: notifyDeviceOffline,
@@ -3461,12 +3621,24 @@ function SettingsPage({ onSaved }) {
         adguard_username: adguardUsername.trim(),
         adguard_sync_interval: adguardSyncInterval,
         adguard_retention_days: adguardRetentionDays,
+        speedtest_tracker_enabled: speedtestTrackerEnabled,
+        speedtest_tracker_url: speedtestTrackerUrl.trim(),
       };
       body.discord_webhook = discordWebhook;
       body.telegram_token = telegramToken;
       body.telegram_user_id = telegramUserId;
+      body.webhook_url = webhookUrl.trim();
+      if (webhookSecret) {
+        body.webhook_secret = webhookSecret;
+      }
+      if (clearWebhookSecret) {
+        body.clear_webhook_secret = true;
+      }
       if (adguardPassword) {
         body.adguard_password = adguardPassword;
+      }
+      if (speedtestTrackerApiToken) {
+        body.speedtest_tracker_api_token = speedtestTrackerApiToken;
       }
 
       const savedSettings = await apiRequest('settings/', { method: 'PUT', body });
@@ -3485,14 +3657,22 @@ function SettingsPage({ onSaved }) {
     setTestingChannel(channel);
     setError('');
     try {
-      const body =
-        channel === 'discord'
-          ? { channel, discord_webhook: discordWebhook.trim() }
-          : {
-              channel,
-              telegram_token: telegramToken.trim(),
-              telegram_user_id: telegramUserId.trim(),
-            };
+      let body;
+      if (channel === 'discord') {
+        body = { channel, discord_webhook: discordWebhook.trim() };
+      } else if (channel === 'telegram') {
+        body = {
+          channel,
+          telegram_token: telegramToken.trim(),
+          telegram_user_id: telegramUserId.trim(),
+        };
+      } else {
+        body = {
+          channel,
+          webhook_url: webhookUrl.trim(),
+          webhook_secret: webhookSecret,
+        };
+      }
       const payload = await apiRequest('notifications/test/', { method: 'POST', body });
       showServerNotification(payload);
     } catch (err) {
@@ -3539,6 +3719,27 @@ function SettingsPage({ onSaved }) {
       showErrorNotification(err);
     } finally {
       setSyncingAdguard(false);
+    }
+  }
+
+  async function testSpeedtestTrackerConnection() {
+    setTestingSpeedtestTracker(true);
+    setError('');
+    try {
+      const body = { url: speedtestTrackerUrl.trim() };
+      if (speedtestTrackerApiToken) {
+        body.api_token = speedtestTrackerApiToken;
+      }
+      const payload = await apiRequest('integrations/speedtest-tracker/test/', {
+        method: 'POST',
+        body,
+      });
+      showServerNotification(payload);
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification(err);
+    } finally {
+      setTestingSpeedtestTracker(false);
     }
   }
 
@@ -3923,6 +4124,77 @@ function SettingsPage({ onSaved }) {
             </Tooltip>
           </Group>
         </Stack>
+
+        <Stack className="settings-subsection" gap="sm">
+          <Group justify="space-between">
+            <Group gap="sm">
+              <Group gap={6}>
+                <IconWebhook size={18} />
+                <Text fw={700}>Automation webhook</Text>
+              </Group>
+              <Switch
+                label="Enabled"
+                checked={webhookEnabled}
+                onChange={(event) => setWebhookEnabled(event.currentTarget.checked)}
+              />
+            </Group>
+            <Group gap="xs">
+              {webhookConfigured && (
+                <Badge color={webhookSignatureConfigured ? 'teal' : 'yellow'} variant="light">
+                  {webhookSignatureConfigured ? 'Signed' : 'Unsigned'}
+                </Badge>
+              )}
+              <Badge color={webhookConfigured && webhookEnabled ? 'teal' : 'gray'} variant="light">
+                {webhookConfigured ? 'Configured' : 'Not configured'}
+              </Badge>
+            </Group>
+          </Group>
+          <Group align="flex-end" wrap="wrap">
+            <TextInput
+              style={{ flex: '1 1 360px' }}
+              label="Webhook URL"
+              description="Send structured network events to n8n, Home Assistant, or another automation service."
+              placeholder="https://automation.example/webhook/languard"
+              value={webhookUrl}
+              onChange={(event) => setWebhookUrl(event.currentTarget.value)}
+            />
+            <PasswordInput
+              style={{ flex: '1 1 260px' }}
+              label="Signing secret"
+              description={
+                webhookSignatureConfigured
+                  ? 'Leave blank to keep the saved secret.'
+                  : 'Optional HMAC secret used to verify LanGuard deliveries.'
+              }
+              placeholder={webhookSignatureConfigured ? 'Saved secret' : 'Shared secret'}
+              value={webhookSecret}
+              onChange={(event) => setWebhookSecret(event.currentTarget.value)}
+              disabled={clearWebhookSecret}
+            />
+            <Tooltip label="Send test notification">
+              <ActionIcon
+                size={36}
+                variant="light"
+                aria-label="Send webhook test notification"
+                loading={testingChannel === 'webhook'}
+                disabled={
+                  !webhookUrl.trim() ||
+                  Boolean(testingChannel && testingChannel !== 'webhook')
+                }
+                onClick={() => testNotificationChannel('webhook')}
+              >
+                <IconSend size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+          {webhookSignatureConfigured && (
+            <Checkbox
+              label="Remove the saved signing secret when settings are saved"
+              checked={clearWebhookSecret}
+              onChange={(event) => setClearWebhookSecret(event.currentTarget.checked)}
+            />
+          )}
+        </Stack>
         </Stack>
           </Tabs.Panel>
 
@@ -3933,7 +4205,7 @@ function SettingsPage({ onSaved }) {
               <Title order={3}>Add-ons</Title>
               <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
             </Box>
-            <Badge variant="light">1 available</Badge>
+            <Badge variant="light">2 available</Badge>
           </Group>
         <Stack className="settings-subsection" gap="sm">
           <Group justify="space-between" align="flex-start">
@@ -4037,6 +4309,56 @@ function SettingsPage({ onSaved }) {
                 Sync now
               </Button>
             </Group>
+          </Group>
+        </Stack>
+        <Stack className="settings-subsection" gap="sm">
+          <Group justify="space-between" align="flex-start">
+            <Box>
+              <Group gap="sm">
+                <Text fw={700}>Speedtest Tracker</Text>
+                <Switch
+                  label="Enabled"
+                  checked={speedtestTrackerEnabled}
+                  onChange={(event) => setSpeedtestTrackerEnabled(event.currentTarget.checked)}
+                />
+              </Group>
+              <Text size="sm" c="dimmed" mt={4}>
+                Show the latest internet performance result on the dashboard.
+              </Text>
+            </Box>
+            <Badge color={speedtestTrackerConfigured && speedtestTrackerEnabled ? 'teal' : 'gray'} variant="light">
+              {speedtestTrackerConfigured ? 'Configured' : 'Not configured'}
+            </Badge>
+          </Group>
+          <SimpleGrid cols={{ base: 1, md: 2 }}>
+            <TextInput
+              label="Speedtest Tracker URL"
+              placeholder="http://192.168.1.2:8080"
+              value={speedtestTrackerUrl}
+              onChange={(event) => setSpeedtestTrackerUrl(event.currentTarget.value)}
+              disabled={!speedtestTrackerEnabled}
+            />
+            <PasswordInput
+              label="API token"
+              placeholder={speedtestTrackerConfigured ? 'Saved API token' : 'API token'}
+              value={speedtestTrackerApiToken}
+              onChange={(event) => setSpeedtestTrackerApiToken(event.currentTarget.value)}
+              disabled={!speedtestTrackerEnabled}
+            />
+          </SimpleGrid>
+          {speedtestTrackerConfigured && (
+            <Text size="xs" c="dimmed">Leave the API token blank to keep the saved token.</Text>
+          )}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              leftSection={<IconSend size={18} />}
+              onClick={testSpeedtestTrackerConnection}
+              loading={testingSpeedtestTracker}
+              disabled={!speedtestTrackerEnabled || !speedtestTrackerUrl.trim()}
+            >
+              Test connection
+            </Button>
           </Group>
         </Stack>
         </Stack>
@@ -4934,6 +5256,13 @@ function Dashboard({
   const [counters, setCounters] = useState({});
   const [scanStatus, setScanStatus] = useState(null);
   const [scanVisibility, setScanVisibility] = useState(null);
+  const [integrationStatus, setIntegrationStatus] = useState({});
+  const [speedtestTrackerPayload, setSpeedtestTrackerPayload] = useState(null);
+  const [accessCapabilities, setAccessCapabilities] = useState({
+    can_edit_devices: Boolean(user?.is_staff || user?.is_superuser || user?.can_edit_devices),
+    can_edit_home_map: Boolean(user?.is_staff || user?.is_superuser || user?.can_edit_home_map),
+    can_run_scans: Boolean(user?.is_staff || user?.is_superuser || user?.can_run_scans),
+  });
   const [scanRuns, setScanRuns] = useState([]);
   const [scanRunPagination, setScanRunPagination] = useState(null);
   const [dashboardEvents, setDashboardEvents] = useState([]);
@@ -4987,6 +5316,9 @@ function Dashboard({
   const selectedDeviceStatus =
     deviceStatusOptions.find((option) => option.value === deviceStatus) || null;
   const canManageUsers = Boolean(user?.is_staff || user?.is_superuser);
+  const canEditDevices = canManageUsers || Boolean(accessCapabilities.can_edit_devices);
+  const canEditHomeMap = canManageUsers || Boolean(accessCapabilities.can_edit_home_map);
+  const canRunScans = canManageUsers || Boolean(accessCapabilities.can_run_scans);
   const hasUnreadChangelog = seenChangelogVersion !== APP_VERSION;
   const hasVersionUpdate = isNewerVersion(latestVersion, APP_VERSION);
   const hasVersionIndicator = hasUnreadChangelog || hasVersionUpdate;
@@ -4994,7 +5326,25 @@ function Dashboard({
     ? `New version v${latestVersion} is available`
     : 'Version history';
   const displayTimeZone = appSettings?.time_zone || dashboardTimeZone || undefined;
+  const showDnsActivity = Boolean(
+    integrationStatus?.adguard?.enabled && integrationStatus?.adguard?.configured
+  );
   const showFirstSeen = deviceOrdering === 'firstseen' || deviceOrdering === '-firstseen';
+
+  useEffect(() => {
+    setAccessCapabilities({
+      can_edit_devices: Boolean(user?.is_staff || user?.is_superuser || user?.can_edit_devices),
+      can_edit_home_map: Boolean(user?.is_staff || user?.is_superuser || user?.can_edit_home_map),
+      can_run_scans: Boolean(user?.is_staff || user?.is_superuser || user?.can_run_scans),
+    });
+  }, [
+    user?.is_staff,
+    user?.is_superuser,
+    user?.can_edit_devices,
+    user?.can_edit_home_map,
+    user?.can_run_scans,
+  ]);
+
   function storeDashboardNavigationState(overrides = {}) {
     window.sessionStorage.setItem(
       dashboardStateStorageKey,
@@ -5112,7 +5462,7 @@ function Dashboard({
     };
   }, [search, deviceStatus, firstSeenPeriod, deviceOrdering]);
 
-  async function loadData({ quiet = false, notifyOnError = false } = {}) {
+  async function loadData({ quiet = false, notifyOnError = false, refreshIntegrations = false } = {}) {
     if (quiet) {
       setRefreshing(true);
     } else {
@@ -5145,13 +5495,16 @@ function Dashboard({
       const settingsRequest = canManageUsers
         ? apiRequest('settings/')
         : Promise.resolve({ data: null });
-      const [deviceData, mapDeviceData, statusData, dashboardEventData, settingsData] =
+      const [deviceData, mapDeviceData, statusData, dashboardEventData, settingsData, speedtestData] =
         await Promise.all([
           apiRequest('device/', { params: deviceParams }),
           apiRequest('device/', { params: mapDeviceParams }),
           apiRequest('scan/status/'),
           apiRequest('events/', { params: dashboardEventParams }),
           settingsRequest,
+          apiRequest('integrations/speedtest-tracker/latest/', {
+            params: { refresh: refreshIntegrations ? 'true' : undefined },
+          }).catch(() => null),
         ]);
 
       setDevices(deviceData.data || []);
@@ -5168,6 +5521,9 @@ function Dashboard({
       setCounters(deviceData.counters || {});
       setScanStatus(statusData.data || statusData.active_scan || null);
       setScanVisibility(statusData.visibility || null);
+      setIntegrationStatus(statusData.integrations || {});
+      setSpeedtestTrackerPayload(speedtestData || null);
+      setAccessCapabilities(statusData.permissions || {});
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
       }
@@ -5197,6 +5553,8 @@ function Dashboard({
       const statusData = await apiRequest('scan/status/');
       setScanStatus(statusData.data || statusData.active_scan || null);
       setScanVisibility(statusData.visibility || null);
+      setIntegrationStatus(statusData.integrations || {});
+      setAccessCapabilities(statusData.permissions || {});
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
       }
@@ -5582,7 +5940,7 @@ function Dashboard({
                 </Box>
               </Group>
               <ColorSchemeControl />
-              <Button
+              {canRunScans && <Button
                 size="sm"
                 leftSection={<IconRefresh size={17} />}
                 onClick={runScan}
@@ -5590,12 +5948,12 @@ function Dashboard({
                 className="topbar-scan-button"
               >
                 Run Scan
-              </Button>
+              </Button>}
               <Tooltip label="Refresh">
                 <ActionIcon
                   variant="light"
                   size="lg"
-                  onClick={() => loadData({ quiet: true, notifyOnError: true })}
+                  onClick={() => loadData({ quiet: true, notifyOnError: true, refreshIntegrations: true })}
                   loading={refreshing}
                 >
                   <IconRefresh size={19} />
@@ -5676,16 +6034,18 @@ function Dashboard({
             >
               Notifications
             </Button>
-            <Button
-              className="sidebar-nav-button"
-              variant={!devicePageId && mainView === 'dns' ? 'filled' : 'subtle'}
-              justify="flex-start"
-              leftSection={<IconWorldSearch size={18} />}
-              onClick={() => navigateToView('dns')}
-              fullWidth
-            >
-              DNS Activity
-            </Button>
+            {showDnsActivity && (
+              <Button
+                className="sidebar-nav-button"
+                variant={!devicePageId && mainView === 'dns' ? 'filled' : 'subtle'}
+                justify="flex-start"
+                leftSection={<IconWorldSearch size={18} />}
+                onClick={() => navigateToView('dns')}
+                fullWidth
+              >
+                DNS Activity
+              </Button>
+            )}
             {canManageUsers && (
               <>
                 <Divider my={4} />
@@ -5744,11 +6104,14 @@ function Dashboard({
               }}
               timeZone={displayTimeZone}
               roomOptions={roomOptions}
+              dnsActivityEnabled={showDnsActivity}
+              canEditDevices={canEditDevices}
             />
           ) : mainView === 'home-map' ? (
             <HomeMap
               devices={mapDevices}
               onSelectDevice={openDevicePage}
+              canEditLayout={canEditHomeMap}
             />
           ) : mainView === 'settings' && canManageUsers ? (
             <SettingsPage
@@ -5789,7 +6152,7 @@ function Dashboard({
             <>
           <DashboardStatusCards counters={counters} />
 
-          <div className="dashboard-summary-grid">
+          <div className={`dashboard-summary-grid ${speedtestTrackerPayload?.integration?.enabled && speedtestTrackerPayload?.integration?.configured ? 'with-speedtest' : ''}`}>
             <NetworkHealthCard counters={counters} />
             <AutomaticScanningCard appSettings={appSettings} scanVisibility={scanVisibility} />
             <LatestScanCard
@@ -5798,6 +6161,9 @@ function Dashboard({
               timeZone={displayTimeZone}
               onOpenDetails={scanDetailsModal.open}
             />
+            {speedtestTrackerPayload?.integration?.enabled && speedtestTrackerPayload?.integration?.configured && (
+              <SpeedtestTrackerCard payload={speedtestTrackerPayload} timeZone={displayTimeZone} />
+            )}
           </div>
 
           <DashboardInsightCards

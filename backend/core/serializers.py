@@ -4,6 +4,7 @@ import json
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from .access_control import ACCESS_FIELDS, update_user_capabilities, user_capabilities
 from .datetime_utils import utc_isoformat
 from .models import (
     AdGuardUnmatchedClient,
@@ -59,6 +60,9 @@ class UserSerializer(serializers.ModelSerializer):
 class UserManagementSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=False, allow_blank=True)
     password_confirm = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    can_edit_devices = serializers.BooleanField(write_only=True, required=False, default=True)
+    can_edit_home_map = serializers.BooleanField(write_only=True, required=False, default=True)
+    can_run_scans = serializers.BooleanField(write_only=True, required=False, default=True)
 
     class Meta:
         model = User
@@ -71,6 +75,9 @@ class UserManagementSerializer(serializers.ModelSerializer):
             "password_confirm",
             "is_active",
             "is_staff",
+            "can_edit_devices",
+            "can_edit_home_map",
+            "can_run_scans",
             "date_joined",
             "last_login",
         )
@@ -93,18 +100,36 @@ class UserManagementSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         password = validated_data.pop("password")
         validated_data.pop("password_confirm", None)
-        return User.objects.create_user(password=password, **validated_data)
+        capability_values = {
+            field: validated_data.pop(field)
+            for field in ACCESS_FIELDS
+            if field in validated_data
+        }
+        user = User.objects.create_user(password=password, **validated_data)
+        update_user_capabilities(user, capability_values)
+        return user
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", "")
         validated_data.pop("password_confirm", None)
+        capability_values = {
+            field: validated_data.pop(field)
+            for field in ACCESS_FIELDS
+            if field in validated_data
+        }
 
         for field, value in validated_data.items():
             setattr(instance, field, value)
         if password:
             instance.set_password(password)
         instance.save()
+        update_user_capabilities(instance, capability_values)
         return instance
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data.update(user_capabilities(instance))
+        return data
 
 
 class DevicePortSerializer(serializers.ModelSerializer):
@@ -512,9 +537,17 @@ class NotificationTestSerializer(serializers.Serializer):
         choices=(
             NotificationDelivery.Channel.DISCORD,
             NotificationDelivery.Channel.TELEGRAM,
+            NotificationDelivery.Channel.WEBHOOK,
         )
     )
     discord_webhook = serializers.URLField(required=False, allow_blank=True)
+    webhook_url = serializers.URLField(required=False, allow_blank=True, max_length=2048)
+    webhook_secret = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=255,
+        write_only=True,
+    )
     telegram_token = serializers.CharField(
         required=False,
         allow_blank=True,
@@ -533,9 +566,10 @@ class NotificationTestSerializer(serializers.Serializer):
                 raise serializers.ValidationError(
                     {"discord_webhook": "Enter a Discord webhook URL."}
                 )
-        elif not attrs.get("telegram_token", "").strip() or not attrs.get(
-            "telegram_user_id", ""
-        ).strip():
+        elif channel == NotificationDelivery.Channel.TELEGRAM and (
+            not attrs.get("telegram_token", "").strip()
+            or not attrs.get("telegram_user_id", "").strip()
+        ):
             raise serializers.ValidationError(
                 {
                     "telegram": (
@@ -543,6 +577,11 @@ class NotificationTestSerializer(serializers.Serializer):
                     )
                 }
             )
+        elif channel == NotificationDelivery.Channel.WEBHOOK:
+            if not attrs.get("webhook_url", "").strip():
+                raise serializers.ValidationError(
+                    {"webhook_url": "Enter a webhook URL."}
+                )
         return attrs
 
 
@@ -563,17 +602,56 @@ class AdGuardConnectionSerializer(serializers.Serializer):
         return attrs
 
 
+class SpeedtestTrackerConnectionSerializer(serializers.Serializer):
+    url = serializers.URLField(max_length=2048)
+    api_token = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=512,
+        trim_whitespace=True,
+    )
+
+    def validate(self, attrs):
+        saved = AppSettings.load()
+        if not attrs.get("api_token") and not saved.speedtest_tracker_api_token:
+            raise serializers.ValidationError(
+                {"api_token": "Enter a Speedtest Tracker API token."}
+            )
+        return attrs
+
+
 class AppSettingsSerializer(serializers.ModelSerializer):
     updated_at = UTCDateTimeField(read_only=True)
     adguard_last_sync_at = UTCDateTimeField(read_only=True)
     discord_configured = serializers.SerializerMethodField()
     telegram_configured = serializers.SerializerMethodField()
+    webhook_configured = serializers.SerializerMethodField()
+    webhook_signature_configured = serializers.SerializerMethodField()
     adguard_configured = serializers.SerializerMethodField()
+    speedtest_tracker_configured = serializers.SerializerMethodField()
     adguard_password = serializers.CharField(
         write_only=True,
         required=False,
         allow_blank=True,
         max_length=255,
+    )
+    webhook_secret = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=255,
+    )
+    speedtest_tracker_api_token = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=512,
+        trim_whitespace=True,
+    )
+    clear_webhook_secret = serializers.BooleanField(
+        write_only=True,
+        required=False,
+        default=False,
     )
     adguard_last_error = serializers.SerializerMethodField()
 
@@ -596,6 +674,12 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "telegram_token",
             "telegram_user_id",
             "telegram_configured",
+            "webhook_enabled",
+            "webhook_url",
+            "webhook_secret",
+            "clear_webhook_secret",
+            "webhook_configured",
+            "webhook_signature_configured",
             "notify_new_devices",
             "notify_device_online",
             "notify_device_offline",
@@ -614,6 +698,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "adguard_retention_days",
             "adguard_last_sync_at",
             "adguard_last_error",
+            "speedtest_tracker_enabled",
+            "speedtest_tracker_url",
+            "speedtest_tracker_api_token",
+            "speedtest_tracker_configured",
             "home_map_layout",
             "updated_at",
         )
@@ -621,10 +709,12 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "discord_webhook": {"required": False, "allow_blank": True},
             "telegram_token": {"required": False, "allow_blank": True},
             "telegram_user_id": {"required": False, "allow_blank": True},
+            "webhook_url": {"required": False, "allow_blank": True},
             "adguard_url": {"required": False, "allow_blank": True},
             "adguard_username": {"required": False, "allow_blank": True},
             "adguard_last_sync_at": {"read_only": True},
             "adguard_last_error": {"read_only": True},
+            "speedtest_tracker_url": {"required": False, "allow_blank": True},
             "updated_at": {"read_only": True},
         }
 
@@ -637,11 +727,36 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return bool(obj.telegram_token and obj.telegram_user_id)
 
     @extend_schema_field(serializers.BooleanField)
+    def get_webhook_configured(self, obj):
+        return bool(obj.webhook_url)
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_webhook_signature_configured(self, obj):
+        return bool(obj.webhook_secret)
+
+    @extend_schema_field(serializers.BooleanField)
     def get_adguard_configured(self, obj):
         return bool(obj.adguard_url and (not obj.adguard_username or obj.adguard_password))
 
+    @extend_schema_field(serializers.BooleanField)
+    def get_speedtest_tracker_configured(self, obj):
+        return bool(obj.speedtest_tracker_url and obj.speedtest_tracker_api_token)
+
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        webhook_enabled = attrs.get(
+            "webhook_enabled",
+            self.instance.webhook_enabled if self.instance else False,
+        )
+        webhook_url = attrs.get(
+            "webhook_url",
+            self.instance.webhook_url if self.instance else "",
+        )
+        if webhook_enabled and not webhook_url:
+            raise serializers.ValidationError(
+                {"webhook_url": "Configure the webhook URL before enabling delivery."}
+            )
+
         enabled = attrs.get(
             "adguard_enabled",
             self.instance.adguard_enabled if self.instance else False,
@@ -663,11 +778,38 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"adguard_password": "Enter the AdGuard Home password."}
             )
+
+        speedtest_enabled = attrs.get(
+            "speedtest_tracker_enabled",
+            self.instance.speedtest_tracker_enabled if self.instance else False,
+        )
+        speedtest_url = attrs.get(
+            "speedtest_tracker_url",
+            self.instance.speedtest_tracker_url if self.instance else "",
+        )
+        speedtest_token = attrs.get("speedtest_tracker_api_token") or (
+            self.instance.speedtest_tracker_api_token if self.instance else ""
+        )
+        if speedtest_enabled and not speedtest_url:
+            raise serializers.ValidationError(
+                {"speedtest_tracker_url": "Configure the Speedtest Tracker URL before enabling it."}
+            )
+        if speedtest_enabled and not speedtest_token:
+            raise serializers.ValidationError(
+                {"speedtest_tracker_api_token": "Enter a Speedtest Tracker API token."}
+            )
         return attrs
 
     def update(self, instance, validated_data):
+        clear_webhook_secret = validated_data.pop("clear_webhook_secret", False)
+        if clear_webhook_secret:
+            validated_data["webhook_secret"] = ""
+        elif not validated_data.get("webhook_secret"):
+            validated_data.pop("webhook_secret", None)
         if not validated_data.get("adguard_username", instance.adguard_username):
             validated_data.setdefault("adguard_password", "")
+        if not validated_data.get("speedtest_tracker_api_token"):
+            validated_data.pop("speedtest_tracker_api_token", None)
         return super().update(instance, validated_data)
 
     def validate_home_map_layout(self, value):

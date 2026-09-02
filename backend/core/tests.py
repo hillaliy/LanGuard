@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta, timezone as datetime_timezone
+import hashlib
+import hmac
+import json
 import socket
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
@@ -6,6 +9,7 @@ from unittest.mock import Mock, patch
 from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
+from django.core.cache import cache
 from django.db import DatabaseError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
@@ -21,14 +25,17 @@ from .models import (
     NetworkEvent,
     NotificationDelivery,
     ScanRun,
+    UserAccess,
 )
 from .notifications import (
     format_discord_payload,
+    format_webhook_payload,
     notify_event,
     quiet_hours_active,
     retry_failed_notifications,
     send_discord_test,
     send_telegram_test,
+    send_webhook_test,
 )
 from .serializers import device_identity
 from .views import parse_inventory_datetime
@@ -1450,6 +1457,85 @@ class NotificationTests(TestCase):
             post.call_args.kwargs["json"]["text"],
         )
 
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
+    def test_webhook_test_uses_structured_payload(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+
+        send_webhook_test(
+            "https://automation.example/webhook/languard",
+            "shared-secret",
+        )
+
+        post.assert_called_once()
+        self.assertEqual(
+            post.call_args.args[0],
+            "https://automation.example/webhook/languard",
+        )
+        body = post.call_args.kwargs["data"]
+        payload = json.loads(body)
+        self.assertEqual(payload["source"], "languard")
+        self.assertEqual(payload["kind"], "test")
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertIn("channel is working", payload["message"])
+        self.assertTrue(payload["created_at"].endswith("Z"))
+        headers = post.call_args.kwargs["headers"]
+        self.assertEqual(headers["X-LanGuard-Delivery"], payload["delivery_id"])
+        expected_signature = hmac.new(
+            b"shared-secret",
+            f"{headers['X-LanGuard-Timestamp']}.".encode("utf-8") + body,
+            hashlib.sha256,
+        ).hexdigest()
+        self.assertEqual(
+            headers["X-LanGuard-Signature"],
+            f"sha256={expected_signature}",
+        )
+
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
+    def test_webhook_notification_delivery_is_recorded(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        AppSettings.objects.create(
+            webhook_enabled=True,
+            webhook_url="https://automation.example/webhook/languard",
+            webhook_secret="shared-secret",
+        )
+
+        deliveries = notify_event(self.event)
+
+        self.assertEqual(len(deliveries), 1)
+        delivery = NotificationDelivery.objects.get(event=self.event)
+        self.assertEqual(delivery.channel, NotificationDelivery.Channel.WEBHOOK)
+        self.assertEqual(delivery.status, NotificationDelivery.Status.SENT)
+        payload = json.loads(post.call_args.kwargs["data"])
+        self.assertEqual(
+            payload,
+            format_webhook_payload(self.event, delivery_id=delivery.id),
+        )
+        self.assertEqual(payload["delivery_id"], delivery.id)
+        self.assertEqual(payload["source"], "languard")
+        self.assertEqual(payload["kind"], "network_event")
+        self.assertEqual(payload["event"]["type"], "new_device")
+        self.assertEqual(payload["device"]["mac"], "11:22:33:44:55:66")
+        self.assertEqual(payload["device"]["ip"], "192.168.1.50")
+        self.assertIn("X-LanGuard-Signature", post.call_args.kwargs["headers"])
+
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
+    def test_webhook_without_secret_is_delivered_unsigned(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        AppSettings.objects.create(
+            webhook_enabled=True,
+            webhook_url="https://automation.example/webhook/languard",
+        )
+
+        notify_event(self.event)
+
+        self.assertNotIn(
+            "X-LanGuard-Signature",
+            post.call_args.kwargs["headers"],
+        )
+
     @override_settings(
         NOTIFICATIONS_ENABLED=True,
         DISCORD_WEBHOOK="https://discord.example/webhook",
@@ -1574,6 +1660,27 @@ class NotificationTests(TestCase):
         retried = retry_failed_notifications()
 
         self.assertEqual(retried, [])
+        post.assert_not_called()
+
+    @override_settings(NOTIFICATION_MAX_ATTEMPTS=3)
+    @patch("core.notifications.requests.post")
+    def test_failed_delivery_is_skipped_after_channel_is_disabled(self, post):
+        AppSettings.objects.create(
+            webhook_enabled=False,
+            webhook_url="https://automation.example/webhook/languard",
+        )
+        delivery = NotificationDelivery.objects.create(
+            event=self.event,
+            channel=NotificationDelivery.Channel.WEBHOOK,
+            status=NotificationDelivery.Status.FAILED,
+            attempts=1,
+        )
+
+        retried = retry_failed_notifications()
+
+        delivery.refresh_from_db()
+        self.assertEqual(retried, [])
+        self.assertEqual(delivery.status, NotificationDelivery.Status.SKIPPED)
         post.assert_not_called()
 
     @override_settings(
@@ -1825,6 +1932,117 @@ class ScanApiTests(TestCase):
         self.assertTrue(User.objects.filter(username="viewer").exists())
         self.assertEqual(response.data["data"]["username"], "viewer")
 
+    def test_admin_can_assign_user_capabilities(self):
+        response = self.client.post(
+            "/api/v1/users/",
+            {
+                "username": "viewer",
+                "password": "secret-password",
+                "password_confirm": "secret-password",
+                "can_edit_devices": False,
+                "can_edit_home_map": True,
+                "can_run_scans": False,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertFalse(response.data["data"]["can_edit_devices"])
+        self.assertTrue(response.data["data"]["can_edit_home_map"])
+        self.assertFalse(response.data["data"]["can_run_scans"])
+
+    def test_regular_user_cannot_change_own_capabilities(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        UserAccess.objects.create(
+            user=regular_user,
+            can_edit_devices=False,
+            can_edit_home_map=False,
+            can_run_scans=False,
+        )
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.put(
+            f"/api/v1/users/?id={regular_user.id}",
+            {
+                "can_edit_devices": True,
+                "can_edit_home_map": True,
+                "can_run_scans": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        access = UserAccess.objects.get(user=regular_user)
+        self.assertFalse(access.can_edit_devices)
+        self.assertFalse(access.can_edit_home_map)
+        self.assertFalse(access.can_run_scans)
+
+    def test_restricted_user_can_view_but_cannot_edit_devices(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        UserAccess.objects.create(user=regular_user, can_edit_devices=False)
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        get_response = regular_client.get("/api/v1/device/", {"id": self.device.id})
+        put_response = regular_client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"name": "Changed"},
+            format="json",
+        )
+        delete_response = regular_client.delete(f"/api/v1/device/?id={self.device.id}")
+
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(put_response.status_code, 403)
+        self.assertEqual(delete_response.status_code, 403)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.name, "Laptop")
+
+    def test_restricted_user_cannot_edit_home_map_or_run_scan(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        UserAccess.objects.create(
+            user=regular_user,
+            can_edit_home_map=False,
+            can_run_scans=False,
+        )
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        get_response = regular_client.get("/api/v1/home-map-layout/")
+        put_response = regular_client.put(
+            "/api/v1/home-map-layout/",
+            {"layout": {"order": ["Office"], "parents": {}}},
+            format="json",
+        )
+        scan_response = regular_client.post("/api/v1/scan/", {}, format="json")
+
+        self.assertEqual(get_response.status_code, 200)
+        self.assertEqual(put_response.status_code, 403)
+        self.assertEqual(scan_response.status_code, 403)
+
+    def test_scan_status_returns_effective_capabilities(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        UserAccess.objects.create(
+            user=regular_user,
+            can_edit_devices=False,
+            can_edit_home_map=True,
+            can_run_scans=False,
+        )
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["permissions"],
+            {
+                "can_edit_devices": False,
+                "can_edit_home_map": True,
+                "can_run_scans": False,
+            },
+        )
+
     def test_users_endpoint_updates_user(self):
         user = User.objects.create_user(username="viewer", password="old-password")
 
@@ -1913,11 +2131,17 @@ class ScanApiTests(TestCase):
         config.discord_webhook = "https://discord.example/super-secret-webhook"
         config.telegram_token = "super-secret-bot-token"
         config.telegram_user_id = "987654321"
+        config.webhook_enabled = True
+        config.webhook_url = "https://automation.example/private-webhook"
+        config.webhook_secret = "super-secret-signing-key"
         config.adguard_enabled = True
         config.adguard_url = "http://10.20.30.40:3000"
         config.adguard_username = "private-admin"
         config.adguard_password = "super-secret-password"
         config.adguard_last_error = "Connection failed at http://10.20.30.40/private"
+        config.speedtest_tracker_enabled = True
+        config.speedtest_tracker_url = "http://10.20.30.50:8080"
+        config.speedtest_tracker_api_token = "super-secret-speedtest-token"
         config.save()
         self.scan_run.error = "Failed on 192.168.1.20 with aa:aa:aa:aa:aa:aa"
         self.scan_run.save(update_fields=["error"])
@@ -1934,8 +2158,12 @@ class ScanApiTests(TestCase):
             "super-secret-webhook",
             "super-secret-bot-token",
             "super-secret-password",
+            "super-secret-signing-key",
+            "private-webhook",
             "private-admin",
             "10.20.30.40",
+            "10.20.30.50",
+            "super-secret-speedtest-token",
             "192.168.1.20",
             "aa:aa:aa:aa:aa:aa",
             "Laptop",
@@ -1945,6 +2173,9 @@ class ScanApiTests(TestCase):
             response.data["data"]["report"]["report"]["format"],
             "languard-diagnostics",
         )
+        configuration = response.data["data"]["report"]["configuration"]
+        self.assertTrue(configuration["speedtest_tracker_enabled"])
+        self.assertTrue(configuration["speedtest_tracker_configured"])
         self.assertIn("notification", response.data)
 
     def test_old_raw_errors_are_sanitized_in_api_responses(self):
@@ -2010,6 +2241,37 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         send_test.assert_called_once_with("bot-token", "123456")
+
+    @patch("core.views.send_webhook_test")
+    def test_notification_test_endpoint_sends_webhook(self, send_test):
+        config = AppSettings.load()
+        config.webhook_secret = "saved-secret"
+        config.save(update_fields=["webhook_secret"])
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "webhook",
+                "webhook_url": "https://automation.example/webhook/languard",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["channel"], "webhook")
+        send_test.assert_called_once_with(
+            "https://automation.example/webhook/languard",
+            "saved-secret",
+        )
+
+    def test_notification_test_endpoint_rejects_missing_webhook_url(self):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {"channel": "webhook"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("webhook_url", response.data)
 
     def test_notification_test_endpoint_rejects_incomplete_credentials(self):
         response = self.client.post(
@@ -2119,6 +2381,7 @@ class ScanApiTests(TestCase):
                 "version_check_interval": 3600,
                 "discord_enabled": False,
                 "telegram_enabled": True,
+                "webhook_enabled": True,
                 "notify_new_devices": True,
                 "notify_device_online": True,
                 "notify_device_offline": True,
@@ -2131,6 +2394,8 @@ class ScanApiTests(TestCase):
                 "discord_webhook": "https://discord.example/webhook",
                 "telegram_token": "token",
                 "telegram_user_id": "123",
+                "webhook_url": "https://automation.example/webhook/languard",
+                "webhook_secret": "shared-secret",
                 "home_map_layout": {
                     "order": ["Floor", "Bedroom"],
                     "parents": {"Bedroom": "Floor"},
@@ -2147,6 +2412,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(config.version_check_interval, 3600)
         self.assertFalse(config.discord_enabled)
         self.assertTrue(config.telegram_enabled)
+        self.assertTrue(config.webhook_enabled)
         self.assertTrue(config.notify_new_devices)
         self.assertTrue(config.notify_device_online)
         self.assertTrue(config.notify_device_offline)
@@ -2164,6 +2430,11 @@ class ScanApiTests(TestCase):
         self.assertEqual(config.telegram_token, "token")
         self.assertEqual(config.telegram_user_id, "123")
         self.assertEqual(
+            config.webhook_url,
+            "https://automation.example/webhook/languard",
+        )
+        self.assertEqual(config.webhook_secret, "shared-secret")
+        self.assertEqual(
             response.data["data"]["discord_webhook"],
             "https://discord.example/webhook",
         )
@@ -2171,6 +2442,10 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["data"]["telegram_user_id"], "123")
         self.assertFalse(response.data["data"]["discord_enabled"])
         self.assertTrue(response.data["data"]["telegram_enabled"])
+        self.assertTrue(response.data["data"]["webhook_enabled"])
+        self.assertTrue(response.data["data"]["webhook_configured"])
+        self.assertTrue(response.data["data"]["webhook_signature_configured"])
+        self.assertNotIn("webhook_secret", response.data["data"])
         self.assertTrue(response.data["data"]["discord_configured"])
         self.assertEqual(response.data["data"]["version_check_interval"], 3600)
         self.assertTrue(response.data["data"]["notify_device_online"])
@@ -2198,6 +2473,208 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("version_check_interval", response.data)
+
+    def test_settings_endpoint_saves_and_masks_speedtest_tracker_token(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "speedtest_tracker_enabled": True,
+                "speedtest_tracker_url": "http://192.168.1.5:8080",
+                "speedtest_tracker_api_token": "private-api-token",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        config = AppSettings.load()
+        self.assertTrue(config.speedtest_tracker_enabled)
+        self.assertEqual(config.speedtest_tracker_api_token, "private-api-token")
+        self.assertTrue(response.data["data"]["speedtest_tracker_configured"])
+        self.assertNotIn("speedtest_tracker_api_token", response.data["data"])
+
+        keep_response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "speedtest_tracker_url": "http://192.168.1.6:8080",
+                "speedtest_tracker_api_token": "",
+            },
+            format="json",
+        )
+        config.refresh_from_db()
+        self.assertEqual(keep_response.status_code, 200)
+        self.assertEqual(config.speedtest_tracker_api_token, "private-api-token")
+
+    def test_settings_endpoint_requires_speedtest_tracker_connection_details(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"speedtest_tracker_enabled": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("speedtest_tracker_url", response.data)
+
+    @patch("core.speedtest_tracker.requests.get")
+    def test_speedtest_tracker_latest_result_is_normalized_and_cached(self, get):
+        cache.clear()
+        get.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(
+                return_value={
+                    "id": 42,
+                    "download_bits": 500_000_000,
+                    "upload_bits": 100_000_000,
+                    "download_bits_human": "500 Mbps",
+                    "upload_bits_human": "100 Mbps",
+                    "ping": 8.4,
+                    "healthy": True,
+                    "status": "completed",
+                    "created_at": "2026-09-02T06:00:00Z",
+                    "data": {"packetLoss": 0},
+                }
+            ),
+        )
+        config = AppSettings.load()
+        config.speedtest_tracker_enabled = True
+        config.speedtest_tracker_url = "http://192.168.1.5:8080"
+        config.speedtest_tracker_api_token = "private-api-token"
+        config.save()
+
+        first = self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+        second = self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.data["data"]["download_mbps"], 500.0)
+        self.assertEqual(first.data["data"]["upload_mbps"], 100.0)
+        self.assertEqual(first.data["data"]["packet_loss_percent"], 0.0)
+        self.assertTrue(first.data["integration"]["available"])
+        self.assertFalse(first.data["integration"]["cached"])
+        self.assertTrue(second.data["integration"]["cached"])
+        self.assertNotIn("private-api-token", str(first.data))
+        get.assert_called_once()
+
+    @patch("core.speedtest_tracker.requests.get")
+    def test_speedtest_tracker_refresh_bypasses_cache(self, get):
+        cache.clear()
+        get.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(return_value={"id": 1, "status": "completed"}),
+        )
+        config = AppSettings.load()
+        config.speedtest_tracker_enabled = True
+        config.speedtest_tracker_url = "http://192.168.1.5:8080"
+        config.speedtest_tracker_api_token = "private-api-token"
+        config.save()
+
+        self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+        response = self.client.get(
+            "/api/v1/integrations/speedtest-tracker/latest/",
+            {"refresh": "true"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["integration"]["cached"])
+        self.assertEqual(get.call_count, 2)
+
+    @patch("core.speedtest_tracker.requests.get")
+    def test_speedtest_tracker_unavailable_does_not_fail_dashboard_request(self, get):
+        cache.clear()
+        get.side_effect = requests.Timeout("private upstream detail")
+        config = AppSettings.load()
+        config.speedtest_tracker_enabled = True
+        config.speedtest_tracker_url = "http://192.168.1.5:8080"
+        config.speedtest_tracker_api_token = "private-api-token"
+        config.save()
+
+        response = self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["data"])
+        self.assertFalse(response.data["integration"]["available"])
+        self.assertNotIn("private", str(response.data))
+
+    @patch("core.speedtest_tracker.requests.get")
+    def test_speedtest_tracker_connection_test_uses_saved_token(self, get):
+        cache.clear()
+        get.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(return_value={"id": 1, "status": "completed"}),
+        )
+        config = AppSettings.load()
+        config.speedtest_tracker_api_token = "saved-api-token"
+        config.save(update_fields=["speedtest_tracker_api_token"])
+
+        response = self.client.post(
+            "/api/v1/integrations/speedtest-tracker/test/",
+            {"url": "http://192.168.1.5:8080"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["notification"]["title"], "Speedtest Tracker connected")
+        self.assertNotIn("saved-api-token", str(response.data))
+
+    def test_speedtest_tracker_connection_test_requires_admin_user(self):
+        regular_user = User.objects.create_user(username="speed-viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.post(
+            "/api/v1/integrations/speedtest-tracker/test/",
+            {
+                "url": "http://192.168.1.5:8080",
+                "api_token": "private-api-token",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_speedtest_tracker_latest_requires_authentication(self):
+        anonymous_client = APIClient()
+
+        response = anonymous_client.get(
+            "/api/v1/integrations/speedtest-tracker/latest/"
+        )
+
+        self.assertIn(response.status_code, {401, 403})
+
+    def test_settings_endpoint_rejects_enabled_webhook_without_url(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"webhook_enabled": True, "webhook_url": ""},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("webhook_url", response.data)
+
+    def test_settings_endpoint_keeps_or_clears_saved_webhook_secret_explicitly(self):
+        config = AppSettings.load()
+        config.webhook_secret = "saved-secret"
+        config.save(update_fields=["webhook_secret"])
+
+        keep_response = self.client.put(
+            "/api/v1/settings/",
+            {"webhook_secret": ""},
+            format="json",
+        )
+        config.refresh_from_db()
+
+        self.assertEqual(keep_response.status_code, 200)
+        self.assertEqual(config.webhook_secret, "saved-secret")
+
+        clear_response = self.client.put(
+            "/api/v1/settings/",
+            {"clear_webhook_secret": True},
+            format="json",
+        )
+        config.refresh_from_db()
+
+        self.assertEqual(clear_response.status_code, 200)
+        self.assertEqual(config.webhook_secret, "")
+        self.assertFalse(clear_response.data["data"]["webhook_signature_configured"])
+        self.assertNotIn("clear_webhook_secret", clear_response.data["data"])
 
     def test_settings_endpoint_rejects_bad_quiet_hours(self):
         response = self.client.put(
@@ -2451,6 +2928,10 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["counters"]["offline_devices"], 1)
         self.assertEqual(response.data["counters"]["unnotified_events"], 1)
         self.assertEqual(response.data["time_zone"], "UTC")
+        self.assertEqual(
+            response.data["integrations"]["adguard"],
+            {"enabled": False, "configured": False},
+        )
         self.assertFalse(response.data["visibility"]["is_scanning"])
         self.assertEqual(response.data["visibility"]["current_range"], "192.168.1.0/24")
         self.assertTrue(response.data["data"]["started_at"].endswith("Z"))
@@ -2458,6 +2939,24 @@ class ScanApiTests(TestCase):
         self.assertTrue(response.data["visibility"]["started_at"].endswith("Z"))
         self.assertTrue(response.data["visibility"]["finished_at"].endswith("Z"))
         self.assertGreaterEqual(response.data["visibility"]["duration_seconds"], 119)
+
+    def test_scan_status_exposes_safe_active_adguard_state(self):
+        config = AppSettings.load()
+        config.adguard_enabled = True
+        config.adguard_url = "http://192.168.1.2:3000"
+        config.adguard_username = "admin"
+        config.adguard_password = "secret-password"
+        config.save()
+
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["integrations"]["adguard"],
+            {"enabled": True, "configured": True},
+        )
+        self.assertNotIn("adguard_url", str(response.data))
+        self.assertNotIn("secret-password", str(response.data))
 
     def test_scan_status_endpoint_returns_active_scan_visibility(self):
         running_scan = ScanRun.objects.create(

@@ -26,8 +26,8 @@
 </p>
 
 LanGuard finds devices, tracks online and offline state, scans common ports,
-keeps network history, and can send Discord or Telegram alerts when new devices
-appear.
+keeps network history, and can send Discord, Telegram, or automation webhook
+alerts when new devices appear.
 
 ## Preview
 
@@ -62,11 +62,13 @@ appear.
 - Assign names, icons, rooms, roles, and expected device behavior
 - Arrange rooms and devices in the Docker Home Map view
 - Export and import device inventory between LanGuard installations
+- Grant each Docker user permission to edit devices, change the Home Map layout, or run manual scans
 
 **Notify and integrate**
 
-- Send Discord or Telegram alerts for new devices and important changes
+- Send Discord, Telegram, or generic webhook alerts for new devices and important changes
 - Sync per-device DNS destinations and blocked-query totals from AdGuard Home
+- Show the latest Speedtest Tracker result on the Docker dashboard
 - Use Swagger, ReDoc, and the OpenAPI schema for integrations
 - Create the initial administrator directly from first-user setup
 
@@ -201,11 +203,10 @@ AdGuard Home settings are read from the database during their scheduled loops an
 do not require a restart.
 
 > [!IMPORTANT]
-> The next Docker release includes a Docker deployment change. Existing Compose
-> files remain compatible, but installations should update the stack with the
-> current Compose definition and recreate it once to enable the backend health
-> check and coordinated service restarts. Named volumes are preserved, so this
-> does not delete LanGuard data.
+> When upgrading from version 1.7.0 or earlier, update the stack with the current
+> Compose definition and recreate it once to enable the backend health check and
+> coordinated service restarts. Older Compose files remain compatible and named
+> volumes are preserved, so this does not delete LanGuard data.
 
 > [!IMPORTANT]
 > When upgrading from version 1.4.0 or earlier, change the scanner service image
@@ -234,7 +235,7 @@ You normally do not need `CORS_ALLOWED_ORIGINS` in the Portainer stack. The fron
 
 Open `http://<docker-host-ip>:8080` and create the first user. That user becomes admin. There is no default admin password.
 
-After sign in, open Settings to change the scan range, scan interval, timezone, Discord webhook, or Telegram settings.
+After sign in, open Settings to change the scan range, scan interval, timezone, and notification channels.
 
 The scanner waits for the configured scan interval after a scan completes before starting the next scheduled scan. For example, with a 5 minute interval, a scan that finishes at 20:14 will schedule the next scan for about 20:19.
 
@@ -248,7 +249,17 @@ usernames, device names, IP and MAC addresses, network ranges, and raw exception
 text. Attach this report to a GitHub issue; only provide container logs when
 requested and review them for private network details first.
 
-## AdGuard Home
+## Integrations
+
+Docker installations can connect LanGuard to optional services from
+**Settings > Add-ons**. Each integration is disabled by default.
+
+| Integration | What it adds | Data handling |
+| --- | --- | --- |
+| AdGuard Home | Network-wide and per-device DNS activity | Stores aggregated domain and query counters using the configured retention period |
+| Speedtest Tracker | Latest download, upload, ping, packet loss, and health on the dashboard | Stores connection settings only; the latest result is cached in memory for five minutes |
+
+### AdGuard Home
 
 Docker installations can sync AdGuard Home query-log activity into LanGuard.
 LanGuard stores aggregated counters per device, domain, and DNS query type
@@ -278,6 +289,86 @@ integration is included in a release.
 > Home only sees the router IP, LanGuard can only associate that activity with
 > the router. Configure clients or DHCP to use AdGuard Home directly when you
 > need device-level activity.
+
+### Speedtest Tracker
+
+Docker installations can show the latest result from an existing Speedtest
+Tracker installation directly on the dashboard. LanGuard displays download,
+upload, ping, packet loss, health, and test time, and links the card back to
+Speedtest Tracker.
+
+1. In Speedtest Tracker, create an API token with the `results:read` ability.
+2. In LanGuard, open **Settings > Add-ons** and enable **Speedtest Tracker**.
+3. Enter the Speedtest Tracker URL and API token, then select **Test connection**.
+4. Save Settings. The latest result will appear on the dashboard.
+
+LanGuard stores only the connection settings. It does not copy test results or
+history into its database. The backend reads the latest result on dashboard
+requests and caches it in memory for five minutes, while a manual dashboard
+refresh requests fresh data immediately. The scheduler container is not used
+for this integration.
+
+## Automation webhooks
+
+LanGuard can send each enabled network event as structured JSON to n8n, Home
+Assistant, or another automation service that accepts HTTP webhooks.
+
+1. Create a webhook trigger in the automation service and copy its production URL.
+2. In LanGuard, open **Settings > Notifications**.
+3. Enable **Automation webhook**, paste the URL, and use the test action.
+4. Save Settings and enable the event rules that should be delivered.
+
+Event deliveries use this structure:
+
+```json
+{
+  "schema_version": 1,
+  "source": "languard",
+  "kind": "network_event",
+  "delivery_id": 73,
+  "event": {
+    "id": 42,
+    "type": "new_device",
+    "label": "New device",
+    "message": "Found new device Office laptop at 192.168.1.50",
+    "created_at": "2026-08-31T08:15:00Z",
+    "metadata": {}
+  },
+  "device": {
+    "id": 12,
+    "name": "Office laptop",
+    "hostname": "office-laptop",
+    "ip": "192.168.1.50",
+    "mac": "02:00:00:00:00:12",
+    "vendor": "Example Vendor",
+    "role": "laptop",
+    "room": "Office",
+    "known": false,
+    "online": true,
+    "status": "online"
+  },
+  "scan_run_id": 18
+}
+```
+
+The webhook follows the same event rules and quiet hours as Discord and
+Telegram. You can independently enable new-device, online, offline, and port
+change events. A non-success HTTP response is recorded in notification history,
+and the scheduler retries it with the existing notification retry policy.
+
+For authenticated delivery, set a **Signing secret** in LanGuard and configure
+the same value in the receiving workflow. Signed requests include these headers:
+
+- `X-LanGuard-Delivery`: a stable delivery identifier for network events.
+- `X-LanGuard-Event`: `network_event` or `test`.
+- `X-LanGuard-Timestamp`: the Unix timestamp used in the signature.
+- `X-LanGuard-Signature`: `sha256=<hex digest>` when a secret is configured.
+
+To verify a request, calculate HMAC-SHA256 over
+`<X-LanGuard-Timestamp>.<raw request body>` with the shared secret, compare it
+to `X-LanGuard-Signature` using a constant-time comparison, and reject stale
+timestamps. The signing secret is write-only in the LanGuard API and is omitted
+from diagnostics exports.
 
 ## Migrate from WatchYourLAN
 

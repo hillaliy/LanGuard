@@ -429,6 +429,15 @@ textarea {
   grid-template-columns: minmax(280px, 1.1fr) minmax(240px, 1fr) minmax(280px, 1fr);
 }
 
+.dashboard-summary-grid.with-speedtest {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.speedtest-tracker-card {
+  color: inherit;
+  text-decoration: none;
+}
+
 .dashboard-summary-card {
   min-height: 176px;
   overflow: hidden;

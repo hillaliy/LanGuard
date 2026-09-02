@@ -30,6 +30,8 @@ from .views import (
     test_notification_channel,
     sync_adguard,
     test_adguard,
+    speedtest_tracker_latest,
+    test_speedtest_tracker,
     users,
 )
 
@@ -45,6 +47,16 @@ urlpatterns = [
     path("settings/", app_settings, name="app-settings"),
     path("integrations/adguard/test/", test_adguard, name="test-adguard"),
     path("integrations/adguard/sync/", sync_adguard, name="sync-adguard"),
+    path(
+        "integrations/speedtest-tracker/test/",
+        test_speedtest_tracker,
+        name="test-speedtest-tracker",
+    ),
+    path(
+        "integrations/speedtest-tracker/latest/",
+        speedtest_tracker_latest,
+        name="speedtest-tracker-latest",
+    ),
     path(
         "notifications/test/",
         test_notification_channel,

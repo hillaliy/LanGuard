@@ -8,6 +8,7 @@ from .models import (
     NetworkEvent,
     NotificationDelivery,
     ScanRun,
+    UserAccess,
 )
 
 
@@ -30,6 +31,18 @@ class DevicePortAdmin(admin.ModelAdmin):
     list_display = ("device", "protocol", "port", "service", "open", "lastseen")
     list_filter = ("open", "protocol", "service")
     search_fields = ("device__name", "device__ip", "port", "service")
+
+
+@admin.register(UserAccess)
+class UserAccessAdmin(admin.ModelAdmin):
+    list_display = (
+        "user",
+        "can_edit_devices",
+        "can_edit_home_map",
+        "can_run_scans",
+    )
+    list_filter = ("can_edit_devices", "can_edit_home_map", "can_run_scans")
+    search_fields = ("user__username", "user__first_name", "user__last_name")
 
 
 @admin.register(DeviceDNSActivity)
@@ -104,6 +117,7 @@ class AppSettingsAdmin(admin.ModelAdmin):
         "adguard_retention_days",
         "time_zone",
         "notifications_enabled",
+        "webhook_enabled",
         "updated_at",
     )
     readonly_fields = ("singleton_key", "updated_at")

@@ -91,6 +91,9 @@ def build_diagnostics_report():
             "discord_configured": bool(config.discord_webhook),
             "telegram_enabled": config.telegram_enabled,
             "telegram_configured": bool(config.telegram_token and config.telegram_user_id),
+            "webhook_enabled": config.webhook_enabled,
+            "webhook_configured": bool(config.webhook_url),
+            "webhook_signature_configured": bool(config.webhook_secret),
             "adguard_enabled": config.adguard_enabled,
             "adguard_configured": bool(
                 config.adguard_url
@@ -101,6 +104,11 @@ def build_diagnostics_report():
             "adguard_last_sync_at": utc_isoformat(config.adguard_last_sync_at),
             "adguard_last_error": stored_error_message(
                 "adguard", config.adguard_last_error
+            ),
+            "speedtest_tracker_enabled": config.speedtest_tracker_enabled,
+            "speedtest_tracker_configured": bool(
+                config.speedtest_tracker_url
+                and config.speedtest_tracker_api_token
             ),
         },
         "counts": {

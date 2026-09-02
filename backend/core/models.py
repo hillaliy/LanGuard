@@ -252,6 +252,7 @@ class NotificationDelivery(models.Model):
     class Channel(models.TextChoices):
         DISCORD = "discord", "Discord"
         TELEGRAM = "telegram", "Telegram"
+        WEBHOOK = "webhook", "Webhook"
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -289,6 +290,24 @@ class NotificationDelivery(models.Model):
         return f"{self.channel} {self.status} - {self.event_id}"
 
 
+class UserAccess(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        related_name="languard_access",
+        on_delete=models.CASCADE,
+    )
+    can_edit_devices = models.BooleanField(default=True)
+    can_edit_home_map = models.BooleanField(default=True)
+    can_run_scans = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "User access"
+        verbose_name_plural = "User access"
+
+    def __str__(self):
+        return f"LanGuard access for {self.user}"
+
+
 class AppSettings(models.Model):
     singleton_key = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
     ip_range = models.CharField(max_length=64, default="192.168.1.0/24")
@@ -301,6 +320,9 @@ class AppSettings(models.Model):
     telegram_enabled = models.BooleanField(default=True)
     telegram_token = models.CharField(max_length=255, blank=True, default="")
     telegram_user_id = models.CharField(max_length=64, blank=True, default="")
+    webhook_enabled = models.BooleanField(default=False)
+    webhook_url = models.URLField(max_length=2048, blank=True, default="")
+    webhook_secret = models.CharField(max_length=255, blank=True, default="")
     notify_new_devices = models.BooleanField(default=True)
     notify_device_online = models.BooleanField(default=False)
     notify_device_offline = models.BooleanField(default=False)
@@ -321,6 +343,9 @@ class AppSettings(models.Model):
     adguard_retention_days = models.PositiveIntegerField(default=90)
     adguard_last_sync_at = models.DateTimeField(blank=True, null=True)
     adguard_last_error = models.TextField(blank=True, default="")
+    speedtest_tracker_enabled = models.BooleanField(default=False)
+    speedtest_tracker_url = models.URLField(max_length=2048, blank=True, default="")
+    speedtest_tracker_api_token = models.CharField(max_length=512, blank=True, default="")
     home_map_layout = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -344,6 +369,9 @@ class AppSettings(models.Model):
             "telegram_enabled": settings.NOTIFICATIONS_ENABLED,
             "telegram_token": settings.TELEGRAM_TOKEN or "",
             "telegram_user_id": settings.TELEGRAM_USERID or "",
+            "webhook_enabled": False,
+            "webhook_url": "",
+            "webhook_secret": "",
             "notify_new_devices": "new_device" in settings.NOTIFICATION_EVENT_TYPES,
             "notify_device_online": "device_online" in settings.NOTIFICATION_EVENT_TYPES,
             "notify_device_offline": "device_offline" in settings.NOTIFICATION_EVENT_TYPES,
@@ -364,6 +392,9 @@ class AppSettings(models.Model):
             "adguard_retention_days": 90,
             "adguard_last_sync_at": None,
             "adguard_last_error": "",
+            "speedtest_tracker_enabled": False,
+            "speedtest_tracker_url": "",
+            "speedtest_tracker_api_token": "",
             "home_map_layout": {},
         }
         config, _ = cls.objects.get_or_create(singleton_key=1, defaults=defaults)

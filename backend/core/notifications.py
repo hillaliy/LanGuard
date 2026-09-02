@@ -1,4 +1,8 @@
+import hashlib
+import hmac
+import json
 import logging
+import uuid
 from datetime import time
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -22,13 +26,21 @@ DISCORD_TEST_COLOR = 0x228BE6
 TEST_NOTIFICATION_MESSAGE = (
     "This is a test notification from LanGuard. Your notification channel is working."
 )
+
+
 def configured_channels(app_config=None):
     app_config = app_config or AppSettings.load()
     channels = []
     if app_config.discord_enabled and app_config.discord_webhook:
         channels.append(NotificationDelivery.Channel.DISCORD)
-    if app_config.telegram_enabled and app_config.telegram_token and app_config.telegram_user_id:
+    if (
+        app_config.telegram_enabled
+        and app_config.telegram_token
+        and app_config.telegram_user_id
+    ):
         channels.append(NotificationDelivery.Channel.TELEGRAM)
+    if app_config.webhook_enabled and app_config.webhook_url:
+        channels.append(NotificationDelivery.Channel.WEBHOOK)
     return channels
 
 
@@ -133,7 +145,13 @@ def retry_failed_notifications(limit=50, max_attempts=None):
     ).select_related("event", "event__device")[:limit]
 
     retried = []
+    configured = set(configured_channels(app_config))
     for delivery in deliveries:
+        if delivery.channel not in configured:
+            delivery.status = NotificationDelivery.Status.SKIPPED
+            delivery.error = "Notification channel is no longer enabled or configured."
+            delivery.save(update_fields=["status", "error"])
+            continue
         if not notification_event_allowed(delivery.event):
             delivery.status = NotificationDelivery.Status.SKIPPED
             delivery.error = "Event type is not enabled for external notifications."
@@ -162,6 +180,8 @@ def send_delivery(delivery, app_config=None):
             send_discord(delivery.event, app_config)
         elif delivery.channel == NotificationDelivery.Channel.TELEGRAM:
             send_telegram(delivery.event, app_config)
+        elif delivery.channel == NotificationDelivery.Channel.WEBHOOK:
+            send_webhook(delivery, app_config)
         else:
             delivery.status = NotificationDelivery.Status.SKIPPED
             delivery.error = f"Unsupported channel: {delivery.channel}"
@@ -207,6 +227,42 @@ def send_telegram(event, app_config):
     response.raise_for_status()
 
 
+def webhook_request_data(payload, secret="", delivery_id=None, timestamp=None):
+    delivery_id = str(delivery_id or uuid.uuid4())
+    timestamp = str(timestamp or int(timezone.now().timestamp()))
+    body = json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    headers = {
+        "Content-Type": "application/json",
+        "X-LanGuard-Delivery": delivery_id,
+        "X-LanGuard-Event": payload.get("kind", "unknown"),
+        "X-LanGuard-Timestamp": timestamp,
+    }
+    if secret:
+        signature = hmac.new(
+            secret.encode("utf-8"),
+            f"{timestamp}.".encode("utf-8") + body,
+            hashlib.sha256,
+        ).hexdigest()
+        headers["X-LanGuard-Signature"] = f"sha256={signature}"
+    return body, headers
+
+
+def send_webhook(delivery, app_config):
+    payload = format_webhook_payload(delivery.event, delivery_id=delivery.id)
+    body, headers = webhook_request_data(
+        payload,
+        secret=app_config.webhook_secret,
+        delivery_id=delivery.id,
+    )
+    response = requests.post(
+        app_config.webhook_url,
+        data=body,
+        headers=headers,
+        timeout=settings.NOTIFICATION_TIMEOUT,
+    )
+    response.raise_for_status()
+
+
 def send_discord_test(webhook):
     response = requests.post(
         webhook,
@@ -229,6 +285,30 @@ def send_telegram_test(token, user_id):
     response.raise_for_status()
 
 
+def send_webhook_test(webhook_url, secret=""):
+    delivery_id = str(uuid.uuid4())
+    payload = {
+        "schema_version": 1,
+        "source": "languard",
+        "kind": "test",
+        "delivery_id": delivery_id,
+        "message": TEST_NOTIFICATION_MESSAGE,
+        "created_at": utc_isoformat(timezone.now()),
+    }
+    body, headers = webhook_request_data(
+        payload,
+        secret=secret,
+        delivery_id=delivery_id,
+    )
+    response = requests.post(
+        webhook_url,
+        data=body,
+        headers=headers,
+        timeout=settings.NOTIFICATION_TIMEOUT,
+    )
+    response.raise_for_status()
+
+
 def format_event_message(event):
     device = event.device
     lines = [
@@ -241,6 +321,38 @@ def format_event_message(event):
     if device.vendor:
         lines.append(f"Vendor: {device.vendor}")
     return "\n".join(lines)
+
+
+def format_webhook_payload(event, delivery_id=None):
+    device = event.device
+    return {
+        "schema_version": 1,
+        "source": "languard",
+        "kind": "network_event",
+        "delivery_id": delivery_id,
+        "event": {
+            "id": event.id,
+            "type": event.event_type,
+            "label": event.get_event_type_display(),
+            "message": event.message,
+            "created_at": utc_isoformat(event.created_at),
+            "metadata": event.metadata or {},
+        },
+        "device": {
+            "id": device.id,
+            "name": device.name,
+            "hostname": device.hostname,
+            "ip": device.ip,
+            "mac": device.mac,
+            "vendor": device.vendor,
+            "role": device.role,
+            "room": device.room,
+            "known": device.known,
+            "online": device.online,
+            "status": device.status,
+        },
+        "scan_run_id": event.scan_run_id,
+    }
 
 
 def format_discord_test_payload():
