@@ -343,6 +343,9 @@ class AppSettings(models.Model):
     adguard_retention_days = models.PositiveIntegerField(default=90)
     adguard_last_sync_at = models.DateTimeField(blank=True, null=True)
     adguard_last_error = models.TextField(blank=True, default="")
+    speedtest_tracker_enabled = models.BooleanField(default=False)
+    speedtest_tracker_url = models.URLField(max_length=2048, blank=True, default="")
+    speedtest_tracker_api_token = models.CharField(max_length=512, blank=True, default="")
     home_map_layout = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -389,6 +392,9 @@ class AppSettings(models.Model):
             "adguard_retention_days": 90,
             "adguard_last_sync_at": None,
             "adguard_last_error": "",
+            "speedtest_tracker_enabled": False,
+            "speedtest_tracker_url": "",
+            "speedtest_tracker_api_token": "",
             "home_map_layout": {},
         }
         config, _ = cls.objects.get_or_create(singleton_key=1, defaults=defaults)

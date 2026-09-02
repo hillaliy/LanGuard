@@ -68,6 +68,7 @@ alerts when new devices appear.
 
 - Send Discord, Telegram, or generic webhook alerts for new devices and important changes
 - Sync per-device DNS destinations and blocked-query totals from AdGuard Home
+- Show the latest Speedtest Tracker result on the Docker dashboard
 - Use Swagger, ReDoc, and the OpenAPI schema for integrations
 - Create the initial administrator directly from first-user setup
 
@@ -279,6 +280,24 @@ integration is included in a release.
 > Home only sees the router IP, LanGuard can only associate that activity with
 > the router. Configure clients or DHCP to use AdGuard Home directly when you
 > need device-level activity.
+
+## Speedtest Tracker
+
+Docker installations can show the latest result from an existing Speedtest
+Tracker installation directly on the dashboard. LanGuard displays download,
+upload, ping, packet loss, health, and test time, and links the card back to
+Speedtest Tracker.
+
+1. In Speedtest Tracker, create an API token with the `results:read` ability.
+2. In LanGuard, open **Settings > Add-ons** and enable **Speedtest Tracker**.
+3. Enter the Speedtest Tracker URL and API token, then select **Test connection**.
+4. Save Settings. The latest result will appear on the dashboard.
+
+LanGuard stores only the connection settings. It does not copy test results or
+history into its database. The backend reads the latest result on dashboard
+requests and caches it in memory for five minutes, while a manual dashboard
+refresh requests fresh data immediately. The scheduler container is not used
+for this integration.
 
 ## Automation webhooks
 

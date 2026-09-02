@@ -602,6 +602,24 @@ class AdGuardConnectionSerializer(serializers.Serializer):
         return attrs
 
 
+class SpeedtestTrackerConnectionSerializer(serializers.Serializer):
+    url = serializers.URLField(max_length=2048)
+    api_token = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=512,
+        trim_whitespace=True,
+    )
+
+    def validate(self, attrs):
+        saved = AppSettings.load()
+        if not attrs.get("api_token") and not saved.speedtest_tracker_api_token:
+            raise serializers.ValidationError(
+                {"api_token": "Enter a Speedtest Tracker API token."}
+            )
+        return attrs
+
+
 class AppSettingsSerializer(serializers.ModelSerializer):
     updated_at = UTCDateTimeField(read_only=True)
     adguard_last_sync_at = UTCDateTimeField(read_only=True)
@@ -610,6 +628,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     webhook_configured = serializers.SerializerMethodField()
     webhook_signature_configured = serializers.SerializerMethodField()
     adguard_configured = serializers.SerializerMethodField()
+    speedtest_tracker_configured = serializers.SerializerMethodField()
     adguard_password = serializers.CharField(
         write_only=True,
         required=False,
@@ -621,6 +640,13 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         required=False,
         allow_blank=True,
         max_length=255,
+    )
+    speedtest_tracker_api_token = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=512,
+        trim_whitespace=True,
     )
     clear_webhook_secret = serializers.BooleanField(
         write_only=True,
@@ -672,6 +698,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "adguard_retention_days",
             "adguard_last_sync_at",
             "adguard_last_error",
+            "speedtest_tracker_enabled",
+            "speedtest_tracker_url",
+            "speedtest_tracker_api_token",
+            "speedtest_tracker_configured",
             "home_map_layout",
             "updated_at",
         )
@@ -684,6 +714,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "adguard_username": {"required": False, "allow_blank": True},
             "adguard_last_sync_at": {"read_only": True},
             "adguard_last_error": {"read_only": True},
+            "speedtest_tracker_url": {"required": False, "allow_blank": True},
             "updated_at": {"read_only": True},
         }
 
@@ -706,6 +737,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.BooleanField)
     def get_adguard_configured(self, obj):
         return bool(obj.adguard_url and (not obj.adguard_username or obj.adguard_password))
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_speedtest_tracker_configured(self, obj):
+        return bool(obj.speedtest_tracker_url and obj.speedtest_tracker_api_token)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -743,6 +778,26 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"adguard_password": "Enter the AdGuard Home password."}
             )
+
+        speedtest_enabled = attrs.get(
+            "speedtest_tracker_enabled",
+            self.instance.speedtest_tracker_enabled if self.instance else False,
+        )
+        speedtest_url = attrs.get(
+            "speedtest_tracker_url",
+            self.instance.speedtest_tracker_url if self.instance else "",
+        )
+        speedtest_token = attrs.get("speedtest_tracker_api_token") or (
+            self.instance.speedtest_tracker_api_token if self.instance else ""
+        )
+        if speedtest_enabled and not speedtest_url:
+            raise serializers.ValidationError(
+                {"speedtest_tracker_url": "Configure the Speedtest Tracker URL before enabling it."}
+            )
+        if speedtest_enabled and not speedtest_token:
+            raise serializers.ValidationError(
+                {"speedtest_tracker_api_token": "Enter a Speedtest Tracker API token."}
+            )
         return attrs
 
     def update(self, instance, validated_data):
@@ -753,6 +808,8 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             validated_data.pop("webhook_secret", None)
         if not validated_data.get("adguard_username", instance.adguard_username):
             validated_data.setdefault("adguard_password", "")
+        if not validated_data.get("speedtest_tracker_api_token"):
+            validated_data.pop("speedtest_tracker_api_token", None)
         return super().update(instance, validated_data)
 
     def validate_home_map_layout(self, value):

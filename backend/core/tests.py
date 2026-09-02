@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
+from django.core.cache import cache
 from django.db import DatabaseError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
@@ -2138,6 +2139,9 @@ class ScanApiTests(TestCase):
         config.adguard_username = "private-admin"
         config.adguard_password = "super-secret-password"
         config.adguard_last_error = "Connection failed at http://10.20.30.40/private"
+        config.speedtest_tracker_enabled = True
+        config.speedtest_tracker_url = "http://10.20.30.50:8080"
+        config.speedtest_tracker_api_token = "super-secret-speedtest-token"
         config.save()
         self.scan_run.error = "Failed on 192.168.1.20 with aa:aa:aa:aa:aa:aa"
         self.scan_run.save(update_fields=["error"])
@@ -2158,6 +2162,8 @@ class ScanApiTests(TestCase):
             "private-webhook",
             "private-admin",
             "10.20.30.40",
+            "10.20.30.50",
+            "super-secret-speedtest-token",
             "192.168.1.20",
             "aa:aa:aa:aa:aa:aa",
             "Laptop",
@@ -2167,6 +2173,9 @@ class ScanApiTests(TestCase):
             response.data["data"]["report"]["report"]["format"],
             "languard-diagnostics",
         )
+        configuration = response.data["data"]["report"]["configuration"]
+        self.assertTrue(configuration["speedtest_tracker_enabled"])
+        self.assertTrue(configuration["speedtest_tracker_configured"])
         self.assertIn("notification", response.data)
 
     def test_old_raw_errors_are_sanitized_in_api_responses(self):
@@ -2464,6 +2473,171 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("version_check_interval", response.data)
+
+    def test_settings_endpoint_saves_and_masks_speedtest_tracker_token(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "speedtest_tracker_enabled": True,
+                "speedtest_tracker_url": "http://192.168.1.5:8080",
+                "speedtest_tracker_api_token": "private-api-token",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        config = AppSettings.load()
+        self.assertTrue(config.speedtest_tracker_enabled)
+        self.assertEqual(config.speedtest_tracker_api_token, "private-api-token")
+        self.assertTrue(response.data["data"]["speedtest_tracker_configured"])
+        self.assertNotIn("speedtest_tracker_api_token", response.data["data"])
+
+        keep_response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "speedtest_tracker_url": "http://192.168.1.6:8080",
+                "speedtest_tracker_api_token": "",
+            },
+            format="json",
+        )
+        config.refresh_from_db()
+        self.assertEqual(keep_response.status_code, 200)
+        self.assertEqual(config.speedtest_tracker_api_token, "private-api-token")
+
+    def test_settings_endpoint_requires_speedtest_tracker_connection_details(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"speedtest_tracker_enabled": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("speedtest_tracker_url", response.data)
+
+    @patch("core.speedtest_tracker.requests.get")
+    def test_speedtest_tracker_latest_result_is_normalized_and_cached(self, get):
+        cache.clear()
+        get.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(
+                return_value={
+                    "id": 42,
+                    "download_bits": 500_000_000,
+                    "upload_bits": 100_000_000,
+                    "download_bits_human": "500 Mbps",
+                    "upload_bits_human": "100 Mbps",
+                    "ping": 8.4,
+                    "healthy": True,
+                    "status": "completed",
+                    "created_at": "2026-09-02T06:00:00Z",
+                    "data": {"packetLoss": 0},
+                }
+            ),
+        )
+        config = AppSettings.load()
+        config.speedtest_tracker_enabled = True
+        config.speedtest_tracker_url = "http://192.168.1.5:8080"
+        config.speedtest_tracker_api_token = "private-api-token"
+        config.save()
+
+        first = self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+        second = self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.data["data"]["download_mbps"], 500.0)
+        self.assertEqual(first.data["data"]["upload_mbps"], 100.0)
+        self.assertEqual(first.data["data"]["packet_loss_percent"], 0.0)
+        self.assertTrue(first.data["integration"]["available"])
+        self.assertFalse(first.data["integration"]["cached"])
+        self.assertTrue(second.data["integration"]["cached"])
+        self.assertNotIn("private-api-token", str(first.data))
+        get.assert_called_once()
+
+    @patch("core.speedtest_tracker.requests.get")
+    def test_speedtest_tracker_refresh_bypasses_cache(self, get):
+        cache.clear()
+        get.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(return_value={"id": 1, "status": "completed"}),
+        )
+        config = AppSettings.load()
+        config.speedtest_tracker_enabled = True
+        config.speedtest_tracker_url = "http://192.168.1.5:8080"
+        config.speedtest_tracker_api_token = "private-api-token"
+        config.save()
+
+        self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+        response = self.client.get(
+            "/api/v1/integrations/speedtest-tracker/latest/",
+            {"refresh": "true"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.data["integration"]["cached"])
+        self.assertEqual(get.call_count, 2)
+
+    @patch("core.speedtest_tracker.requests.get")
+    def test_speedtest_tracker_unavailable_does_not_fail_dashboard_request(self, get):
+        cache.clear()
+        get.side_effect = requests.Timeout("private upstream detail")
+        config = AppSettings.load()
+        config.speedtest_tracker_enabled = True
+        config.speedtest_tracker_url = "http://192.168.1.5:8080"
+        config.speedtest_tracker_api_token = "private-api-token"
+        config.save()
+
+        response = self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["data"])
+        self.assertFalse(response.data["integration"]["available"])
+        self.assertNotIn("private", str(response.data))
+
+    @patch("core.speedtest_tracker.requests.get")
+    def test_speedtest_tracker_connection_test_uses_saved_token(self, get):
+        cache.clear()
+        get.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(return_value={"id": 1, "status": "completed"}),
+        )
+        config = AppSettings.load()
+        config.speedtest_tracker_api_token = "saved-api-token"
+        config.save(update_fields=["speedtest_tracker_api_token"])
+
+        response = self.client.post(
+            "/api/v1/integrations/speedtest-tracker/test/",
+            {"url": "http://192.168.1.5:8080"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["notification"]["title"], "Speedtest Tracker connected")
+        self.assertNotIn("saved-api-token", str(response.data))
+
+    def test_speedtest_tracker_connection_test_requires_admin_user(self):
+        regular_user = User.objects.create_user(username="speed-viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.post(
+            "/api/v1/integrations/speedtest-tracker/test/",
+            {
+                "url": "http://192.168.1.5:8080",
+                "api_token": "private-api-token",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_speedtest_tracker_latest_requires_authentication(self):
+        anonymous_client = APIClient()
+
+        response = anonymous_client.get(
+            "/api/v1/integrations/speedtest-tracker/latest/"
+        )
+
+        self.assertIn(response.status_code, {401, 403})
 
     def test_settings_endpoint_rejects_enabled_webhook_without_url(self):
         response = self.client.put(

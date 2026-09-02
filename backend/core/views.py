@@ -50,6 +50,7 @@ from .serializers import (
     NotificationDeliverySerializer,
     NotificationTestSerializer,
     ScanRunSerializer,
+    SpeedtestTrackerConnectionSerializer,
     UserManagementSerializer,
     UserSerializer,
     device_attention_acknowledged,
@@ -76,6 +77,7 @@ from .api import (
 from .scan import detect_web_interface, scan, validate_ip_range
 from .notifications import send_discord_test, send_telegram_test, send_webhook_test
 from .adguard import AdGuardError, sync_adguard_query_log, test_adguard_connection
+from .speedtest_tracker import SpeedtestTrackerError, latest_speedtest_result
 from .diagnostics import build_diagnostics_report
 from .user_messages import error_response, scan_error_message, success_response
 
@@ -856,6 +858,65 @@ def sync_adguard(request):
             f"{result.get('domains_updated', 0)} device domains."
         ),
     )
+
+
+@extend_schema(request=SpeedtestTrackerConnectionSerializer, responses=OpenApiTypes.OBJECT)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def test_speedtest_tracker(request):
+    serializer = SpeedtestTrackerConnectionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    config = AppSettings.load()
+    api_token = data.get("api_token") or config.speedtest_tracker_api_token
+    try:
+        result, _ = latest_speedtest_result(
+            data["url"],
+            api_token,
+            force_refresh=True,
+        )
+    except SpeedtestTrackerError as exc:
+        return error_response(
+            "Speedtest Tracker connection failed",
+            str(exc),
+            response_status=status.HTTP_502_BAD_GATEWAY,
+        )
+    return success_response(
+        result,
+        "Speedtest Tracker connected",
+        "Connection succeeded and the latest result is available.",
+    )
+
+
+@extend_schema(responses=OpenApiTypes.OBJECT)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def speedtest_tracker_latest(request):
+    config = AppSettings.load()
+    configured = bool(
+        config.speedtest_tracker_url and config.speedtest_tracker_api_token
+    )
+    integration = {
+        "enabled": config.speedtest_tracker_enabled,
+        "configured": configured,
+        "available": False,
+        "service_url": config.speedtest_tracker_url if configured else "",
+    }
+    if not config.speedtest_tracker_enabled or not configured:
+        return Response({"data": None, "integration": integration})
+
+    try:
+        result, cached = latest_speedtest_result(
+            config.speedtest_tracker_url,
+            config.speedtest_tracker_api_token,
+            force_refresh=parse_bool_param(request.query_params, "refresh") is True,
+        )
+    except SpeedtestTrackerError as exc:
+        LOGGER.warning("Speedtest Tracker latest-result request failed: %s", exc)
+        return Response({"data": None, "integration": integration})
+
+    integration.update({"available": True, "cached": cached})
+    return Response({"data": result, "integration": integration})
 
 
 @extend_schema(responses=OpenApiTypes.OBJECT)
@@ -1760,6 +1821,13 @@ def scan_status(request):
                             not app_config.adguard_username
                             or app_config.adguard_password
                         )
+                    ),
+                },
+                "speedtest_tracker": {
+                    "enabled": app_config.speedtest_tracker_enabled,
+                    "configured": bool(
+                        app_config.speedtest_tracker_url
+                        and app_config.speedtest_tracker_api_token
                     ),
                 },
             },

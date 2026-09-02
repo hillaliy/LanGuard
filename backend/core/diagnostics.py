@@ -105,6 +105,11 @@ def build_diagnostics_report():
             "adguard_last_error": stored_error_message(
                 "adguard", config.adguard_last_error
             ),
+            "speedtest_tracker_enabled": config.speedtest_tracker_enabled,
+            "speedtest_tracker_configured": bool(
+                config.speedtest_tracker_url
+                and config.speedtest_tracker_api_token
+            ),
         },
         "counts": {
             "devices": Device.objects.count(),

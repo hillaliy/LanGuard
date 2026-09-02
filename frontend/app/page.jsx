@@ -61,6 +61,7 @@ import {
   IconDownload,
   IconEdit,
   IconGripVertical,
+  IconGauge,
   IconHistory,
   IconLamp,
   IconLayoutDashboard,
@@ -1954,6 +1955,79 @@ function LatestScanCard({ scanStatus, scanVisibility, timeZone, onOpenDetails })
   );
 }
 
+function formatSpeedtestSpeed(displayValue, numericValue) {
+  if (displayValue) {
+    return displayValue;
+  }
+  if (numericValue === null || numericValue === undefined || numericValue === '') {
+    return '-';
+  }
+  const value = Number(numericValue);
+  return Number.isFinite(value) ? `${value.toFixed(value >= 100 ? 0 : 1)} Mbps` : '-';
+}
+
+function formatSpeedtestNumber(value, suffix) {
+  if (value === null || value === undefined || value === '') {
+    return '-';
+  }
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? `${numberValue.toFixed(1)} ${suffix}` : '-';
+}
+
+function SpeedtestTrackerCard({ payload, timeZone }) {
+  const result = payload?.data || null;
+  const integration = payload?.integration || {};
+  const available = Boolean(integration.available && result);
+  const healthColor = !available ? 'gray' : result.healthy === false ? 'orange' : result.healthy === true ? 'teal' : 'blue';
+  const healthLabel = !available ? 'Unavailable' : result.healthy === false ? 'Degraded' : result.healthy === true ? 'Healthy' : 'Available';
+  const serviceUrl = result?.service_url || integration.service_url;
+  const linkProps = serviceUrl
+    ? { component: 'a', href: serviceUrl, target: '_blank', rel: 'noreferrer' }
+    : {};
+
+  return (
+    <Paper
+      className={`dashboard-summary-card speedtest-tracker-card ${serviceUrl ? 'dashboard-clickable-card' : ''}`}
+      radius="md"
+      {...linkProps}
+    >
+      <Group justify="space-between" align="center" mb="lg" wrap="nowrap">
+        <Group gap="sm" wrap="nowrap">
+          <IconGauge size={28} />
+          <Title order={3}>Speedtest</Title>
+        </Group>
+        <Badge className="dashboard-status-badge" color={healthColor} variant="light">
+          {healthLabel}
+        </Badge>
+      </Group>
+      {available ? (
+        <>
+          <SimpleGrid cols={2} spacing="sm">
+            <SummaryMetric
+              label="Download"
+              value={formatSpeedtestSpeed(result.download_display, result.download_mbps)}
+            />
+            <SummaryMetric
+              label="Upload"
+              value={formatSpeedtestSpeed(result.upload_display, result.upload_mbps)}
+              align="right"
+            />
+            <SummaryMetric label="Ping" value={formatSpeedtestNumber(result.ping_ms, 'ms')} />
+            <SummaryMetric label="Packet loss" value={formatSpeedtestNumber(result.packet_loss_percent, '%')} align="right" />
+          </SimpleGrid>
+          <Text size="xs" c="dimmed" mt="md">
+            Tested {formatDate(result.tested_at, timeZone)}
+          </Text>
+        </>
+      ) : (
+        <Text c="dimmed" size="sm">
+          The latest result could not be loaded from Speedtest Tracker.
+        </Text>
+      )}
+    </Paper>
+  );
+}
+
 function DashboardInsightCards({ events = [], devices = [], onSelectDevice, timeZone }) {
   const recentEvents = events;
   const deviceById = useMemo(
@@ -3434,6 +3508,10 @@ function SettingsPage({ onSaved }) {
   const [adguardRetentionDays, setAdguardRetentionDays] = useState(90);
   const [adguardLastSyncAt, setAdguardLastSyncAt] = useState(null);
   const [adguardLastError, setAdguardLastError] = useState('');
+  const [speedtestTrackerEnabled, setSpeedtestTrackerEnabled] = useState(false);
+  const [speedtestTrackerConfigured, setSpeedtestTrackerConfigured] = useState(false);
+  const [speedtestTrackerUrl, setSpeedtestTrackerUrl] = useState('');
+  const [speedtestTrackerApiToken, setSpeedtestTrackerApiToken] = useState('');
   const [notifyNewDevices, setNotifyNewDevices] = useState(true);
   const [notifyDeviceOnline, setNotifyDeviceOnline] = useState(false);
   const [notifyDeviceOffline, setNotifyDeviceOffline] = useState(false);
@@ -3447,6 +3525,7 @@ function SettingsPage({ onSaved }) {
   const [testingChannel, setTestingChannel] = useState('');
   const [testingAdguard, setTestingAdguard] = useState(false);
   const [syncingAdguard, setSyncingAdguard] = useState(false);
+  const [testingSpeedtestTracker, setTestingSpeedtestTracker] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportingDiagnostics, setExportingDiagnostics] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -3488,6 +3567,10 @@ function SettingsPage({ onSaved }) {
       setAdguardRetentionDays(Number(data.adguard_retention_days || 90));
       setAdguardLastSyncAt(data.adguard_last_sync_at || null);
       setAdguardLastError(data.adguard_last_error || '');
+      setSpeedtestTrackerEnabled(Boolean(data.speedtest_tracker_enabled));
+      setSpeedtestTrackerConfigured(Boolean(data.speedtest_tracker_configured));
+      setSpeedtestTrackerUrl(data.speedtest_tracker_url || '');
+      setSpeedtestTrackerApiToken('');
       setNotifyNewDevices(Boolean(data.notify_new_devices));
       setNotifyDeviceOnline(Boolean(data.notify_device_online));
       setNotifyDeviceOffline(Boolean(data.notify_device_offline));
@@ -3538,6 +3621,8 @@ function SettingsPage({ onSaved }) {
         adguard_username: adguardUsername.trim(),
         adguard_sync_interval: adguardSyncInterval,
         adguard_retention_days: adguardRetentionDays,
+        speedtest_tracker_enabled: speedtestTrackerEnabled,
+        speedtest_tracker_url: speedtestTrackerUrl.trim(),
       };
       body.discord_webhook = discordWebhook;
       body.telegram_token = telegramToken;
@@ -3551,6 +3636,9 @@ function SettingsPage({ onSaved }) {
       }
       if (adguardPassword) {
         body.adguard_password = adguardPassword;
+      }
+      if (speedtestTrackerApiToken) {
+        body.speedtest_tracker_api_token = speedtestTrackerApiToken;
       }
 
       const savedSettings = await apiRequest('settings/', { method: 'PUT', body });
@@ -3631,6 +3719,27 @@ function SettingsPage({ onSaved }) {
       showErrorNotification(err);
     } finally {
       setSyncingAdguard(false);
+    }
+  }
+
+  async function testSpeedtestTrackerConnection() {
+    setTestingSpeedtestTracker(true);
+    setError('');
+    try {
+      const body = { url: speedtestTrackerUrl.trim() };
+      if (speedtestTrackerApiToken) {
+        body.api_token = speedtestTrackerApiToken;
+      }
+      const payload = await apiRequest('integrations/speedtest-tracker/test/', {
+        method: 'POST',
+        body,
+      });
+      showServerNotification(payload);
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification(err);
+    } finally {
+      setTestingSpeedtestTracker(false);
     }
   }
 
@@ -4096,7 +4205,7 @@ function SettingsPage({ onSaved }) {
               <Title order={3}>Add-ons</Title>
               <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
             </Box>
-            <Badge variant="light">1 available</Badge>
+            <Badge variant="light">2 available</Badge>
           </Group>
         <Stack className="settings-subsection" gap="sm">
           <Group justify="space-between" align="flex-start">
@@ -4200,6 +4309,56 @@ function SettingsPage({ onSaved }) {
                 Sync now
               </Button>
             </Group>
+          </Group>
+        </Stack>
+        <Stack className="settings-subsection" gap="sm">
+          <Group justify="space-between" align="flex-start">
+            <Box>
+              <Group gap="sm">
+                <Text fw={700}>Speedtest Tracker</Text>
+                <Switch
+                  label="Enabled"
+                  checked={speedtestTrackerEnabled}
+                  onChange={(event) => setSpeedtestTrackerEnabled(event.currentTarget.checked)}
+                />
+              </Group>
+              <Text size="sm" c="dimmed" mt={4}>
+                Show the latest internet performance result on the dashboard.
+              </Text>
+            </Box>
+            <Badge color={speedtestTrackerConfigured && speedtestTrackerEnabled ? 'teal' : 'gray'} variant="light">
+              {speedtestTrackerConfigured ? 'Configured' : 'Not configured'}
+            </Badge>
+          </Group>
+          <SimpleGrid cols={{ base: 1, md: 2 }}>
+            <TextInput
+              label="Speedtest Tracker URL"
+              placeholder="http://192.168.1.2:8080"
+              value={speedtestTrackerUrl}
+              onChange={(event) => setSpeedtestTrackerUrl(event.currentTarget.value)}
+              disabled={!speedtestTrackerEnabled}
+            />
+            <PasswordInput
+              label="API token"
+              placeholder={speedtestTrackerConfigured ? 'Saved API token' : 'API token'}
+              value={speedtestTrackerApiToken}
+              onChange={(event) => setSpeedtestTrackerApiToken(event.currentTarget.value)}
+              disabled={!speedtestTrackerEnabled}
+            />
+          </SimpleGrid>
+          {speedtestTrackerConfigured && (
+            <Text size="xs" c="dimmed">Leave the API token blank to keep the saved token.</Text>
+          )}
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              leftSection={<IconSend size={18} />}
+              onClick={testSpeedtestTrackerConnection}
+              loading={testingSpeedtestTracker}
+              disabled={!speedtestTrackerEnabled || !speedtestTrackerUrl.trim()}
+            >
+              Test connection
+            </Button>
           </Group>
         </Stack>
         </Stack>
@@ -5098,6 +5257,7 @@ function Dashboard({
   const [scanStatus, setScanStatus] = useState(null);
   const [scanVisibility, setScanVisibility] = useState(null);
   const [integrationStatus, setIntegrationStatus] = useState({});
+  const [speedtestTrackerPayload, setSpeedtestTrackerPayload] = useState(null);
   const [accessCapabilities, setAccessCapabilities] = useState({
     can_edit_devices: Boolean(user?.is_staff || user?.is_superuser || user?.can_edit_devices),
     can_edit_home_map: Boolean(user?.is_staff || user?.is_superuser || user?.can_edit_home_map),
@@ -5302,7 +5462,7 @@ function Dashboard({
     };
   }, [search, deviceStatus, firstSeenPeriod, deviceOrdering]);
 
-  async function loadData({ quiet = false, notifyOnError = false } = {}) {
+  async function loadData({ quiet = false, notifyOnError = false, refreshIntegrations = false } = {}) {
     if (quiet) {
       setRefreshing(true);
     } else {
@@ -5335,13 +5495,16 @@ function Dashboard({
       const settingsRequest = canManageUsers
         ? apiRequest('settings/')
         : Promise.resolve({ data: null });
-      const [deviceData, mapDeviceData, statusData, dashboardEventData, settingsData] =
+      const [deviceData, mapDeviceData, statusData, dashboardEventData, settingsData, speedtestData] =
         await Promise.all([
           apiRequest('device/', { params: deviceParams }),
           apiRequest('device/', { params: mapDeviceParams }),
           apiRequest('scan/status/'),
           apiRequest('events/', { params: dashboardEventParams }),
           settingsRequest,
+          apiRequest('integrations/speedtest-tracker/latest/', {
+            params: { refresh: refreshIntegrations ? 'true' : undefined },
+          }).catch(() => null),
         ]);
 
       setDevices(deviceData.data || []);
@@ -5359,6 +5522,7 @@ function Dashboard({
       setScanStatus(statusData.data || statusData.active_scan || null);
       setScanVisibility(statusData.visibility || null);
       setIntegrationStatus(statusData.integrations || {});
+      setSpeedtestTrackerPayload(speedtestData || null);
       setAccessCapabilities(statusData.permissions || {});
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
@@ -5789,7 +5953,7 @@ function Dashboard({
                 <ActionIcon
                   variant="light"
                   size="lg"
-                  onClick={() => loadData({ quiet: true, notifyOnError: true })}
+                  onClick={() => loadData({ quiet: true, notifyOnError: true, refreshIntegrations: true })}
                   loading={refreshing}
                 >
                   <IconRefresh size={19} />
@@ -5988,7 +6152,7 @@ function Dashboard({
             <>
           <DashboardStatusCards counters={counters} />
 
-          <div className="dashboard-summary-grid">
+          <div className={`dashboard-summary-grid ${speedtestTrackerPayload?.integration?.enabled && speedtestTrackerPayload?.integration?.configured ? 'with-speedtest' : ''}`}>
             <NetworkHealthCard counters={counters} />
             <AutomaticScanningCard appSettings={appSettings} scanVisibility={scanVisibility} />
             <LatestScanCard
@@ -5997,6 +6161,9 @@ function Dashboard({
               timeZone={displayTimeZone}
               onOpenDetails={scanDetailsModal.open}
             />
+            {speedtestTrackerPayload?.integration?.enabled && speedtestTrackerPayload?.integration?.configured && (
+              <SpeedtestTrackerCard payload={speedtestTrackerPayload} timeZone={displayTimeZone} />
+            )}
           </div>
 
           <DashboardInsightCards
