@@ -430,18 +430,12 @@ textarea {
 }
 
 .dashboard-summary-grid.with-speedtest {
-  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .speedtest-tracker-card {
   color: inherit;
   text-decoration: none;
-}
-
-@media (max-width: 1300px) and (min-width: 981px) {
-  .dashboard-summary-grid.with-speedtest {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 .dashboard-summary-card {
