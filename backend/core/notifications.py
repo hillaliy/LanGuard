@@ -13,6 +13,7 @@ from django.utils import timezone
 from .datetime_utils import utc_isoformat
 from .models import (
     AppSettings,
+    Device,
     NetworkEvent,
     NotificationDelivery,
     QUIET_HOURS_DAY_KEYS,
@@ -48,8 +49,24 @@ def notification_event_types():
     return set(settings.NOTIFICATION_EVENT_TYPES or [])
 
 
-def notification_event_allowed(event):
-    app_config = AppSettings.load()
+def presence_notification_preference(event):
+    preference_fields = {
+        NetworkEvent.EventType.DEVICE_ONLINE: "online_notification_preference",
+        NetworkEvent.EventType.DEVICE_OFFLINE: "offline_notification_preference",
+    }
+    field = preference_fields.get(event.event_type)
+    if not field:
+        return Device.NotificationPreference.INHERIT
+    return getattr(event.device, field, Device.NotificationPreference.INHERIT)
+
+
+def notification_event_allowed(event, app_config=None):
+    app_config = app_config or AppSettings.load()
+    preference = presence_notification_preference(event)
+    if preference == Device.NotificationPreference.ALWAYS:
+        return True
+    if preference == Device.NotificationPreference.NEVER:
+        return False
     if event.event_type == NetworkEvent.EventType.NEW_DEVICE:
         return app_config.notify_new_devices
     if event.event_type == NetworkEvent.EventType.DEVICE_ONLINE:
@@ -62,6 +79,12 @@ def notification_event_allowed(event):
     }:
         return app_config.notify_port_changes
     return event.event_type in notification_event_types()
+
+
+def notification_skip_reason(event):
+    if presence_notification_preference(event) == Device.NotificationPreference.NEVER:
+        return "device_notification_disabled"
+    return "event_type_not_enabled"
 
 
 def quiet_hours_active(app_config, now=None):
@@ -108,8 +131,8 @@ def mark_notification_skipped(event, reason):
 def notify_event(event):
     app_config = AppSettings.load()
 
-    if not notification_event_allowed(event):
-        mark_notification_skipped(event, "event_type_not_enabled")
+    if not notification_event_allowed(event, app_config=app_config):
+        mark_notification_skipped(event, notification_skip_reason(event))
         return []
 
     if quiet_hours_active(app_config):
@@ -152,11 +175,14 @@ def retry_failed_notifications(limit=50, max_attempts=None):
             delivery.error = "Notification channel is no longer enabled or configured."
             delivery.save(update_fields=["status", "error"])
             continue
-        if not notification_event_allowed(delivery.event):
+        if not notification_event_allowed(delivery.event, app_config=app_config):
             delivery.status = NotificationDelivery.Status.SKIPPED
             delivery.error = "Event type is not enabled for external notifications."
             delivery.save(update_fields=["status", "error"])
-            mark_notification_skipped(delivery.event, "event_type_not_enabled")
+            mark_notification_skipped(
+                delivery.event,
+                notification_skip_reason(delivery.event),
+            )
             continue
         send_delivery(delivery, app_config=app_config)
         retried.append(delivery)

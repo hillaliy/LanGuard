@@ -444,7 +444,22 @@ textarea {
   padding: 22px;
 }
 
+.dashboard-card-header {
+  margin-bottom: var(--mantine-spacing-lg);
+  min-height: 42px;
+  width: 100%;
+}
+
+.dashboard-card-header-title {
+  min-width: 0;
+}
+
+.dashboard-card-header-title .mantine-Title-root {
+  line-height: 1.25;
+}
+
 .dashboard-status-badge {
+  flex: 0 0 auto;
   font-size: 0.95rem;
   min-height: 32px;
   padding-inline: 14px;
@@ -553,10 +568,14 @@ textarea {
 }
 
 .dashboard-clickable-card {
+  align-items: stretch;
+  appearance: none;
   color: inherit;
   cursor: pointer;
-  display: block;
+  display: flex;
+  flex-direction: column;
   font: inherit;
+  justify-content: flex-start;
   text-align: left;
   transition: border-color 120ms ease, transform 120ms ease;
   width: 100%;

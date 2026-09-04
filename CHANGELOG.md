@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 1.12.0 - 2026-09-04
+
+- **Docker/web only:** Added reliable discovery of the Docker scanner host itself, with local-interface status reporting and duplicate-safe updates of imported devices.
+- Normalized dashboard summary-card headings and status badges for consistent sizing and alignment.
+- Added per-device Online and Offline notification overrides while preserving global notification rules and quiet hours.
+- Added a direct link from the central DNS Activity page to the configured AdGuard Home interface.
+
 ## 1.11.0 - 2026-09-02
 
 - Licensed LanGuard under the Apache License 2.0 with matching contributor terms and documentation.

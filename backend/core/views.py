@@ -355,6 +355,8 @@ def inventory_device_payload(device):
         "room": getattr(device, "room", ""),
         "comments": device.comments,
         "external_url": device.external_url,
+        "online_notification_preference": device.online_notification_preference,
+        "offline_notification_preference": device.offline_notification_preference,
         "risk": risk_data["level"],
         "attention_acknowledged": device_attention_acknowledged(device, risk_data),
         "known": device.known,
@@ -575,6 +577,31 @@ def import_inventory_devices(payload):
             parsed_external_url = urlparse(external_url)
             if parsed_external_url.scheme not in {"http", "https"} or not parsed_external_url.netloc:
                 external_url = ""
+        valid_notification_preferences = set(Device.NotificationPreference.values)
+        online_notification_preference_present = (
+            "online_notification_preference" in item
+            or "onlineNotificationPreference" in item
+        )
+        offline_notification_preference_present = (
+            "offline_notification_preference" in item
+            or "offlineNotificationPreference" in item
+        )
+        online_notification_preference = str(
+            item.get(
+                "online_notification_preference",
+                item.get("onlineNotificationPreference", Device.NotificationPreference.INHERIT),
+            )
+        ).strip()
+        offline_notification_preference = str(
+            item.get(
+                "offline_notification_preference",
+                item.get("offlineNotificationPreference", Device.NotificationPreference.INHERIT),
+            )
+        ).strip()
+        if online_notification_preference not in valid_notification_preferences:
+            online_notification_preference = Device.NotificationPreference.INHERIT
+        if offline_notification_preference not in valid_notification_preferences:
+            offline_notification_preference = Device.NotificationPreference.INHERIT
         attention_acknowledged_present = (
             "attention_acknowledged" in item or "attentionAcknowledged" in item
         )
@@ -621,6 +648,10 @@ def import_inventory_devices(payload):
             "status": device_status,
             "lastseen": last_seen,
         }
+        if online_notification_preference_present:
+            defaults["online_notification_preference"] = online_notification_preference
+        if offline_notification_preference_present:
+            defaults["offline_notification_preference"] = offline_notification_preference
         if role is not None:
             defaults["role"] = role or ("gateway" if is_gateway else "device")
         if room is not None:
@@ -662,6 +693,16 @@ def import_inventory_devices(payload):
                     "is_gateway",
                     "online",
                     "status",
+                    *(
+                        ["online_notification_preference"]
+                        if online_notification_preference_present
+                        else []
+                    ),
+                    *(
+                        ["offline_notification_preference"]
+                        if offline_notification_preference_present
+                        else []
+                    ),
                     "firstseen",
                     "lastseen",
                 ]
@@ -1060,6 +1101,7 @@ def dns_activity(request):
                     config.adguard_url
                     and (not config.adguard_username or config.adguard_password)
                 ),
+                "web_url": config.adguard_url,
                 "last_sync_at": utc_isoformat(config.adguard_last_sync_at),
                 "last_error": config.adguard_last_error,
             },

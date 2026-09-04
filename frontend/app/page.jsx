@@ -242,6 +242,17 @@ const deviceRoleOptions = [
   formatRoleLabel(left).localeCompare(formatRoleLabel(right))
 );
 
+const deviceNotificationPreferenceOptions = [
+  { value: 'inherit', label: 'Use global setting' },
+  { value: 'always', label: 'Always notify' },
+  { value: 'never', label: 'Never notify' },
+];
+
+function formatDeviceNotificationPreference(value) {
+  return deviceNotificationPreferenceOptions.find((option) => option.value === value)?.label
+    || 'Use global setting';
+}
+
 const inventoryViewOptions = [
   { value: 'table', label: 'List' },
   { value: 'roles', label: 'Roles' },
@@ -1813,6 +1824,18 @@ function DashboardStatusCard({ icon, label, value, color }) {
   );
 }
 
+function DashboardCardHeader({ icon, title, badge }) {
+  return (
+    <Group className="dashboard-card-header" justify="space-between" align="center" wrap="nowrap">
+      <Group className="dashboard-card-header-title" gap="sm" wrap="nowrap">
+        {icon}
+        <Title order={3}>{title}</Title>
+      </Group>
+      {badge}
+    </Group>
+  );
+}
+
 function NetworkHealthCard({ counters = {} }) {
   const totalDevices = Number(counters.all_devices) || 0;
   const newDevices = Number(counters.new_devices) || 0;
@@ -1824,15 +1847,15 @@ function NetworkHealthCard({ counters = {} }) {
 
   return (
     <Paper className="dashboard-summary-card network-health-card" radius="md">
-      <Group justify="space-between" align="center" mb="lg" wrap="nowrap">
-        <Group gap="sm" wrap="nowrap">
-          <IconLine size={28} />
-          <Title order={3}>Network Health</Title>
-        </Group>
-        <Badge className="dashboard-status-badge" color={healthColor} variant="light">
-          {healthLabel}
-        </Badge>
-      </Group>
+      <DashboardCardHeader
+        icon={<IconLine size={28} />}
+        title="Network Health"
+        badge={(
+          <Badge className="dashboard-status-badge" color={healthColor} variant="light">
+            {healthLabel}
+          </Badge>
+        )}
+      />
       <div className="network-health-meter" aria-hidden="true">
         <div
           className={`network-health-meter-fill ${healthColor}`}
@@ -1931,15 +1954,15 @@ function LatestScanCard({ scanStatus, scanVisibility, timeZone, onOpenDetails })
       type="button"
       onClick={onOpenDetails}
     >
-      <Group justify="space-between" align="center" mb="lg" wrap="nowrap">
-        <Group gap="sm" wrap="nowrap">
-          <IconClock size={28} />
-          <Title order={3}>Latest Scan</Title>
-        </Group>
-        <Badge className="dashboard-status-badge" color={statusColor} variant="light">
-          {statusLabel}
-        </Badge>
-      </Group>
+      <DashboardCardHeader
+        icon={<IconClock size={28} />}
+        title="Latest Scan"
+        badge={(
+          <Badge className="dashboard-status-badge" color={statusColor} variant="light">
+            {statusLabel}
+          </Badge>
+        )}
+      />
       <SimpleGrid cols={2}>
         <SummaryMetric label="Devices" value={scanStatus?.devices_seen ?? 0} />
         <SummaryMetric label="Duration" value={formatDuration(scanVisibility?.duration_seconds)} />
@@ -1991,15 +2014,15 @@ function SpeedtestTrackerCard({ payload, timeZone }) {
       radius="md"
       {...linkProps}
     >
-      <Group justify="space-between" align="center" mb="lg" wrap="nowrap">
-        <Group gap="sm" wrap="nowrap">
-          <IconGauge size={28} />
-          <Title order={3}>Speedtest</Title>
-        </Group>
-        <Badge className="dashboard-status-badge" color={healthColor} variant="light">
-          {healthLabel}
-        </Badge>
-      </Group>
+      <DashboardCardHeader
+        icon={<IconGauge size={28} />}
+        title="Speedtest"
+        badge={(
+          <Badge className="dashboard-status-badge" color={healthColor} variant="light">
+            {healthLabel}
+          </Badge>
+        )}
+      />
       {available ? (
         <>
           <SimpleGrid cols={2} spacing="sm">
@@ -2421,6 +2444,8 @@ function DeviceDetailsPage({
   const [role, setRole] = useState('device');
   const [room, setRoom] = useState('');
   const [known, setKnown] = useState(false);
+  const [onlineNotificationPreference, setOnlineNotificationPreference] = useState('inherit');
+  const [offlineNotificationPreference, setOfflineNotificationPreference] = useState('inherit');
   const [comments, setComments] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
   const [detectedWebUrl, setDetectedWebUrl] = useState('');
@@ -2450,6 +2475,8 @@ function DeviceDetailsPage({
     setRole(nextDevice?.role || 'device');
     setRoom(nextDevice?.room || '');
     setKnown(Boolean(nextDevice?.known));
+    setOnlineNotificationPreference(nextDevice?.online_notification_preference || 'inherit');
+    setOfflineNotificationPreference(nextDevice?.offline_notification_preference || 'inherit');
     setComments(nextDevice?.comments || '');
     setExternalUrl(nextDevice?.external_url || '');
     setAttentionAcknowledged(Boolean(nextDevice?.attention_acknowledged));
@@ -2642,6 +2669,8 @@ function DeviceDetailsPage({
           role,
           room,
           known,
+          online_notification_preference: onlineNotificationPreference,
+          offline_notification_preference: offlineNotificationPreference,
           comments,
           external_url: externalUrl.trim(),
           acknowledge_attention: known && attentionAcknowledged,
@@ -2828,6 +2857,29 @@ function DeviceDetailsPage({
                     minRows={3}
                     maxRows={8}
                   />
+                  <Divider label="Presence notifications" labelPosition="left" />
+                  <Box>
+                    <Text size="sm" c="dimmed" mb="sm">
+                      Override the global Online and Offline rules for this device. Quiet hours and
+                      configured notification channels still apply.
+                    </Text>
+                    <SimpleGrid cols={{ base: 1, md: 2 }}>
+                      <Select
+                        label="When device comes online"
+                        description="Controls Online notifications for this device."
+                        data={deviceNotificationPreferenceOptions}
+                        value={onlineNotificationPreference}
+                        onChange={(value) => setOnlineNotificationPreference(value || 'inherit')}
+                      />
+                      <Select
+                        label="When device goes offline"
+                        description="Controls Offline notifications for this device."
+                        data={deviceNotificationPreferenceOptions}
+                        value={offlineNotificationPreference}
+                        onChange={(value) => setOfflineNotificationPreference(value || 'inherit')}
+                      />
+                    </SimpleGrid>
+                  </Box>
                   <Group align="flex-start">
                     <Switch
                       label="Known device"
@@ -2899,6 +2951,18 @@ function DeviceDetailsPage({
                       <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md">
                         <DeviceField label="Room" value={device.room || 'Unassigned'} />
                         <DeviceField label="Role" value={formatRoleLabel(device.role)} />
+                        <DeviceField
+                          label="Online notifications"
+                          value={formatDeviceNotificationPreference(
+                            device.online_notification_preference
+                          )}
+                        />
+                        <DeviceField
+                          label="Offline notifications"
+                          value={formatDeviceNotificationPreference(
+                            device.offline_notification_preference
+                          )}
+                        />
                         <DeviceField label="First seen" value={formatDate(device.firstseen, timeZone)} />
                         <DeviceField label="Last seen" value={formatDate(device.lastseen, timeZone)} />
                       </SimpleGrid>
@@ -4649,7 +4713,7 @@ function EventsPage({
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-end">
+      <Group justify="space-between" align="flex-end" wrap="wrap">
         <Group gap="sm">
           <span className="page-icon">
             <IconBell size={26} />
@@ -4937,7 +5001,7 @@ function DNSActivityPage({ timeZone, onSelectDevice }) {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-end">
+      <Group justify="space-between" align="flex-end" wrap="wrap">
         <Group gap="sm">
           <span className="page-icon"><IconWorldSearch size={26} /></span>
           <Box>
@@ -4946,6 +5010,18 @@ function DNSActivityPage({ timeZone, onSelectDevice }) {
           </Box>
         </Group>
         <Group gap="xs">
+          {integration?.enabled && integration?.configured && integration?.web_url && (
+            <Button
+              component="a"
+              href={integration.web_url}
+              target="_blank"
+              rel="noreferrer"
+              variant="default"
+              leftSection={<IconArrowUpRight size={17} />}
+            >
+              Open AdGuard Home
+            </Button>
+          )}
           <Badge variant="light">{number(summary?.unique_domains)} domains</Badge>
           <Badge variant="light" color="teal">{number(summary?.active_devices)} devices</Badge>
         </Group>

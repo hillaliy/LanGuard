@@ -160,6 +160,10 @@ class AdGuardIntegrationTests(TestCase):
         self.assertEqual(activity_response.status_code, 200)
         self.assertEqual(activity_response.data["data"][0]["device_name"], self.device.name)
         self.assertEqual(activity_response.data["summary"]["active_devices"], 1)
+        self.assertEqual(
+            activity_response.data["integration"]["web_url"],
+            "http://adguard.local:3000",
+        )
         self.assertEqual(unmatched_response.status_code, 200)
         self.assertEqual(unmatched_response.data["summary"]["clients"], 1)
         self.assertEqual(unmatched_response.data["data"][0]["client"], "192.168.1.99")
