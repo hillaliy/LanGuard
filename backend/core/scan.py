@@ -1068,6 +1068,28 @@ def get_default_gateway_ip():
     return default_gateway_from_proc_route()
 
 
+def local_scanner_interface(ip_range, route_target=""):
+    network = ipaddress.ip_network(validate_ip_range(ip_range), strict=False)
+    target = route_target
+    if not target or ipaddress.ip_address(target) not in network:
+        target = str(next(network.hosts(), network.network_address))
+
+    try:
+        interface, source_ip, _ = scapy.conf.route.route(target)
+        source_address = ipaddress.ip_address(source_ip)
+        if source_address.is_loopback or source_address not in network:
+            return None
+
+        mac = scapy.get_if_hwaddr(interface).lower()
+        mac_bytes = bytes.fromhex(mac.replace(":", ""))
+        if len(mac_bytes) != 6 or not any(mac_bytes) or mac_bytes[0] & 1:
+            return None
+    except (AttributeError, OSError, TypeError, ValueError):
+        return None
+
+    return {"ip": str(source_address), "mac": mac}
+
+
 def clear_stale_gateways(gateway_ip):
     if not gateway_ip:
         return 0
@@ -1142,6 +1164,7 @@ def should_confirm_offline_with_icmp():
 def status_reason(source, detail=""):
     labels = {
         Device.StatusSource.ARP: "Responded to ARP discovery",
+        Device.StatusSource.LOCAL: "Detected on the local scanner interface",
         Device.StatusSource.PORT: "Responded on open ports",
         Device.StatusSource.ICMP: "Responded to ICMP ping",
         Device.StatusSource.RECENT: "Recently seen during scan grace period",
@@ -1297,7 +1320,11 @@ def create_event(event_type, device, message, scan_run=None, device_port=None, m
         message=message,
         metadata=metadata,
     )
-    if device.known:
+    presence_events = {
+        NetworkEvent.EventType.DEVICE_ONLINE,
+        NetworkEvent.EventType.DEVICE_OFFLINE,
+    }
+    if device.known and event_type not in presence_events:
         event.notified = True
         event.metadata = {
             **metadata,
@@ -1410,6 +1437,20 @@ def scan(ip_range, scan_run=None):
 
     try:
         answered_list = discover_devices(ip_range)
+        local_interface = local_scanner_interface(ip_range, route_target=gateway_ip)
+        local_scanner_mac = local_interface["mac"] if local_interface else ""
+        if local_interface and local_scanner_mac not in {
+            element[1].hwsrc.lower() for element in answered_list
+        }:
+            answered_list.append(
+                (
+                    None,
+                    scapy.ARP(
+                        psrc=local_interface["ip"],
+                        hwsrc=local_scanner_mac,
+                    ),
+                )
+            )
         scan_started_at = timezone.now()
         oui = scapy.MANUFDB
         hostname_hints = discover_hostname_hints()
@@ -1428,6 +1469,11 @@ def scan(ip_range, scan_run=None):
                 gateway_ip=gateway_ip,
                 hostname_hints=hostname_hints,
                 vendor_hints=vendor_hints,
+                status_source=(
+                    Device.StatusSource.LOCAL
+                    if element[1].hwsrc.lower() == local_scanner_mac
+                    else Device.StatusSource.ARP
+                ),
             )
             new_devices += stats["new_devices"]
             ports_opened += stats["ports_opened"]
@@ -1474,6 +1520,7 @@ def sync_discovered_device(
     gateway_ip="",
     hostname_hints=None,
     vendor_hints=None,
+    status_source=Device.StatusSource.ARP,
 ):
     scan_started_at = scan_started_at or timezone.now()
     ip = element[1].psrc
@@ -1543,7 +1590,7 @@ def sync_discovered_device(
         set_device_status(
             device,
             Device.Status.ONLINE,
-            Device.StatusSource.ARP,
+            status_source,
             now=scan_started_at,
         )
         if is_default_device_name(device.name) or is_default_device_icon(device.icon):
@@ -1597,7 +1644,7 @@ def sync_discovered_device(
         set_device_status(
             device,
             Device.Status.ONLINE,
-            Device.StatusSource.ARP,
+            status_source,
             now=scan_started_at,
         )
         device.save(update_fields=["status", "status_source", "status_reason", "last_status_check"])

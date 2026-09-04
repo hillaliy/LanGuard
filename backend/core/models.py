@@ -11,6 +11,11 @@ def default_quiet_hours_days():
 
 
 class Device(models.Model):
+    class NotificationPreference(models.TextChoices):
+        INHERIT = "inherit", "Use global setting"
+        ALWAYS = "always", "Always notify"
+        NEVER = "never", "Never notify"
+
     class IdentitySource(models.TextChoices):
         REVERSE_DNS = "reverse_dns", "Reverse DNS"
         MDNS = "mdns", "mDNS"
@@ -32,6 +37,7 @@ class Device(models.Model):
 
     class StatusSource(models.TextChoices):
         ARP = "arp", "ARP"
+        LOCAL = "local", "Local scanner"
         PORT = "port", "Port"
         ICMP = "icmp", "ICMP"
         RECENT = "recent", "Recent"
@@ -58,6 +64,16 @@ class Device(models.Model):
     )
     comments = models.TextField(blank=True, default="")
     external_url = models.URLField(max_length=2048, blank=True, default="")
+    online_notification_preference = models.CharField(
+        max_length=16,
+        choices=NotificationPreference.choices,
+        default=NotificationPreference.INHERIT,
+    )
+    offline_notification_preference = models.CharField(
+        max_length=16,
+        choices=NotificationPreference.choices,
+        default=NotificationPreference.INHERIT,
+    )
     attention_acknowledged_signature = models.CharField(max_length=64, blank=True, default="")
     role = models.CharField(max_length=32, blank=True, default="device")
     room = models.CharField(max_length=100, blank=True, default="")

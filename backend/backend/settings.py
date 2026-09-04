@@ -152,6 +152,13 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "v1",
     "SCHEMA_PATH_PREFIX": "/api/v1",
     "SERVE_PERMISSIONS": ["rest_framework.permissions.AllowAny"],
+    "ENUM_NAME_OVERRIDES": {
+        "DeviceNotificationPreferenceEnum": [
+            ("inherit", "Use global setting"),
+            ("always", "Always notify"),
+            ("never", "Never notify"),
+        ],
+    },
 }
 
 MIDDLEWARE = [

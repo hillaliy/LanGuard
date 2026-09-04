@@ -53,6 +53,7 @@ from .scan import (
     get_hostname,
     hostname_from_device_description,
     llmnr_reverse_hostname,
+    local_scanner_interface,
     ManufVendorDB,
     mark_missing_devices_offline,
     mdns_service_hostname,
@@ -68,6 +69,7 @@ from .scan import (
     manuf_vendor,
     normalize_scan_ports,
     preferred_vendor,
+    scan,
     ssdp_hostname_from_response,
     ssdp_metadata_from_response,
     sync_discovered_device,
@@ -772,6 +774,107 @@ class ScanStabilityTests(TestCase):
 
         self.assertEqual(len(devices), 2)
         self.assertEqual(srp.call_count, 2)
+
+    @patch("core.scan.scapy.get_if_hwaddr", return_value="AA:BB:CC:DD:EE:FF")
+    @patch("core.scan.scapy.conf.route.route")
+    def test_local_scanner_interface_uses_route_for_scanned_network(self, route, _):
+        route.return_value = ("eth0", "192.168.1.20", "192.168.1.1")
+
+        interface = local_scanner_interface(
+            "192.168.1.0/24",
+            route_target="192.168.1.1",
+        )
+
+        route.assert_called_once_with("192.168.1.1")
+        self.assertEqual(
+            interface,
+            {"ip": "192.168.1.20", "mac": "aa:bb:cc:dd:ee:ff"},
+        )
+
+    @patch("core.scan.scapy.get_if_hwaddr", return_value="AA:BB:CC:DD:EE:FF")
+    @patch("core.scan.scapy.conf.route.route")
+    def test_local_scanner_interface_ignores_source_outside_scan_range(self, route, _):
+        route.return_value = ("eth0", "10.0.0.20", "10.0.0.1")
+
+        self.assertIsNone(local_scanner_interface("192.168.1.0/24"))
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname", return_value="server")
+    def test_local_scanner_updates_imported_device_without_duplicate(self, _):
+        device = Device.objects.create(
+            name="Server",
+            ip="192.168.1.20",
+            mac="aa:bb:cc:dd:ee:ff",
+            online=False,
+            status=Device.Status.OFFLINE,
+            status_source=Device.StatusSource.NONE,
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            status_source=Device.StatusSource.LOCAL,
+        )
+
+        device.refresh_from_db()
+        self.assertEqual(Device.objects.count(), 1)
+        self.assertTrue(device.online)
+        self.assertEqual(device.status_source, Device.StatusSource.LOCAL)
+        self.assertEqual(
+            device.status_reason,
+            "Detected on the local scanner interface",
+        )
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.mark_missing_devices_offline")
+    @patch("core.scan.clear_stale_gateways")
+    @patch("core.scan.sync_discovered_device")
+    @patch("core.scan.ssdp_metadata_map", return_value={})
+    @patch("core.scan.discover_hostname_hints", return_value={})
+    @patch("core.scan.local_scanner_interface")
+    @patch("core.scan.discover_devices")
+    @patch("core.scan.get_default_gateway_ip", return_value="192.168.1.1")
+    def test_scan_includes_local_interface_as_online_device(
+        self,
+        _,
+        discover,
+        local_interface,
+        __,
+        ___,
+        sync_device,
+        clear_gateways,
+        mark_missing,
+    ):
+        remote = self.scan_element("192.168.1.10", "aa:bb:cc:dd:ee:10")
+        discover.return_value = [remote]
+        local_interface.return_value = {
+            "ip": "192.168.1.20",
+            "mac": "aa:bb:cc:dd:ee:20",
+        }
+        sync_device.return_value = {
+            "new_devices": 0,
+            "ports_opened": 0,
+            "ports_closed": 0,
+        }
+
+        scan_run = scan("192.168.1.0/24")
+
+        self.assertEqual(sync_device.call_count, 2)
+        self.assertEqual(
+            sync_device.call_args_list[0].kwargs["status_source"],
+            Device.StatusSource.ARP,
+        )
+        self.assertEqual(
+            sync_device.call_args_list[1].kwargs["status_source"],
+            Device.StatusSource.LOCAL,
+        )
+        mark_missing.assert_called_once_with(
+            ["aa:bb:cc:dd:ee:10", "aa:bb:cc:dd:ee:20"],
+            scan_run=scan_run,
+        )
+        clear_gateways.assert_called_once_with("192.168.1.1")
+        self.assertEqual(scan_run.devices_seen, 2)
 
     @override_settings(SCAN_OFFLINE_AFTER_MISSES=3, PORT_SCAN_ENABLED=False)
     def test_missing_device_is_not_marked_offline_until_grace_limit(self):
@@ -1594,6 +1697,94 @@ class NotificationTests(TestCase):
         NOTIFICATION_TIMEOUT=1,
     )
     @patch("core.notifications.requests.post")
+    def test_device_always_preference_overrides_disabled_global_rule(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        AppSettings.objects.create(
+            discord_webhook="https://discord.example/webhook",
+            notify_device_online=False,
+        )
+        self.device.online_notification_preference = Device.NotificationPreference.ALWAYS
+        self.device.save(update_fields=["online_notification_preference"])
+        event = NetworkEvent.objects.create(
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Camera came online",
+        )
+
+        deliveries = notify_event(event)
+
+        self.assertEqual(len(deliveries), 1)
+        post.assert_called_once()
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
+    def test_device_never_preference_overrides_enabled_global_rule(self, post):
+        AppSettings.objects.create(
+            discord_webhook="https://discord.example/webhook",
+            notify_device_offline=True,
+        )
+        self.device.offline_notification_preference = Device.NotificationPreference.NEVER
+        self.device.save(update_fields=["offline_notification_preference"])
+        event = NetworkEvent.objects.create(
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_OFFLINE,
+            message="Camera went offline",
+        )
+
+        deliveries = notify_event(event)
+
+        self.assertEqual(deliveries, [])
+        post.assert_not_called()
+        event.refresh_from_db()
+        self.assertEqual(
+            event.metadata["notification_skipped"],
+            "device_notification_disabled",
+        )
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
+    def test_device_always_preference_still_obeys_quiet_hours(self, post):
+        AppSettings.objects.create(
+            discord_webhook="https://discord.example/webhook",
+            notification_quiet_hours_enabled=True,
+            notification_quiet_hours_start="00:00",
+            notification_quiet_hours_end="00:00",
+        )
+        self.device.online_notification_preference = Device.NotificationPreference.ALWAYS
+        self.device.save(update_fields=["online_notification_preference"])
+        event = NetworkEvent.objects.create(
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Camera came online",
+        )
+
+        deliveries = notify_event(event)
+
+        self.assertEqual(deliveries, [])
+        post.assert_not_called()
+        event.refresh_from_db()
+        self.assertEqual(event.metadata["notification_skipped"], "quiet_hours")
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
     def test_quiet_hours_skip_external_delivery(self, post):
         AppSettings.objects.create(
             discord_webhook="https://discord.example/webhook",
@@ -1737,6 +1928,24 @@ class ScanNotificationTests(TestCase):
         self.assertTrue(event.notified)
         self.assertEqual(event.metadata["notification_skipped"], "known_device")
         notify_event_mock.assert_not_called()
+
+    @patch("core.scan.notify_event")
+    def test_known_device_presence_event_uses_notification_rules(self, notify_event_mock):
+        device = Device.objects.create(
+            name="Known Camera",
+            ip="192.168.1.50",
+            mac="11:22:33:44:55:66",
+            known=True,
+        )
+
+        event = create_event(
+            NetworkEvent.EventType.DEVICE_OFFLINE,
+            device,
+            "Known Camera went offline",
+            scan_run=self.scan_run,
+        )
+
+        notify_event_mock.assert_called_once_with(event)
 
     @override_settings(
         NOTIFICATIONS_ENABLED=True,
@@ -3310,6 +3519,37 @@ class ScanApiTests(TestCase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.external_url, "https://192.168.1.10:8443")
 
+    def test_device_can_save_presence_notification_preferences(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {
+                "online_notification_preference": Device.NotificationPreference.ALWAYS,
+                "offline_notification_preference": Device.NotificationPreference.NEVER,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.device.refresh_from_db()
+        self.assertEqual(
+            self.device.online_notification_preference,
+            Device.NotificationPreference.ALWAYS,
+        )
+        self.assertEqual(
+            self.device.offline_notification_preference,
+            Device.NotificationPreference.NEVER,
+        )
+
+    def test_device_rejects_invalid_notification_preference(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"online_notification_preference": "sometimes"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("online_notification_preference", response.data["info"])
+
     def test_device_rejects_non_http_external_link(self):
         response = self.client.put(
             f"/api/v1/device/?id={self.device.id}",
@@ -3423,7 +3663,17 @@ class ScanApiTests(TestCase):
         self.device.known = True
         self.device.comments = "Demo note"
         self.device.external_url = "https://192.168.1.10"
-        self.device.save(update_fields=["known", "comments", "external_url"])
+        self.device.online_notification_preference = Device.NotificationPreference.ALWAYS
+        self.device.offline_notification_preference = Device.NotificationPreference.NEVER
+        self.device.save(
+            update_fields=[
+                "known",
+                "comments",
+                "external_url",
+                "online_notification_preference",
+                "offline_notification_preference",
+            ]
+        )
         DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
         self.client.put(
             f"/api/v1/device/?id={self.device.id}",
@@ -3441,6 +3691,8 @@ class ScanApiTests(TestCase):
         self.assertEqual(exported_device["open_ports"], [80])
         self.assertEqual(exported_device["comments"], "Demo note")
         self.assertEqual(exported_device["external_url"], "https://192.168.1.10")
+        self.assertEqual(exported_device["online_notification_preference"], "always")
+        self.assertEqual(exported_device["offline_notification_preference"], "never")
         self.assertTrue(exported_device["attention_acknowledged"])
         self.assertTrue(exported_device["first_seen"].endswith("Z"))
 
@@ -3483,6 +3735,61 @@ class ScanApiTests(TestCase):
             list(self.device.ports.filter(open=True).values_list("port", flat=True)),
             [80, 443],
         )
+
+    def test_device_inventory_import_restores_notification_preferences(self):
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Laptop",
+                        "ip": self.device.ip,
+                        "mac": self.device.mac,
+                        "online_notification_preference": "always",
+                        "offline_notification_preference": "never",
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.online_notification_preference, "always")
+        self.assertEqual(self.device.offline_notification_preference, "never")
+
+    def test_device_inventory_import_preserves_notification_preferences_when_missing(self):
+        self.device.online_notification_preference = Device.NotificationPreference.ALWAYS
+        self.device.offline_notification_preference = Device.NotificationPreference.NEVER
+        self.device.save(
+            update_fields=[
+                "online_notification_preference",
+                "offline_notification_preference",
+            ]
+        )
+
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Laptop",
+                        "ip": self.device.ip,
+                        "mac": self.device.mac,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.online_notification_preference, "always")
+        self.assertEqual(self.device.offline_notification_preference, "never")
 
     def test_watchyourlan_inventory_import_maps_api_all_hosts(self):
         response = self.client.post(
