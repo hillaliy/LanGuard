@@ -43,6 +43,7 @@ from .serializers import (
     AdGuardConnectionSerializer,
     AppSettingsSerializer,
     DeviceDNSActivitySerializer,
+    DeviceBulkUpdateSerializer,
     DeviceSerializer,
     GlobalDNSActivitySerializer,
     HomeMapLayoutSerializer,
@@ -74,7 +75,12 @@ from .api import (
     parse_datetime_param,
     parse_int_param,
 )
-from .scan import detect_web_interface, scan, validate_ip_range
+from .scan import (
+    detect_web_interface,
+    mark_devices_outside_scan_ranges_offline,
+    scan,
+    validate_ip_ranges,
+)
 from .notifications import send_discord_test, send_telegram_test, send_webhook_test
 from .adguard import AdGuardError, sync_adguard_query_log, test_adguard_connection
 from .speedtest_tracker import SpeedtestTrackerError, latest_speedtest_result
@@ -176,6 +182,7 @@ DEVICE_ORDERING_FIELDS = {
     "-lastseen": ("-lastseen", "ip", "id"),
 }
 FIRST_SEEN_PERIODS = {"today", "7d", "30d"}
+OUTSIDE_NETWORK_RANGE_FILTER = "outside"
 
 
 @extend_schema(exclude=True)
@@ -216,6 +223,53 @@ def ip_sort_key(device):
     except ValueError:
         return (1, device.ip, device.name.lower(), device.id)
     return (0, address.version, int(address), device.name.lower(), device.id)
+
+
+def filter_devices_by_network_ranges(devices, raw_filter):
+    if not raw_filter:
+        return devices
+
+    requested_ranges = list(
+        dict.fromkeys(value.strip() for value in raw_filter.split(",") if value.strip())
+    )
+    configured_ranges = AppSettings.load().effective_scan_ranges
+    allowed_values = set(configured_ranges) | {OUTSIDE_NETWORK_RANGE_FILTER}
+    if not requested_ranges or any(value not in allowed_values for value in requested_ranges):
+        raise ValidationError(
+            {
+                "network_ranges": (
+                    "Choose one or more configured network ranges, or Outside "
+                    "configured ranges."
+                )
+            }
+        )
+
+    configured_networks = [
+        ipaddress.ip_network(network_range, strict=False)
+        for network_range in configured_ranges
+    ]
+    selected_networks = [
+        ipaddress.ip_network(network_range, strict=False)
+        for network_range in requested_ranges
+        if network_range != OUTSIDE_NETWORK_RANGE_FILTER
+    ]
+    include_outside = OUTSIDE_NETWORK_RANGE_FILTER in requested_ranges
+    matching_ids = []
+    for device_id, ip_value in devices.values_list("id", "ip"):
+        try:
+            address = ipaddress.ip_address(ip_value)
+        except ValueError:
+            if include_outside:
+                matching_ids.append(device_id)
+            continue
+        in_selected_range = any(address in network for network in selected_networks)
+        outside_configured_ranges = not any(
+            address in network for network in configured_networks
+        )
+        if in_selected_range or (include_outside and outside_configured_ranges):
+            matching_ids.append(device_id)
+
+    return devices.filter(id__in=matching_ids)
 
 
 def paginated_device_payload(request, devices):
@@ -840,13 +894,28 @@ def app_settings(request):
     if request.method == "GET":
         return Response({"data": AppSettingsSerializer(config).data})
 
+    previous_ranges = config.effective_scan_ranges
     serializer = AppSettingsSerializer(config, data=request.data, partial=True)
     serializer.is_valid(raise_exception=True)
     serializer.save()
+    ranges_changed = previous_ranges != config.effective_scan_ranges
+    devices_removed_from_monitoring = 0
+    if ranges_changed:
+        devices_removed_from_monitoring = mark_devices_outside_scan_ranges_offline(
+            previous_ranges,
+            config.effective_scan_ranges,
+        )
+    message = "Scanner, notification, and integration settings were updated."
+    if devices_removed_from_monitoring:
+        message += (
+            f" {devices_removed_from_monitoring} device"
+            f"{'s were' if devices_removed_from_monitoring != 1 else ' was'} marked offline "
+            "because the configured ranges no longer include them."
+        )
     return success_response(
         AppSettingsSerializer(config).data,
         "Settings saved",
-        "Scanner, notification, and integration settings were updated.",
+        message,
     )
 
 
@@ -1419,23 +1488,6 @@ class UserLoginView(APIView):
             )
 
 
-@permission_classes([permissions.IsAuthenticated])
-class UserEditView(generics.UpdateAPIView):
-    serializer_class = UserSerializer
-
-    def get_object(self):
-        # Get the current authenticated user
-        return self.request.user
-
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop("partial", False)
-        instance = self.get_object()
-        serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data)
-
-
 class UserLogoutView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -1447,8 +1499,13 @@ class UserLogoutView(APIView):
         ),
     )
     def post(self, request, *args, **kwargs):
+        Token.objects.filter(user=request.user).delete()
         logout(request)
-        return Response({"message": "User logged out"}, status=status.HTTP_200_OK)
+        return success_response(
+            None,
+            "Logged off",
+            "Your session has ended securely.",
+        )
 
 
 @extend_schema(
@@ -1607,6 +1664,7 @@ def device(request):
             search = request.query_params.get("search")
             open_port = request.query_params.get("open_port")
             first_seen = request.query_params.get("first_seen")
+            network_ranges = request.query_params.get("network_ranges")
 
             if device_status:
                 if device_status not in Device.Status.values:
@@ -1639,6 +1697,7 @@ def device(request):
                 devices = devices.filter(
                     firstseen__gte=first_seen_threshold(first_seen)
                 )
+            devices = filter_devices_by_network_ranges(devices, network_ranges)
 
             payload = paginated_device_payload(request, devices)
             return Response(
@@ -1719,10 +1778,47 @@ def device(request):
 
 
 @extend_schema(
+    request=DeviceBulkUpdateSerializer,
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated, CanEditDevices])
+def bulk_update_devices(request):
+    serializer = DeviceBulkUpdateSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    device_ids = serializer.validated_data["ids"]
+    known = serializer.validated_data["known"]
+    devices = Device.objects.filter(id__in=device_ids)
+    found_ids = set(devices.values_list("id", flat=True))
+    if len(found_ids) != len(device_ids):
+        raise ValidationError(
+            {"ids": "One or more selected devices no longer exist. Refresh and try again."}
+        )
+
+    updated_count = devices.exclude(known=known).update(known=known)
+    selected_count = len(device_ids)
+    state_label = "known" if known else "new"
+    return success_response(
+        {
+            "ids": device_ids,
+            "known": known,
+            "updated_count": updated_count,
+        },
+        "Devices updated",
+        f"{selected_count} selected device{'s' if selected_count != 1 else ''} marked as {state_label}.",
+        status="OK",
+    )
+
+
+@extend_schema(
     request=inline_serializer(
         name="ScanNowRequest",
         fields={
             "ip_range": serializers.CharField(required=False),
+            "scan_ranges": serializers.ListField(
+                child=serializers.CharField(),
+                required=False,
+            ),
         },
     ),
     responses=OpenApiTypes.OBJECT,
@@ -1730,17 +1826,25 @@ def device(request):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated, CanRunScans])
 def scan_now(request):
-    ip_range = request.data.get("ip_range") or AppSettings.load().ip_range
+    config = AppSettings.load()
+    requested_ranges = request.data.get("scan_ranges")
+    error_field = "scan_ranges"
+    if requested_ranges is None:
+        requested_ranges = request.data.get("ip_range")
+        if requested_ranges is not None:
+            error_field = "ip_range"
+    if requested_ranges is None:
+        requested_ranges = config.effective_scan_ranges
     try:
-        ip_range = validate_ip_range(ip_range)
+        scan_ranges = validate_ip_ranges(requested_ranges)
     except ValueError as exc:
-        raise ValidationError({"ip_range": str(exc)}) from exc
+        raise ValidationError({error_field: str(exc)}) from exc
 
     try:
-        scan_run = scan(ip_range)
+        scan_run = scan(scan_ranges)
     except Exception as exc:
-        LOGGER.exception("Scan failed for %s", ip_range)
-        failed_scan = ScanRun.objects.filter(ip_range=ip_range).first()
+        LOGGER.exception("Scan failed for %s", scan_ranges)
+        failed_scan = ScanRun.objects.filter(ip_range=scan_ranges[0]).first()
         message = scan_error_message(exc)
         return error_response(
             "Scan failed",
@@ -1754,7 +1858,7 @@ def scan_now(request):
     return success_response(
         ScanRunSerializer(scan_run).data,
         "Scan completed",
-        "LanGuard finished scanning the configured network range.",
+        "LanGuard finished scanning the configured network ranges.",
         response_status=status.HTTP_202_ACCEPTED,
         status="OK",
     )
@@ -1848,12 +1952,22 @@ def scan_status(request):
             "visibility": {
                 "is_scanning": active_scan is not None,
                 "current_range": visible_scan.ip_range if visible_scan else "",
+                "current_ranges": (
+                    visible_scan.scan_ranges or [visible_scan.ip_range]
+                    if visible_scan
+                    else []
+                ),
+                "current_range_labels": (
+                    visible_scan.scan_range_labels if visible_scan else {}
+                ),
                 "started_at": utc_isoformat(visible_scan.started_at) if visible_scan else None,
                 "finished_at": utc_isoformat(visible_scan.finished_at) if visible_scan else None,
                 "duration_seconds": duration_seconds,
                 "last_error": visible_scan.error if visible_scan and visible_scan.error else "",
             },
             "time_zone": app_config.time_zone,
+            "network_ranges": app_config.effective_scan_ranges,
+            "network_range_labels": app_config.effective_scan_range_labels,
             "integrations": {
                 "adguard": {
                     "enabled": app_config.adguard_enabled,
@@ -1961,23 +2075,6 @@ def notifications(request):
         default_limit=50,
         max_limit=500,
     )
-
-
-@extend_schema(responses=OpenApiTypes.OBJECT)
-@api_view(["GET"])
-@permission_classes([permissions.IsAdminUser])
-def export_db(request):
-    return inventory_export_response()
-
-
-@extend_schema(
-    request=OpenApiTypes.OBJECT,
-    responses=OpenApiTypes.OBJECT,
-)
-@api_view(["POST"])
-@permission_classes([permissions.IsAdminUser])
-def import_db(request):
-    return inventory_import_response(request.data)
 
 
 @extend_schema(responses=OpenApiTypes.OBJECT)

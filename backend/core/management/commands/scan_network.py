@@ -1,6 +1,6 @@
-from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from core.models import AppSettings
 from core.scan import scan
 
 
@@ -10,25 +10,14 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "--ip-range",
-            default=settings.IP_RANGE,
-            help="CIDR range to scan. Defaults to IP_RANGE from settings.",
+            action="append",
+            default=None,
+            help="CIDR range to scan. Repeat for multiple ranges. Defaults to saved app settings.",
         )
-        parser.add_argument(
-            "--loop",
-            action="store_true",
-            help="Deprecated. Use run_scheduler for scheduled scans.",
-        )
-
     def handle(self, *args, **options):
-        ip_range = options["ip_range"]
+        scan_ranges = options["ip_range"] or AppSettings.load().effective_scan_ranges
+        ranges_label = ", ".join(scan_ranges)
 
-        if options["loop"]:
-            self.stdout.write(
-                self.style.WARNING(
-                    "--loop is deprecated. Use `python manage.py run_scheduler`."
-                )
-            )
-
-        self.stdout.write(f"Scanning {ip_range}...")
-        scan(ip_range)
-        self.stdout.write(self.style.SUCCESS(f"Scan completed for {ip_range}"))
+        self.stdout.write(f"Scanning {ranges_label}...")
+        scan(scan_ranges)
+        self.stdout.write(self.style.SUCCESS(f"Scan completed for {ranges_label}"))

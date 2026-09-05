@@ -157,7 +157,8 @@ export async function apiRequest(path, options = {}) {
     const message =
       payload?.detail ||
       payload?.error ||
-      payload?.info;
+      payload?.info ||
+      payload?.notification?.message;
     if (message) {
       throw apiError(message, payload?.notification);
     }

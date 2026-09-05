@@ -17,9 +17,11 @@ import {
   LoadingOverlay,
   Loader,
   Modal,
+  MultiSelect,
   NumberInput,
   Paper,
   PasswordInput,
+  Popover,
   Select,
   SegmentedControl,
   SimpleGrid,
@@ -49,6 +51,7 @@ import {
   IconBulb,
   IconBulbFilled,
   IconCast,
+  IconChevronDown,
   IconClock,
   IconDeviceCctv,
   IconDeviceDesktop,
@@ -71,6 +74,7 @@ import {
   IconMoon,
   IconNetwork,
   IconOutlet,
+  IconPlus,
   IconPrinter,
   IconPropeller,
   IconQuestionMark,
@@ -205,6 +209,15 @@ const deviceStatusOptions = [
   { value: 'offline', label: 'Offline' },
   { value: 'new', label: 'New devices' },
 ];
+
+const outsideNetworkRangeFilter = 'outside';
+
+function retainAvailableNetworkRangeFilters(current, configuredRanges) {
+  const available = current.filter(
+    (value) => value === outsideNetworkRangeFilter || configuredRanges.includes(value)
+  );
+  return available.length === current.length ? current : available;
+}
 
 const firstSeenPeriodOptions = [
   { value: 'today', label: 'Today' },
@@ -1871,7 +1884,14 @@ function NetworkHealthCard({ counters = {} }) {
   );
 }
 
-function AutomaticScanningCard({ appSettings, scanVisibility }) {
+function AutomaticScanningCard({ appSettings, networkRanges, networkRangeLabels }) {
+  const configuredRanges = normalizedScanRanges(networkRanges);
+  const ranges = configuredRanges.length
+    ? configuredRanges
+    : normalizedScanRanges(appSettings?.scan_ranges, appSettings?.ip_range);
+  const rangeLabels = Object.keys(networkRangeLabels || {}).length
+    ? networkRangeLabels
+    : appSettings?.scan_range_labels || {};
   return (
     <Paper className="dashboard-summary-card automatic-scanning-card" radius="md">
       <Group align="flex-start" gap="md" wrap="nowrap">
@@ -1885,13 +1905,21 @@ function AutomaticScanningCard({ appSettings, scanVisibility }) {
       </Group>
       <SimpleGrid cols={2} mt="xl">
         <SummaryMetric label="Interval" value={appSettings?.scan_interval ? `${appSettings.scan_interval} min` : '-'} />
-        <SummaryMetric label="Range" value={scanVisibility?.current_range || appSettings?.ip_range || '-'} align="right" />
+        <SummaryMetric
+          label="Ranges"
+          value={<ScanRangesSummary ranges={ranges} labels={rangeLabels} namesOnly />}
+          align="right"
+        />
       </SimpleGrid>
     </Paper>
   );
 }
 
 function ScanDetailsContent({ scanStatus, scanVisibility, timeZone }) {
+  const ranges = scanVisibility?.current_ranges?.length
+    ? normalizedScanRanges(scanVisibility.current_ranges)
+    : normalizedScanRanges([], scanVisibility?.current_range);
+  const rangeLabels = scanVisibility?.current_range_labels || scanStatus?.scan_range_labels || {};
   const checks = [
     'Device discovery and online status checks',
     'Open port scanning for the configured TCP ports',
@@ -1906,7 +1934,10 @@ function ScanDetailsContent({ scanStatus, scanVisibility, timeZone }) {
         <SummaryMetric label="Status" value={scanVisibility?.is_scanning ? 'Scanning' : scanStatus?.status || '-'} />
         <SummaryMetric label="Devices" value={scanStatus?.devices_seen ?? 0} />
         <SummaryMetric label="Duration" value={formatDuration(scanVisibility?.duration_seconds)} />
-        <SummaryMetric label="Range" value={scanVisibility?.current_range || '-'} />
+        <SummaryMetric
+          label="Ranges"
+          value={ranges.map((range) => formatScanRange(range, rangeLabels)).join(', ') || '-'}
+        />
         <SummaryMetric label="Started" value={formatDate(scanVisibility?.started_at, timeZone)} nowrap />
         <SummaryMetric label="Finished" value={formatDate(scanVisibility?.finished_at, timeZone)} nowrap />
       </SimpleGrid>
@@ -2254,7 +2285,7 @@ function SummaryRow({ label, value }) {
 
 function SummaryMetric({ label, value, align = 'left', nowrap = false }) {
   return (
-    <Box ta={align}>
+    <Box ta={align} style={{ minWidth: 0 }}>
       <Text size="sm" c="dimmed" fw={600}>{label}</Text>
       <Text
         className={`dashboard-summary-value${nowrap ? ' dashboard-summary-value-nowrap' : ''}`}
@@ -2263,6 +2294,74 @@ function SummaryMetric({ label, value, align = 'left', nowrap = false }) {
         {value}
       </Text>
     </Box>
+  );
+}
+
+function normalizedScanRanges(ranges, fallbackRange = '') {
+  const values = Array.isArray(ranges) ? ranges.filter(Boolean) : [];
+  return values.length ? values : fallbackRange ? [fallbackRange] : [];
+}
+
+function formatScanRange(networkRange, labels = {}) {
+  const label = String(labels?.[networkRange] || '').trim();
+  return label ? `${label} · ${networkRange}` : networkRange;
+}
+
+function compactScanRangesLabel(ranges, labels = {}) {
+  if (!ranges.length) return '-';
+  const firstRange = formatScanRange(ranges[0], labels);
+  if (ranges.length === 1) return firstRange;
+  return `${firstRange} +${ranges.length - 1} more`;
+}
+
+function ScanRangesSummary({ ranges, labels = {}, namesOnly = false }) {
+  const fullLabel = ranges.map((range) => formatScanRange(range, labels)).join(', ') || '-';
+  const displayRanges = namesOnly
+    ? ranges.map((range) => String(labels?.[range] || range).trim())
+    : ranges;
+  const displayLabel = namesOnly
+    ? displayRanges.length > 1
+      ? `${displayRanges.length} networks`
+      : displayRanges[0] || '-'
+    : compactScanRangesLabel(ranges, labels);
+
+  if (namesOnly && ranges.length > 1) {
+    return (
+      <Popover position="bottom-end" width={360} shadow="md" withinPortal>
+        <Popover.Target>
+          <UnstyledButton aria-label={`Show ${ranges.length} configured networks`}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <span>{displayLabel}</span>
+              <IconChevronDown size={17} aria-hidden="true" />
+            </span>
+          </UnstyledButton>
+        </Popover.Target>
+        <Popover.Dropdown p={0}>
+          <ScrollArea.Autosize mah={260} type="auto">
+            <Stack gap={0} py={6}>
+              {ranges.map((range) => (
+                <Group key={range} gap="md" wrap="nowrap" px="md" py="sm">
+                  <Text fw={700} truncate style={{ flex: 1, minWidth: 0 }}>
+                    {String(labels?.[range] || range).trim()}
+                  </Text>
+                  <Text size="sm" c="dimmed" ff="monospace" style={{ flexShrink: 0 }}>
+                    {range}
+                  </Text>
+                </Group>
+              ))}
+            </Stack>
+          </ScrollArea.Autosize>
+        </Popover.Dropdown>
+      </Popover>
+    );
+  }
+
+  return (
+    <Tooltip label={fullLabel} disabled={!namesOnly && ranges.length < 2} multiline withArrow>
+      <Text span inherit truncate style={{ display: 'block', maxWidth: '100%' }}>
+        {displayLabel}
+      </Text>
+    </Tooltip>
   );
 }
 
@@ -3547,7 +3646,10 @@ function UserManagementModal({ opened, onClose, currentUser, onCurrentUserUpdate
 }
 
 function SettingsPage({ onSaved }) {
-  const [ipRange, setIpRange] = useState('');
+  const [scanNetworks, setScanNetworks] = useState([
+    { name: 'Primary network', cidr: '' },
+  ]);
+  const [scanMaxHosts, setScanMaxHosts] = useState(1024);
   const [scanInterval, setScanInterval] = useState(10);
   const [timeZone, setTimeZone] = useState('UTC');
   const [discordEnabled, setDiscordEnabled] = useState(true);
@@ -3606,7 +3708,22 @@ function SettingsPage({ onSaved }) {
     try {
       const payload = await apiRequest('settings/');
       const data = payload.data || {};
-      setIpRange(data.ip_range || '');
+      const loadedRanges =
+        Array.isArray(data.scan_ranges) && data.scan_ranges.length
+          ? data.scan_ranges
+          : data.ip_range
+            ? [data.ip_range]
+            : [];
+      const loadedLabels = data.scan_range_labels || {};
+      setScanNetworks(
+        loadedRanges.map((cidr, index) => ({
+          cidr,
+          name:
+            loadedLabels[cidr]
+            || (index === 0 ? 'Primary network' : `Network ${index + 1}`),
+        }))
+      );
+      setScanMaxHosts(Number(data.scan_max_hosts || 1024));
       setScanInterval(data.scan_interval || 10);
       setTimeZone(data.time_zone || 'UTC');
       setDiscordEnabled(Boolean(data.discord_enabled));
@@ -3664,8 +3781,15 @@ function SettingsPage({ onSaved }) {
     setSaving(true);
     setError('');
     try {
+      const normalizedScanNetworks = scanNetworks.map(({ name, cidr }) => ({
+        name: name.trim(),
+        cidr: cidr.trim(),
+      }));
       const body = {
-        ip_range: ipRange,
+        scan_ranges: normalizedScanNetworks.map(({ cidr }) => cidr),
+        scan_range_labels: Object.fromEntries(
+          normalizedScanNetworks.map(({ cidr, name }) => [cidr, name])
+        ),
         scan_interval: scanInterval,
         time_zone: timeZone,
         discord_enabled: discordEnabled,
@@ -3715,6 +3839,34 @@ function SettingsPage({ onSaved }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  function updateScanNetwork(index, field, value) {
+    setScanNetworks((current) =>
+      current.map((network, networkIndex) =>
+        networkIndex === index ? { ...network, [field]: value } : network
+      )
+    );
+  }
+
+  function addScanNetwork() {
+    setScanNetworks((current) => {
+      if (current.length >= 16) {
+        return current;
+      }
+      return [
+        ...current,
+        { name: `Network ${current.length + 1}`, cidr: '' },
+      ];
+    });
+  }
+
+  function removeScanNetwork(index) {
+    setScanNetworks((current) =>
+      current.length > 1
+        ? current.filter((_, networkIndex) => networkIndex !== index)
+        : current
+    );
   }
 
   async function testNotificationChannel(channel) {
@@ -3987,16 +4139,76 @@ function SettingsPage({ onSaved }) {
         <Stack gap="lg">
           <Box>
             <Title order={3}>Network scanning</Title>
-            <Text c="dimmed">Configure the default network range and scheduled scan timing.</Text>
+            <Text c="dimmed">Configure network ranges and scheduled scan timing.</Text>
           </Box>
-        <SimpleGrid cols={{ base: 1, sm: 3 }}>
-          <TextInput
-            label="Default scan range"
-            value={ipRange}
-            onChange={(event) => setIpRange(event.currentTarget.value)}
-            placeholder="192.168.1.0/24"
-            required
-          />
+        <Stack gap="sm">
+          <Group justify="space-between">
+            <Text fw={700}>Network ranges</Text>
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<IconPlus size={16} />}
+              onClick={addScanNetwork}
+              disabled={scanNetworks.length >= 16}
+            >
+              Add network
+            </Button>
+          </Group>
+          <Table.ScrollContainer minWidth={560}>
+            <Table withTableBorder verticalSpacing="xs">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Network name</Table.Th>
+                  <Table.Th>CIDR range</Table.Th>
+                  <Table.Th w={48} />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {scanNetworks.map((network, index) => (
+                  <Table.Tr key={index}>
+                    <Table.Td>
+                      <TextInput
+                        value={network.name}
+                        onChange={(event) =>
+                          updateScanNetwork(index, 'name', event.currentTarget.value)
+                        }
+                        placeholder={index === 0 ? 'Primary network' : `Network ${index + 1}`}
+                        aria-label={`Name for network ${index + 1}`}
+                        maxLength={64}
+                        required
+                      />
+                    </Table.Td>
+                    <Table.Td>
+                      <TextInput
+                        value={network.cidr}
+                        onChange={(event) =>
+                          updateScanNetwork(index, 'cidr', event.currentTarget.value)
+                        }
+                        placeholder="192.168.1.0/24"
+                        aria-label={`CIDR for network ${index + 1}`}
+                        required
+                      />
+                    </Table.Td>
+                    <Table.Td>
+                      <Tooltip label="Remove network">
+                        <ActionIcon
+                          color="red"
+                          variant="subtle"
+                          onClick={() => removeScanNetwork(index)}
+                          disabled={scanNetworks.length === 1}
+                          aria-label={`Remove network ${index + 1}`}
+                        >
+                          <IconTrash size={17} />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        </Stack>
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
           <NumberInput
             label="Scan interval"
             value={scanInterval}
@@ -4019,7 +4231,7 @@ function SettingsPage({ onSaved }) {
         </SimpleGrid>
 
         <Text size="xs" c="dimmed">
-          The interval starts after each scan completes. Restart the scanner container after changing scan interval or timezone.
+          Each range can contain up to {scanMaxHosts.toLocaleString()} addresses. The interval starts after each scan completes. Network range and interval changes apply automatically on the next scheduler cycle.
         </Text>
         </Stack>
           </Tabs.Panel>
@@ -4817,7 +5029,7 @@ function ScanComparisonModal({ opened, onClose, scanRuns, timeZone }) {
   const baselineRun = comparableRuns.find((run) => String(run.id) === baselineId);
   const options = comparableRuns.map((run) => ({
     value: String(run.id),
-    label: `${formatDate(run.started_at, timeZone)} · ${run.ip_range}`,
+    label: `${formatDate(run.started_at, timeZone)} · ${compactScanRangesLabel(normalizedScanRanges(run.scan_ranges, run.ip_range), run.scan_range_labels)}`,
   }));
   const metrics = [
     { label: 'Devices seen', current: currentRun?.devices_seen, baseline: baselineRun?.devices_seen },
@@ -5162,7 +5374,7 @@ function ScanHistoryPage({ scanRuns, timeZone, pagination, loadingMore, onLoadMo
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Status</Table.Th>
-                <Table.Th>Range</Table.Th>
+                <Table.Th>Ranges</Table.Th>
                 <Table.Th>Started</Table.Th>
                 <Table.Th>Seen</Table.Th>
                 <Table.Th>Port changes</Table.Th>
@@ -5176,7 +5388,12 @@ function ScanHistoryPage({ scanRuns, timeZone, pagination, loadingMore, onLoadMo
                       {run.status}
                     </Badge>
                   </Table.Td>
-                  <Table.Td>{run.ip_range}</Table.Td>
+                  <Table.Td>
+                    <ScanRangesSummary
+                      ranges={normalizedScanRanges(run.scan_ranges, run.ip_range)}
+                      labels={run.scan_range_labels}
+                    />
+                  </Table.Td>
                   <Table.Td>{formatDate(run.started_at, timeZone)}</Table.Td>
                   <Table.Td>{run.devices_seen}</Table.Td>
                   <Table.Td>{run.ports_opened} / {run.ports_closed}</Table.Td>
@@ -5355,6 +5572,12 @@ function Dashboard({
   const [dashboardTimeZone, setDashboardTimeZone] = useState();
   const [search, setSearch] = useState('');
   const [deviceStatus, setDeviceStatus] = useState('');
+  const [networkRangeFilter, setNetworkRangeFilter] = useState([]);
+  const [configuredNetworkRanges, setConfiguredNetworkRanges] = useState([]);
+  const [configuredNetworkRangeLabels, setConfiguredNetworkRangeLabels] = useState({});
+  const [bulkEditEnabled, setBulkEditEnabled] = useState(false);
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState([]);
+  const [bulkUpdatingDevices, setBulkUpdatingDevices] = useState(false);
   const [firstSeenPeriod, setFirstSeenPeriod] = useState('');
   const [inventoryView, setInventoryView] = useState('table');
   const [mainView, setMainView] = useState(initialView);
@@ -5370,6 +5593,7 @@ function Dashboard({
     versionCheckFallbackInterval
   );
   const [logoutModalOpened, logoutModal] = useDisclosure(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [usersModalOpened, usersModal] = useDisclosure(false);
   const [scanDetailsOpened, scanDetailsModal] = useDisclosure(false);
   const deviceListRef = useRef(null);
@@ -5378,6 +5602,7 @@ function Dashboard({
   const tableStateRef = useRef({
     search: '',
     deviceStatus: '',
+    networkRangeFilter: [],
     firstSeenPeriod: '',
     deviceLimit: 100,
     deviceOffset: 0,
@@ -5385,12 +5610,34 @@ function Dashboard({
   });
 
   const filteredDevices = useMemo(() => devices, [devices]);
+  const selectableDeviceIds = useMemo(
+    () => filteredDevices.filter((device) => !device.known).map((device) => device.id),
+    [filteredDevices]
+  );
+  const allSelectableDevicesSelected = Boolean(
+    selectableDeviceIds.length
+    && selectableDeviceIds.every((deviceId) => selectedDeviceIds.includes(deviceId))
+  );
+  const someSelectableDevicesSelected = selectedDeviceIds.length > 0;
   const roomOptions = useMemo(() => buildRoomOptions(mapDevices), [mapDevices]);
   const deviceLimit = 100;
   const deviceOffset = 0;
   const deviceEnd = Math.min(devices.length, devicePagination.count || devices.length);
   const selectedDeviceStatus =
     deviceStatusOptions.find((option) => option.value === deviceStatus) || null;
+  const networkRangeOptions = useMemo(
+    () => [
+      ...configuredNetworkRanges.map((networkRange) => ({
+        value: networkRange,
+        label: formatScanRange(networkRange, configuredNetworkRangeLabels),
+      })),
+      {
+        value: outsideNetworkRangeFilter,
+        label: 'Outside configured ranges',
+      },
+    ],
+    [configuredNetworkRangeLabels, configuredNetworkRanges]
+  );
   const canManageUsers = Boolean(user?.is_staff || user?.is_superuser);
   const canEditDevices = canManageUsers || Boolean(accessCapabilities.can_edit_devices);
   const canEditHomeMap = canManageUsers || Boolean(accessCapabilities.can_edit_home_map);
@@ -5421,12 +5668,30 @@ function Dashboard({
     user?.can_run_scans,
   ]);
 
+  useEffect(() => {
+    if (!bulkEditEnabled) {
+      return;
+    }
+    setSelectedDeviceIds((current) => {
+      const available = current.filter((deviceId) => selectableDeviceIds.includes(deviceId));
+      return available.length === current.length ? current : available;
+    });
+  }, [bulkEditEnabled, selectableDeviceIds]);
+
+  useEffect(() => {
+    if (inventoryView !== 'table' && bulkEditEnabled) {
+      setBulkEditEnabled(false);
+      setSelectedDeviceIds([]);
+    }
+  }, [bulkEditEnabled, inventoryView]);
+
   function storeDashboardNavigationState(overrides = {}) {
     window.sessionStorage.setItem(
       dashboardStateStorageKey,
       JSON.stringify({
         search,
         deviceStatus,
+        networkRangeFilter,
         firstSeenPeriod,
         inventoryView,
         mainView,
@@ -5531,12 +5796,13 @@ function Dashboard({
     tableStateRef.current = {
       search,
       deviceStatus,
+      networkRangeFilter,
       firstSeenPeriod,
       deviceLimit,
       deviceOffset,
       deviceOrdering,
     };
-  }, [search, deviceStatus, firstSeenPeriod, deviceOrdering]);
+  }, [search, deviceStatus, networkRangeFilter, firstSeenPeriod, deviceOrdering]);
 
   async function loadData({ quiet = false, notifyOnError = false, refreshIntegrations = false } = {}) {
     if (quiet) {
@@ -5555,6 +5821,9 @@ function Dashboard({
             ? currentTableState.deviceStatus
             : undefined,
         known: currentTableState.deviceStatus === 'new' ? 'false' : undefined,
+        network_ranges: currentTableState.networkRangeFilter.length
+          ? currentTableState.networkRangeFilter.join(',')
+          : undefined,
         first_seen: currentTableState.firstSeenPeriod || undefined,
         limit: currentTableState.deviceLimit,
         offset: currentTableState.deviceOffset,
@@ -5598,6 +5867,14 @@ function Dashboard({
       setScanStatus(statusData.data || statusData.active_scan || null);
       setScanVisibility(statusData.visibility || null);
       setIntegrationStatus(statusData.integrations || {});
+      const nextNetworkRanges = Array.isArray(statusData.network_ranges)
+        ? statusData.network_ranges
+        : [];
+      setConfiguredNetworkRanges(nextNetworkRanges);
+      setConfiguredNetworkRangeLabels(statusData.network_range_labels || {});
+      setNetworkRangeFilter((current) =>
+        retainAvailableNetworkRangeFilters(current, nextNetworkRanges)
+      );
       setSpeedtestTrackerPayload(speedtestData || null);
       setAccessCapabilities(statusData.permissions || {});
       if (statusData.time_zone) {
@@ -5630,6 +5907,14 @@ function Dashboard({
       setScanStatus(statusData.data || statusData.active_scan || null);
       setScanVisibility(statusData.visibility || null);
       setIntegrationStatus(statusData.integrations || {});
+      const nextNetworkRanges = Array.isArray(statusData.network_ranges)
+        ? statusData.network_ranges
+        : [];
+      setConfiguredNetworkRanges(nextNetworkRanges);
+      setConfiguredNetworkRangeLabels(statusData.network_range_labels || {});
+      setNetworkRangeFilter((current) =>
+        retainAvailableNetworkRangeFilters(current, nextNetworkRanges)
+      );
       setAccessCapabilities(statusData.permissions || {});
       if (statusData.time_zone) {
         setDashboardTimeZone(statusData.time_zone);
@@ -5758,6 +6043,9 @@ function Dashboard({
       const state = JSON.parse(stored);
       setSearch(state.search || '');
       setDeviceStatus(state.deviceStatus || '');
+      setNetworkRangeFilter(
+        Array.isArray(state.networkRangeFilter) ? state.networkRangeFilter : []
+      );
       setFirstSeenPeriod(state.firstSeenPeriod || '');
       setInventoryView(state.inventoryView || 'table');
       setMainView(mainViewFromPath(window.location.pathname));
@@ -5767,6 +6055,9 @@ function Dashboard({
         ...tableStateRef.current,
         search: state.search || '',
         deviceStatus: state.deviceStatus || '',
+        networkRangeFilter: Array.isArray(state.networkRangeFilter)
+          ? state.networkRangeFilter
+          : [],
         firstSeenPeriod: state.firstSeenPeriod || '',
         deviceOrdering: state.deviceOrdering || '',
       };
@@ -5923,7 +6214,7 @@ function Dashboard({
   useEffect(() => {
     const timer = window.setTimeout(() => loadData({ quiet: true }), 250);
     return () => window.clearTimeout(timer);
-  }, [search, deviceStatus, firstSeenPeriod, deviceOrdering]);
+  }, [search, deviceStatus, networkRangeFilter, firstSeenPeriod, deviceOrdering]);
 
   async function runScan() {
     setRefreshing(true);
@@ -5943,9 +6234,60 @@ function Dashboard({
     }
   }
 
-  function logout() {
-    clearStoredUser();
-    onLogout();
+  function toggleBulkDevice(device) {
+    if (device.known) {
+      return;
+    }
+    setSelectedDeviceIds((current) =>
+      current.includes(device.id)
+        ? current.filter((deviceId) => deviceId !== device.id)
+        : [...current, device.id]
+    );
+  }
+
+  function closeBulkEdit() {
+    setBulkEditEnabled(false);
+    setSelectedDeviceIds([]);
+  }
+
+  function toggleAllBulkDevices() {
+    setSelectedDeviceIds(allSelectableDevicesSelected ? [] : selectableDeviceIds);
+  }
+
+  async function markSelectedDevicesKnown() {
+    if (!selectedDeviceIds.length) {
+      return;
+    }
+    setBulkUpdatingDevices(true);
+    try {
+      const payload = await apiRequest('devices/bulk-update/', {
+        method: 'POST',
+        body: {
+          ids: selectedDeviceIds,
+          known: true,
+        },
+      });
+      closeBulkEdit();
+      await loadData({ quiet: true });
+      showServerNotification(payload);
+    } catch (err) {
+      showErrorNotification(err);
+    } finally {
+      setBulkUpdatingDevices(false);
+    }
+  }
+
+  async function logout() {
+    setLoggingOut(true);
+    try {
+      await apiRequest('logout/', { method: 'POST' });
+      clearStoredUser();
+      onLogout();
+    } catch (err) {
+      showErrorNotification(err);
+    } finally {
+      setLoggingOut(false);
+    }
   }
 
   function updateCurrentUser(nextUser) {
@@ -6230,7 +6572,11 @@ function Dashboard({
 
           <div className={`dashboard-summary-grid ${speedtestTrackerPayload?.integration?.enabled && speedtestTrackerPayload?.integration?.configured ? 'with-speedtest' : ''}`}>
             <NetworkHealthCard counters={counters} />
-            <AutomaticScanningCard appSettings={appSettings} scanVisibility={scanVisibility} />
+            <AutomaticScanningCard
+              appSettings={appSettings}
+              networkRanges={configuredNetworkRanges}
+              networkRangeLabels={configuredNetworkRangeLabels}
+            />
             <LatestScanCard
               scanStatus={scanStatus}
               scanVisibility={scanVisibility}
@@ -6271,6 +6617,20 @@ function Dashboard({
                     value={deviceStatus}
                     aria-label={selectedDeviceStatus?.label || 'Status'}
                     onChange={(value) => setDeviceStatus(value || '')}
+                  />
+                  <MultiSelect
+                    w={240}
+                    placeholder="Network ranges"
+                    clearable
+                    searchable
+                    hidePickedOptions
+                    comboboxProps={{ width: 340 }}
+                    data={networkRangeOptions}
+                    value={networkRangeFilter}
+                    aria-label="Filter by network ranges"
+                    onChange={setNetworkRangeFilter}
+                    maxDropdownHeight={260}
+                    styles={{ option: { whiteSpace: 'nowrap' } }}
                   />
                   <Select
                     w={150}
@@ -6319,6 +6679,17 @@ function Dashboard({
                   <Box className="device-list-toolbar" p="md">
                     <Group justify="space-between" wrap="wrap" gap="sm">
                       <Group gap="xs">
+                        {bulkEditEnabled && (
+                          <Checkbox
+                            label="Select all"
+                            checked={allSelectableDevicesSelected}
+                            indeterminate={
+                              someSelectableDevicesSelected && !allSelectableDevicesSelected
+                            }
+                            disabled={!selectableDeviceIds.length}
+                            onChange={toggleAllBulkDevices}
+                          />
+                        )}
                         <Button
                           size="xs"
                           variant={deviceOrdering === 'name' ? 'light' : 'subtle'}
@@ -6356,18 +6727,80 @@ function Dashboard({
                           First seen
                         </Button>
                       </Group>
-                      <Text size="sm" c="dimmed">
-                        Showing {deviceEnd} of {devicePagination.count || deviceEnd} devices
-                      </Text>
+                      <Group gap="sm" wrap="wrap">
+                        {bulkEditEnabled ? (
+                          <>
+                            <Text size="sm" c="dimmed">
+                              {selectedDeviceIds.length} selected
+                            </Text>
+                            <Button size="xs" variant="default" onClick={closeBulkEdit}>
+                              Cancel
+                            </Button>
+                            <Button
+                              size="xs"
+                              leftSection={<IconShieldCheck size={16} />}
+                              disabled={!selectedDeviceIds.length}
+                              loading={bulkUpdatingDevices}
+                              onClick={markSelectedDevicesKnown}
+                            >
+                              Mark as known
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Text size="sm" c="dimmed">
+                              Showing {deviceEnd} of {devicePagination.count || deviceEnd} devices
+                            </Text>
+                            {canEditDevices && (
+                              <Button
+                                size="xs"
+                                variant="light"
+                                leftSection={<IconEdit size={16} />}
+                                disabled={!selectableDeviceIds.length}
+                                onClick={() => setBulkEditEnabled(true)}
+                              >
+                                Bulk edit
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </Group>
                     </Group>
                   </Box>
                   <Stack ref={deviceListRef} className="device-list" gap={0}>
                     {filteredDevices.map((device) => (
                       <UnstyledButton
-                        className="device-list-row"
+                        component={bulkEditEnabled ? 'div' : 'button'}
+                        className={`device-list-row${bulkEditEnabled ? ' bulk-edit' : ''}${selectedDeviceIds.includes(device.id) ? ' selected' : ''}`}
                         key={device.id}
-                        onClick={() => openDevicePage(device)}
+                        role={bulkEditEnabled ? 'checkbox' : undefined}
+                        aria-checked={bulkEditEnabled ? selectedDeviceIds.includes(device.id) : undefined}
+                        aria-disabled={bulkEditEnabled && device.known ? true : undefined}
+                        tabIndex={bulkEditEnabled ? 0 : undefined}
+                        onClick={() => (
+                          bulkEditEnabled ? toggleBulkDevice(device) : openDevicePage(device)
+                        )}
+                        onKeyDown={(event) => {
+                          if (
+                            bulkEditEnabled
+                            && !device.known
+                            && (event.key === 'Enter' || event.key === ' ')
+                          ) {
+                            event.preventDefault();
+                            toggleBulkDevice(device);
+                          }
+                        }}
                       >
+                        {bulkEditEnabled && (
+                          <Checkbox
+                            checked={selectedDeviceIds.includes(device.id)}
+                            disabled={device.known}
+                            readOnly
+                            tabIndex={-1}
+                            aria-label={`Select ${displayDeviceName(device)}`}
+                            pointerEvents="none"
+                          />
+                        )}
                         <Group className="device-list-primary" gap="md" align="center" wrap="nowrap">
                           <span className="device-list-icon">
                             <DeviceIconStack device={device} size={21} />
@@ -6525,14 +6958,27 @@ function Dashboard({
         currentUser={user}
         onCurrentUserUpdated={updateCurrentUser}
       />
-      <Modal opened={logoutModalOpened} onClose={logoutModal.close} title="Log off" centered>
+      <Modal
+        opened={logoutModalOpened}
+        onClose={logoutModal.close}
+        title="Log off"
+        centered
+        closeOnClickOutside={!loggingOut}
+        closeOnEscape={!loggingOut}
+        withCloseButton={!loggingOut}
+      >
         <Stack>
           <Text>Are you sure you want to log off?</Text>
           <Group justify="flex-end">
-            <Button variant="default" onClick={logoutModal.close}>
+            <Button variant="default" onClick={logoutModal.close} disabled={loggingOut}>
               Cancel
             </Button>
-            <Button color="red" leftSection={<IconLogout size={18} />} onClick={logout}>
+            <Button
+              color="red"
+              leftSection={<IconLogout size={18} />}
+              onClick={logout}
+              loading={loggingOut}
+            >
               Log off
             </Button>
           </Group>

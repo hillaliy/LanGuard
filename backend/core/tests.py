@@ -1,12 +1,14 @@
 from datetime import datetime, timedelta, timezone as datetime_timezone
 import hashlib
 import hmac
+import importlib
 import json
 import socket
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.core.cache import cache
@@ -18,6 +20,7 @@ from rest_framework.test import APIClient
 
 from backend.settings import include_internal_hosts, validate_production_settings
 from .datetime_utils import utc_isoformat
+from .management.commands.run_scheduler import load_scan_schedule
 from .models import (
     AppSettings,
     Device,
@@ -75,6 +78,7 @@ from .scan import (
     sync_discovered_device,
     sync_device_ports,
     validate_ip_range,
+    validate_ip_ranges,
     web_interface_candidates,
 )
 
@@ -713,6 +717,188 @@ class AuthApiTests(TestCase):
         self.assertTrue(response.data["is_staff"])
         self.assertTrue(response.data["is_superuser"])
 
+    def test_logout_requires_authentication(self):
+        response = self.client.post("/api/v1/logout/")
+
+        self.assertEqual(response.status_code, 401)
+
+    def test_logout_revokes_token(self):
+        user = User.objects.create_user(username="admin", password="password")
+        login_response = self.client.post(
+            "/api/v1/login/",
+            {"username": "admin", "password": "password"},
+            format="json",
+        )
+        token = login_response.data["token"]
+        token_client = APIClient()
+        token_client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+
+        response = token_client.post("/api/v1/logout/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["notification"]["title"], "Logged off")
+        self.assertFalse(Token.objects.filter(user=user).exists())
+        protected_response = token_client.get("/api/v1/scan/status/")
+        self.assertEqual(protected_response.status_code, 401)
+
+
+class ScanCommandTests(TestCase):
+    def test_scheduler_reloads_saved_ranges_and_interval(self):
+        config = AppSettings.load()
+        config.ip_range = "192.168.1.0/24"
+        config.scan_ranges = ["192.168.1.0/24"]
+        config.scan_interval = 10
+        config.save(update_fields=["ip_range", "scan_ranges", "scan_interval"])
+
+        self.assertEqual(
+            load_scan_schedule(),
+            (["192.168.1.0/24"], 10),
+        )
+
+        config.scan_ranges = ["192.168.20.0/24", "192.168.30.0/24"]
+        config.scan_interval = 25
+        config.save(update_fields=["scan_ranges", "scan_interval"])
+
+        self.assertEqual(
+            load_scan_schedule(),
+            (["192.168.20.0/24", "192.168.30.0/24"], 25),
+        )
+
+    def test_scheduler_keeps_explicit_command_overrides(self):
+        self.assertEqual(
+            load_scan_schedule(["10.0.0.0/24"], 30),
+            (["10.0.0.0/24"], 30),
+        )
+
+    @patch("core.management.commands.run_scheduler.signal.signal")
+    @patch("core.management.commands.run_scheduler.threading.Thread")
+    @patch("core.management.commands.run_scheduler.threading.Event")
+    @patch("core.management.commands.run_scheduler.scan")
+    def test_scheduler_uses_latest_ranges_when_cycle_starts(
+        self,
+        scan_mock,
+        event_factory,
+        thread_factory,
+        signal_mock,
+    ):
+        config = AppSettings.load()
+        config.ip_range = "192.168.1.0/24"
+        config.scan_ranges = ["192.168.1.0/24"]
+        config.scan_interval = 10
+        config.save(update_fields=["ip_range", "scan_ranges", "scan_interval"])
+        stop_event = Mock()
+        stop_event.is_set.side_effect = [False, True]
+
+        def finish_wait(_seconds):
+            config.scan_ranges = ["192.168.20.0/24", "192.168.30.0/24"]
+            config.scan_interval = 25
+            config.save(update_fields=["scan_ranges", "scan_interval"])
+            return False
+
+        stop_event.wait.side_effect = finish_wait
+        event_factory.return_value = stop_event
+
+        call_command("run_scheduler")
+
+        scan_mock.assert_called_once_with(
+            ["192.168.20.0/24", "192.168.30.0/24"]
+        )
+        thread_factory.assert_called()
+        signal_mock.assert_called()
+
+    @patch("core.management.commands.scan_network.scan")
+    def test_scan_network_accepts_repeated_ranges(self, scan_mock):
+        call_command(
+            "scan_network",
+            "--ip-range",
+            "192.168.1.0/24",
+            "--ip-range",
+            "192.168.20.0/24",
+        )
+
+        scan_mock.assert_called_once_with(
+            ["192.168.1.0/24", "192.168.20.0/24"]
+        )
+
+
+class MultiNetworkMigrationTests(SimpleTestCase):
+    def test_migration_copies_primary_range_to_new_fields(self):
+        migration = importlib.import_module(
+            "core.migrations.0028_multi_network_scan_ranges"
+        )
+        config = SimpleNamespace(
+            ip_range="192.168.1.0/24",
+            scan_ranges=[],
+            save=Mock(),
+        )
+        scan_run = SimpleNamespace(
+            ip_range="192.168.20.0/24",
+            scan_ranges=[],
+            save=Mock(),
+        )
+        config_queryset = Mock()
+        config_queryset.iterator.return_value = iter([config])
+        run_queryset = Mock()
+        run_queryset.iterator.return_value = iter([scan_run])
+        app_settings_model = Mock()
+        app_settings_model.objects.all.return_value = config_queryset
+        scan_run_model = Mock()
+        scan_run_model.objects.all.return_value = run_queryset
+        apps = Mock()
+        apps.get_model.side_effect = [app_settings_model, scan_run_model]
+
+        migration.copy_primary_ranges(apps, None)
+
+        self.assertEqual(config.scan_ranges, ["192.168.1.0/24"])
+        self.assertEqual(scan_run.scan_ranges, ["192.168.20.0/24"])
+        config.save.assert_called_once_with(update_fields=["scan_ranges"])
+        scan_run.save.assert_called_once_with(update_fields=["scan_ranges"])
+
+    def test_label_migration_names_configured_ranges_and_matching_scan_history(self):
+        migration = importlib.import_module("core.migrations.0029_scan_range_labels")
+        config = SimpleNamespace(
+            ip_range="192.168.1.0/24",
+            scan_ranges=["192.168.1.0/24", "192.168.20.0/24"],
+            scan_range_labels={},
+            save=Mock(),
+        )
+        matching_run = SimpleNamespace(
+            ip_range="192.168.20.0/24",
+            scan_ranges=["192.168.20.0/24"],
+            scan_range_labels={},
+            save=Mock(),
+        )
+        unrelated_run = SimpleNamespace(
+            ip_range="192.168.30.0/24",
+            scan_ranges=["192.168.30.0/24"],
+            scan_range_labels={},
+            save=Mock(),
+        )
+        app_settings_model = Mock()
+        app_settings_model.objects.first.return_value = config
+        run_queryset = Mock()
+        run_queryset.iterator.return_value = iter([matching_run, unrelated_run])
+        scan_run_model = Mock()
+        scan_run_model.objects.all.return_value = run_queryset
+        apps = Mock()
+        apps.get_model.side_effect = [app_settings_model, scan_run_model]
+
+        migration.populate_scan_range_labels(apps, None)
+
+        expected_labels = {
+            "192.168.1.0/24": "Primary network",
+            "192.168.20.0/24": "Network 2",
+        }
+        self.assertEqual(config.scan_range_labels, expected_labels)
+        self.assertEqual(
+            matching_run.scan_range_labels,
+            {"192.168.20.0/24": "Network 2"},
+        )
+        self.assertEqual(unrelated_run.scan_range_labels, {})
+        config.save.assert_called_once_with(update_fields=["scan_range_labels"])
+        matching_run.save.assert_called_once_with(update_fields=["scan_range_labels"])
+        unrelated_run.save.assert_called_once_with(update_fields=["scan_range_labels"])
+
 
 @override_settings(NOTIFICATIONS_ENABLED=False)
 class PortEventTests(TestCase):
@@ -763,8 +949,9 @@ class ScanStabilityTests(TestCase):
         return (None, SimpleNamespace(psrc=ip, hwsrc=mac))
 
     @override_settings(SCAN_ARP_RETRIES=2, SCAN_ARP_TIMEOUT=2)
+    @patch("core.scan.scapy.conf.route.route", return_value=("eth0", "192.168.1.20", "0.0.0.0"))
     @patch("core.scan.scapy.srp")
-    def test_discover_devices_retries_and_deduplicates_by_mac(self, srp):
+    def test_discover_devices_retries_and_deduplicates_by_mac(self, srp, route):
         first = self.scan_element("192.168.1.10", "AA:BB:CC:DD:EE:01")
         second = self.scan_element("192.168.1.11", "AA:BB:CC:DD:EE:02")
         duplicate = self.scan_element("192.168.1.10", "aa:bb:cc:dd:ee:01")
@@ -774,6 +961,32 @@ class ScanStabilityTests(TestCase):
 
         self.assertEqual(len(devices), 2)
         self.assertEqual(srp.call_count, 2)
+        route.assert_called_once_with("192.168.1.1")
+        self.assertEqual(srp.call_args.kwargs["iface"], "eth0")
+
+    @override_settings(SCAN_ARP_RETRIES=1, SCAN_ARP_TIMEOUT=2)
+    @patch("core.scan.scapy.conf.route.route")
+    @patch("core.scan.scapy.srp")
+    def test_discover_devices_uses_route_interface_for_each_network(self, srp, route):
+        first = self.scan_element("192.168.1.10", "aa:bb:cc:dd:ee:01")
+        second = self.scan_element("192.168.20.10", "aa:bb:cc:dd:ee:02")
+        route.side_effect = [
+            ("eth0", "192.168.1.20", "0.0.0.0"),
+            ("eth0.20", "192.168.20.20", "0.0.0.0"),
+        ]
+        srp.side_effect = [([first], None), ([second], None)]
+
+        discover_devices("192.168.1.0/24")
+        discover_devices("192.168.20.0/24")
+
+        self.assertEqual(
+            [call.args[0] for call in route.call_args_list],
+            ["192.168.1.1", "192.168.20.1"],
+        )
+        self.assertEqual(
+            [call.kwargs["iface"] for call in srp.call_args_list],
+            ["eth0", "eth0.20"],
+        )
 
     @patch("core.scan.scapy.get_if_hwaddr", return_value="AA:BB:CC:DD:EE:FF")
     @patch("core.scan.scapy.conf.route.route")
@@ -872,9 +1085,109 @@ class ScanStabilityTests(TestCase):
         mark_missing.assert_called_once_with(
             ["aa:bb:cc:dd:ee:10", "aa:bb:cc:dd:ee:20"],
             scan_run=scan_run,
+            ip_ranges=["192.168.1.0/24"],
         )
         clear_gateways.assert_called_once_with("192.168.1.1")
         self.assertEqual(scan_run.devices_seen, 2)
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    def test_scan_combines_multiple_network_ranges(self):
+        first = self.scan_element("192.168.1.10", "aa:bb:cc:dd:ee:10")
+        second = self.scan_element("192.168.20.10", "aa:bb:cc:dd:ee:20")
+        stats = {"new_devices": 0, "ports_opened": 0, "ports_closed": 0}
+        config = AppSettings.load()
+        config.scan_ranges = ["192.168.1.0/24", "192.168.20.0/24"]
+        config.scan_range_labels = {
+            "192.168.1.0/24": "Main LAN",
+            "192.168.20.0/24": "IoT",
+        }
+        config.save(update_fields=["scan_ranges", "scan_range_labels"])
+
+        with (
+            patch("core.scan.get_default_gateway_ip", return_value="192.168.1.1"),
+            patch("core.scan.discover_devices", side_effect=[[first], [second]]) as discover,
+            patch("core.scan.local_scanner_interface", return_value=None),
+            patch("core.scan.discover_hostname_hints", return_value={}),
+            patch("core.scan.ssdp_metadata_map", return_value={}),
+            patch("core.scan.sync_discovered_device", return_value=stats) as sync_device,
+            patch("core.scan.clear_stale_gateways"),
+            patch("core.scan.mark_missing_devices_offline") as mark_missing,
+        ):
+            scan_run = scan(["192.168.1.0/24", "192.168.20.0/24"])
+
+        self.assertEqual(
+            [item.args[0] for item in discover.call_args_list],
+            ["192.168.1.0/24", "192.168.20.0/24"],
+        )
+        self.assertEqual(sync_device.call_count, 2)
+        self.assertEqual(scan_run.ip_range, "192.168.1.0/24")
+        self.assertEqual(
+            scan_run.scan_ranges,
+            ["192.168.1.0/24", "192.168.20.0/24"],
+        )
+        self.assertEqual(
+            scan_run.scan_range_labels,
+            {
+                "192.168.1.0/24": "Main LAN",
+                "192.168.20.0/24": "IoT",
+            },
+        )
+        self.assertEqual(scan_run.devices_seen, 2)
+        mark_missing.assert_called_once_with(
+            ["aa:bb:cc:dd:ee:10", "aa:bb:cc:dd:ee:20"],
+            scan_run=scan_run,
+            ip_ranges=["192.168.1.0/24", "192.168.20.0/24"],
+        )
+
+    @override_settings(
+        SCAN_OFFLINE_AFTER_MISSES=1,
+        SCAN_CONFIRM_OFFLINE_WITH_PORTS=False,
+        SCAN_CONFIRM_OFFLINE_WITH_ICMP=False,
+    )
+    def test_missing_devices_are_scoped_to_scanned_ranges(self):
+        inside = Device.objects.create(
+            name="Inside",
+            ip="192.168.1.10",
+            mac="aa:bb:cc:dd:ee:10",
+            online=True,
+        )
+        outside = Device.objects.create(
+            name="Outside",
+            ip="192.168.20.10",
+            mac="aa:bb:cc:dd:ee:20",
+            online=True,
+        )
+
+        mark_missing_devices_offline([], ip_ranges=["192.168.1.0/24"])
+
+        inside.refresh_from_db()
+        outside.refresh_from_db()
+        self.assertFalse(inside.online)
+        self.assertTrue(outside.online)
+
+    def test_validate_ip_ranges_normalizes_and_rejects_overlaps(self):
+        self.assertEqual(
+            validate_ip_ranges(["192.168.1.4/24", "192.168.20.0/24"]),
+            ["192.168.1.0/24", "192.168.20.0/24"],
+        )
+        with self.assertRaisesMessage(ValueError, "must not overlap"):
+            validate_ip_ranges(["192.168.1.0/24", "192.168.1.128/25"])
+
+    @override_settings(SCAN_MAX_HOSTS=1024)
+    def test_validate_ip_ranges_accepts_up_to_1024_addresses_per_range(self):
+        self.assertEqual(
+            validate_ip_ranges(["192.168.0.0/22"]),
+            ["192.168.0.0/22"],
+        )
+        with self.assertRaisesMessage(ValueError, "Maximum allowed hosts: 1024"):
+            validate_ip_ranges(["192.168.0.0/21"])
+
+    @override_settings(SCAN_MAX_RANGES=2)
+    def test_validate_ip_ranges_enforces_range_count_limit(self):
+        with self.assertRaisesMessage(ValueError, "Maximum allowed ranges: 2"):
+            validate_ip_ranges(
+                ["192.168.1.0/24", "192.168.20.0/24", "192.168.30.0/24"]
+            )
 
     @override_settings(SCAN_OFFLINE_AFTER_MISSES=3, PORT_SCAN_ENABLED=False)
     def test_missing_device_is_not_marked_offline_until_grace_limit(self):
@@ -2207,6 +2520,65 @@ class ScanApiTests(TestCase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.name, "Laptop")
 
+    def test_bulk_update_marks_selected_devices_as_known(self):
+        second_device = Device.objects.create(
+            name="Phone",
+            ip="192.168.1.21",
+            mac="bb:bb:bb:bb:bb:bb",
+            known=False,
+        )
+        untouched_device = Device.objects.create(
+            name="Tablet",
+            ip="192.168.1.22",
+            mac="cc:cc:cc:cc:cc:cc",
+            known=False,
+        )
+        self.device.known = False
+        self.device.save(update_fields=["known"])
+
+        response = self.client.post(
+            "/api/v1/devices/bulk-update/",
+            {"ids": [self.device.id, second_device.id], "known": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        second_device.refresh_from_db()
+        untouched_device.refresh_from_db()
+        self.assertTrue(self.device.known)
+        self.assertTrue(second_device.known)
+        self.assertFalse(untouched_device.known)
+        self.assertEqual(response.data["data"]["updated_count"], 2)
+        self.assertEqual(
+            response.data["notification"]["message"],
+            "2 selected devices marked as known.",
+        )
+
+    def test_bulk_update_rejects_missing_device(self):
+        response = self.client.post(
+            "/api/v1/devices/bulk-update/",
+            {"ids": [self.device.id, 999999], "known": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("ids", response.data)
+
+    def test_restricted_user_cannot_bulk_update_devices(self):
+        regular_user = User.objects.create_user(username="bulk-viewer", password="password")
+        UserAccess.objects.create(user=regular_user, can_edit_devices=False)
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.post(
+            "/api/v1/devices/bulk-update/",
+            {"ids": [self.device.id], "known": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
     def test_restricted_user_cannot_edit_home_map_or_run_scan(self):
         regular_user = User.objects.create_user(username="viewer", password="password")
         UserAccess.objects.create(
@@ -2616,6 +2988,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         config = AppSettings.load()
         self.assertEqual(config.ip_range, "192.168.1.0/24")
+        self.assertEqual(config.scan_ranges, ["192.168.1.0/24"])
         self.assertEqual(config.scan_interval, 15)
         self.assertEqual(config.time_zone, "Asia/Jerusalem")
         self.assertEqual(config.version_check_interval, 3600)
@@ -2671,6 +3044,154 @@ class ScanApiTests(TestCase):
         self.assertEqual(
             response.data["data"]["home_map_layout"],
             {"order": ["Floor", "Bedroom"], "parents": {"Bedroom": "Floor"}},
+        )
+
+    def test_settings_endpoint_saves_multiple_network_ranges(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "scan_ranges": ["192.168.1.4/24", "192.168.20.0/24"],
+                "scan_range_labels": {
+                    "192.168.1.4/24": "Main LAN",
+                    "192.168.20.0/24": "IoT",
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        config = AppSettings.load()
+        self.assertEqual(config.ip_range, "192.168.1.0/24")
+        self.assertEqual(
+            config.scan_ranges,
+            ["192.168.1.0/24", "192.168.20.0/24"],
+        )
+        self.assertEqual(
+            config.scan_range_labels,
+            {
+                "192.168.1.0/24": "Main LAN",
+                "192.168.20.0/24": "IoT",
+            },
+        )
+        self.assertEqual(response.data["data"]["scan_ranges"], config.scan_ranges)
+        self.assertEqual(
+            response.data["data"]["scan_range_labels"],
+            config.scan_range_labels,
+        )
+
+    def test_settings_endpoint_rejects_blank_network_name(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "scan_ranges": ["192.168.1.0/24"],
+                "scan_range_labels": {"192.168.1.0/24": ""},
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("scan_range_labels", response.data)
+
+    def test_settings_endpoint_rejects_duplicate_network_names(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "scan_ranges": ["192.168.1.0/24", "192.168.20.0/24"],
+                "scan_range_labels": {
+                    "192.168.1.0/24": "IoT",
+                    "192.168.20.0/24": "iot",
+                },
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("scan_range_labels", response.data)
+
+    @override_settings(SCAN_MAX_HOSTS=1024)
+    def test_settings_endpoint_accepts_1024_address_network_range(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"scan_ranges": ["192.168.0.0/22"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["scan_ranges"], ["192.168.0.0/22"])
+        self.assertEqual(response.data["data"]["scan_max_hosts"], 1024)
+
+    @override_settings(SCAN_MAX_HOSTS=1024)
+    def test_settings_endpoint_rejects_more_than_1024_addresses(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"scan_ranges": ["192.168.0.0/21"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("scan_ranges", response.data)
+
+    def test_removing_network_range_marks_only_previously_monitored_devices_offline(self):
+        removed_device = Device.objects.create(
+            name="Removed VLAN device",
+            ip="192.168.1.50",
+            mac="aa:bb:cc:dd:ee:50",
+            online=True,
+            status=Device.Status.ONLINE,
+        )
+        unrelated_device = Device.objects.create(
+            name="Imported external device",
+            ip="192.168.30.50",
+            mac="aa:bb:cc:dd:ee:60",
+            online=True,
+            status=Device.Status.ONLINE,
+        )
+
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"scan_ranges": ["192.168.20.0/24"]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        removed_device.refresh_from_db()
+        unrelated_device.refresh_from_db()
+        self.device.refresh_from_db()
+        self.assertFalse(removed_device.online)
+        self.assertFalse(self.device.online)
+        self.assertEqual(removed_device.status, Device.Status.OFFLINE)
+        self.assertEqual(removed_device.status_source, Device.StatusSource.NONE)
+        self.assertEqual(
+            removed_device.status_reason,
+            "Outside the configured network ranges.",
+        )
+        self.assertTrue(unrelated_device.online)
+        self.assertFalse(
+            NetworkEvent.objects.filter(
+                event_type=NetworkEvent.EventType.DEVICE_OFFLINE,
+            ).exists()
+        )
+        self.assertIn(
+            "2 devices were marked offline",
+            response.data["notification"]["message"],
+        )
+
+    def test_settings_endpoint_rejects_overlapping_network_ranges(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "scan_ranges": ["192.168.1.0/24", "192.168.1.128/25"],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("scan_ranges", response.data)
+        self.assertEqual(
+            response.data["notification"]["message"],
+            "Network ranges must not overlap. CIDR entries are normalized to their "
+            "network boundary; use one larger range instead of adding ranges it "
+            "already contains.",
         )
 
     def test_settings_endpoint_rejects_short_version_check_interval(self):
@@ -3137,12 +3658,21 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["counters"]["offline_devices"], 1)
         self.assertEqual(response.data["counters"]["unnotified_events"], 1)
         self.assertEqual(response.data["time_zone"], "UTC")
+        self.assertEqual(response.data["network_ranges"], ["192.168.1.0/24"])
+        self.assertEqual(
+            response.data["network_range_labels"],
+            {"192.168.1.0/24": "Primary network"},
+        )
         self.assertEqual(
             response.data["integrations"]["adguard"],
             {"enabled": False, "configured": False},
         )
         self.assertFalse(response.data["visibility"]["is_scanning"])
         self.assertEqual(response.data["visibility"]["current_range"], "192.168.1.0/24")
+        self.assertEqual(
+            response.data["visibility"]["current_ranges"],
+            ["192.168.1.0/24"],
+        )
         self.assertTrue(response.data["data"]["started_at"].endswith("Z"))
         self.assertTrue(response.data["data"]["finished_at"].endswith("Z"))
         self.assertTrue(response.data["visibility"]["started_at"].endswith("Z"))
@@ -3332,6 +3862,53 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["pagination"]["count"], 1)
         self.assertEqual(response.data["data"][0]["id"], recent.id)
+
+    def test_device_endpoint_filters_by_configured_network_ranges(self):
+        config = AppSettings.load()
+        config.ip_range = "192.168.1.0/24"
+        config.scan_ranges = ["192.168.1.0/24", "192.168.20.0/24"]
+        config.save(update_fields=["ip_range", "scan_ranges"])
+        vlan_device = Device.objects.create(
+            name="VLAN device",
+            ip="192.168.20.30",
+            mac="bb:bb:bb:bb:bb:bb",
+        )
+        outside_device = Device.objects.create(
+            name="Outside device",
+            ip="192.168.30.40",
+            mac="cc:cc:cc:cc:cc:cc",
+        )
+
+        single_response = self.client.get(
+            "/api/v1/device/",
+            {"network_ranges": "192.168.20.0/24"},
+        )
+        multiple_response = self.client.get(
+            "/api/v1/device/",
+            {"network_ranges": "192.168.1.0/24,192.168.20.0/24"},
+        )
+        outside_response = self.client.get(
+            "/api/v1/device/",
+            {"network_ranges": "outside"},
+        )
+
+        self.assertEqual(single_response.status_code, 200)
+        self.assertEqual(single_response.data["pagination"]["count"], 1)
+        self.assertEqual(single_response.data["data"][0]["id"], vlan_device.id)
+        self.assertEqual(multiple_response.status_code, 200)
+        self.assertEqual(multiple_response.data["pagination"]["count"], 2)
+        self.assertEqual(outside_response.status_code, 200)
+        self.assertEqual(outside_response.data["pagination"]["count"], 1)
+        self.assertEqual(outside_response.data["data"][0]["id"], outside_device.id)
+
+    def test_device_endpoint_rejects_unconfigured_network_range_filter(self):
+        response = self.client.get(
+            "/api/v1/device/",
+            {"network_ranges": "192.168.200.0/24"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("network_ranges", response.data)
 
     def test_device_endpoint_rejects_invalid_first_seen_period(self):
         response = self.client.get(
@@ -4344,7 +4921,23 @@ class ScanApiTests(TestCase):
         response = self.client.post("/api/v1/scan/", {}, format="json")
 
         self.assertEqual(response.status_code, 202)
-        scan_mock.assert_called_once_with("192.168.1.0/24")
+        scan_mock.assert_called_once_with(["192.168.1.0/24"])
+
+    @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
+    @patch("core.views.scan")
+    def test_scan_now_uses_saved_network_ranges(self, scan_mock):
+        config = AppSettings.load()
+        config.ip_range = "192.168.1.0/24"
+        config.scan_ranges = ["192.168.1.0/24", "192.168.20.0/24"]
+        config.save(update_fields=["ip_range", "scan_ranges"])
+        scan_mock.return_value = self.scan_run
+
+        response = self.client.post("/api/v1/scan/", {}, format="json")
+
+        self.assertEqual(response.status_code, 202)
+        scan_mock.assert_called_once_with(
+            ["192.168.1.0/24", "192.168.20.0/24"]
+        )
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
     @patch("core.views.scan")

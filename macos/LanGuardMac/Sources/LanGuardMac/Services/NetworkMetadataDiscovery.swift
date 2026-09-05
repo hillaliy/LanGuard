@@ -5,12 +5,6 @@ protocol NetworkMetadataDiscovering: Sendable {
     func discoverMetadata(for ipAddresses: [String]) async -> [String: DeviceMetadata]
 }
 
-struct DisabledNetworkMetadataDiscovery: NetworkMetadataDiscovering {
-    func discoverMetadata(for ipAddresses: [String]) async -> [String: DeviceMetadata] {
-        [:]
-    }
-}
-
 struct DefaultNetworkMetadataDiscovery: NetworkMetadataDiscovering {
     private let dnsDiscovery: DNSPTRMetadataDiscovery
     private let ssdpDiscovery: SSDPMetadataDiscovery
