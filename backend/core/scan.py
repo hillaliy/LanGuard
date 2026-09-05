@@ -16,7 +16,7 @@ import scapy.all as scapy
 from scapy.data import ManufDA
 from urllib3.exceptions import InsecureRequestWarning
 
-from .models import Device, DevicePort, NetworkEvent, ScanRun
+from .models import AppSettings, Device, DevicePort, NetworkEvent, ScanRun
 from .notifications import notify_event
 from .user_messages import scan_error_message
 
@@ -1047,6 +1047,87 @@ def validate_ip_range(ip_range):
     return network.with_prefixlen
 
 
+def validate_ip_ranges(ip_ranges):
+    if isinstance(ip_ranges, str):
+        values = [value for value in re.split(r"[,\n]+", ip_ranges) if value.strip()]
+    elif isinstance(ip_ranges, (list, tuple)):
+        values = list(ip_ranges)
+    else:
+        raise ValueError("Network ranges must be provided as a list of CIDR ranges.")
+
+    if not values:
+        raise ValueError("Configure at least one network range.")
+    if len(values) > settings.SCAN_MAX_RANGES:
+        raise ValueError(
+            f"Too many network ranges. Maximum allowed ranges: {settings.SCAN_MAX_RANGES}."
+        )
+
+    normalized = []
+    networks = []
+    for value in values:
+        network_range = validate_ip_range(str(value).strip())
+        network = ipaddress.ip_network(network_range, strict=False)
+        if any(network.overlaps(existing) for existing in networks):
+            raise ValueError(
+                "Network ranges must not overlap. CIDR entries are normalized to "
+                "their network boundary; use one larger range instead of adding "
+                "ranges it already contains."
+            )
+        normalized.append(network_range)
+        networks.append(network)
+    return normalized
+
+
+def mark_devices_outside_scan_ranges_offline(previous_ranges, current_ranges, now=None):
+    previous_networks = [
+        ipaddress.ip_network(network_range, strict=False)
+        for network_range in validate_ip_ranges(previous_ranges)
+    ]
+    current_networks = [
+        ipaddress.ip_network(network_range, strict=False)
+        for network_range in validate_ip_ranges(current_ranges)
+    ]
+    if previous_networks == current_networks:
+        return 0
+
+    now = now or timezone.now()
+    updated_devices = []
+    for device in Device.objects.filter(online=True).iterator():
+        try:
+            address = ipaddress.ip_address(device.ip)
+        except ValueError:
+            continue
+        if not any(address in network for network in previous_networks):
+            continue
+        if any(address in network for network in current_networks):
+            continue
+
+        device.online = False
+        device.missed_scans = 0
+        set_device_status(
+            device,
+            Device.Status.OFFLINE,
+            Device.StatusSource.NONE,
+            "Outside the configured network ranges.",
+            now=now,
+        )
+        updated_devices.append(device)
+
+    if updated_devices:
+        Device.objects.bulk_update(
+            updated_devices,
+            [
+                "online",
+                "missed_scans",
+                "status",
+                "status_source",
+                "status_reason",
+                "last_status_check",
+            ],
+        )
+    return len(updated_devices)
+
+
 def default_gateway_from_proc_route(path="/proc/net/route"):
     try:
         with open(path, encoding="utf-8") as route_file:
@@ -1408,6 +1489,9 @@ def sync_device_ports(device, open_ports, scan_run=None):
 
 def discover_devices(ip_range):
     ip_range = validate_ip_range(ip_range)
+    network = ipaddress.ip_network(ip_range, strict=False)
+    route_target = str(next(network.hosts(), network.network_address))
+    interface = scapy.conf.route.route(route_target)[0]
     discovered = {}
 
     for _ in range(max(1, settings.SCAN_ARP_RETRIES)):
@@ -1416,6 +1500,7 @@ def discover_devices(ip_range):
         arp_request_broadcast = broadcast / arp_request
         answered = scapy.srp(
             arp_request_broadcast,
+            iface=interface,
             timeout=settings.SCAN_ARP_TIMEOUT,
             verbose=False,
         )[0]
@@ -1427,30 +1512,57 @@ def discover_devices(ip_range):
     return list(discovered.values())
 
 
-def scan(ip_range, scan_run=None):
-    ip_range = validate_ip_range(ip_range)
-    scan_run = scan_run or ScanRun.objects.create(ip_range=ip_range)
+def scan(ip_ranges, scan_run=None):
+    scan_ranges = validate_ip_ranges(ip_ranges)
+    primary_range = scan_ranges[0]
+    configured_labels = AppSettings.load().effective_scan_range_labels
+    scan_range_labels = {
+        network_range: configured_labels[network_range]
+        for network_range in scan_ranges
+        if network_range in configured_labels
+    }
+    scan_run = scan_run or ScanRun.objects.create(
+        ip_range=primary_range,
+        scan_ranges=scan_ranges,
+        scan_range_labels=scan_range_labels,
+    )
+    if (
+        scan_run.ip_range != primary_range
+        or scan_run.scan_ranges != scan_ranges
+        or scan_run.scan_range_labels != scan_range_labels
+    ):
+        scan_run.ip_range = primary_range
+        scan_run.scan_ranges = scan_ranges
+        scan_run.scan_range_labels = scan_range_labels
+        scan_run.save(update_fields=["ip_range", "scan_ranges", "scan_range_labels"])
     gateway_ip = get_default_gateway_ip()
     ports_opened = 0
     ports_closed = 0
     new_devices = 0
 
     try:
-        answered_list = discover_devices(ip_range)
-        local_interface = local_scanner_interface(ip_range, route_target=gateway_ip)
-        local_scanner_mac = local_interface["mac"] if local_interface else ""
-        if local_interface and local_scanner_mac not in {
-            element[1].hwsrc.lower() for element in answered_list
-        }:
-            answered_list.append(
-                (
-                    None,
-                    scapy.ARP(
-                        psrc=local_interface["ip"],
-                        hwsrc=local_scanner_mac,
+        discovered = {}
+        local_scanner_macs = set()
+        for ip_range in scan_ranges:
+            for element in discover_devices(ip_range):
+                discovered[element[1].hwsrc.lower()] = element
+
+            local_interface = local_scanner_interface(ip_range, route_target=gateway_ip)
+            if local_interface:
+                local_scanner_mac = local_interface["mac"]
+                local_scanner_macs.add(local_scanner_mac)
+                discovered.setdefault(
+                    local_scanner_mac,
+                    (
+                        None,
+                        scapy.ARP(
+                            psrc=local_interface["ip"],
+                            hwsrc=local_scanner_mac,
+                        ),
                     ),
                 )
-            )
+
+        answered_list = list(discovered.values())
         scan_started_at = timezone.now()
         oui = scapy.MANUFDB
         hostname_hints = discover_hostname_hints()
@@ -1471,7 +1583,7 @@ def scan(ip_range, scan_run=None):
                 vendor_hints=vendor_hints,
                 status_source=(
                     Device.StatusSource.LOCAL
-                    if element[1].hwsrc.lower() == local_scanner_mac
+                    if element[1].hwsrc.lower() in local_scanner_macs
                     else Device.StatusSource.ARP
                 ),
             )
@@ -1481,7 +1593,11 @@ def scan(ip_range, scan_run=None):
 
         online_macs = [element[1].hwsrc.lower() for element in answered_list]
         clear_stale_gateways(gateway_ip)
-        mark_missing_devices_offline(online_macs, scan_run=scan_run)
+        mark_missing_devices_offline(
+            online_macs,
+            scan_run=scan_run,
+            ip_ranges=scan_ranges,
+        )
     except Exception as exc:
         scan_run.status = ScanRun.Status.FAILED
         scan_run.finished_at = timezone.now()
@@ -1689,9 +1805,19 @@ def sync_discovered_device(
     }
 
 
-def mark_missing_devices_offline(online_macs, scan_run=None):
+def mark_missing_devices_offline(online_macs, scan_run=None, ip_ranges=None):
     offline_devices = Device.objects.exclude(mac__in=online_macs).filter(online=True)
+    networks = [
+        ipaddress.ip_network(network_range, strict=False)
+        for network_range in validate_ip_ranges(ip_ranges)
+    ] if ip_ranges else []
     for device in offline_devices:
+        if networks:
+            try:
+                if not any(ipaddress.ip_address(device.ip) in network for network in networks):
+                    continue
+            except ValueError:
+                continue
         now = timezone.now()
         device.missed_scans += 1
         miss_limit = offline_miss_limit(device)

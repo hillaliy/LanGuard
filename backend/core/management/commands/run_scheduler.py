@@ -16,14 +16,22 @@ from core.adguard import sync_adguard_query_log
 LOGGER = logging.getLogger(__name__)
 
 
+def load_scan_schedule(ip_range_override=None, interval_override=None):
+    config = AppSettings.load()
+    scan_ranges = ip_range_override or config.effective_scan_ranges
+    interval = interval_override or config.scan_interval
+    return list(scan_ranges), interval
+
+
 class Command(BaseCommand):
     help = "Run scheduled network scans."
 
     def add_arguments(self, parser):
         parser.add_argument(
             "--ip-range",
+            action="append",
             default=None,
-            help="CIDR range to scan. Defaults to saved app settings.",
+            help="CIDR range to scan. Repeat for multiple ranges. Defaults to saved app settings.",
         )
         parser.add_argument(
             "--interval",
@@ -44,18 +52,19 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        app_config = AppSettings.load()
-        ip_range = options["ip_range"] or app_config.ip_range
-        interval = options["interval"] or app_config.scan_interval
+        ip_range_override = options["ip_range"]
+        interval_override = options["interval"]
         retry_interval = options["retry_interval"]
         stop_event = threading.Event()
 
         def scheduled_scan():
-            LOGGER.info("Starting scheduled scan for %s", ip_range)
-            self.stdout.write(f"Starting scheduled scan for {ip_range}")
-            scan(ip_range)
-            LOGGER.info("Completed scheduled scan for %s", ip_range)
-            self.stdout.write(self.style.SUCCESS(f"Completed scan for {ip_range}"))
+            scan_ranges, _ = load_scan_schedule(ip_range_override, interval_override)
+            ranges_label = ", ".join(scan_ranges)
+            LOGGER.info("Starting scheduled scan for %s", ranges_label)
+            self.stdout.write(f"Starting scheduled scan for {ranges_label}")
+            scan(scan_ranges)
+            LOGGER.info("Completed scheduled scan for %s", ranges_label)
+            self.stdout.write(self.style.SUCCESS(f"Completed scan for {ranges_label}"))
 
         def scheduled_notification_retry():
             LOGGER.info("Retrying failed notification deliveries")
@@ -90,8 +99,8 @@ class Command(BaseCommand):
             try:
                 scheduled_scan()
             except Exception:
-                LOGGER.exception("Scheduled scan failed for %s", ip_range)
-                self.stderr.write(self.style.ERROR(f"Scheduled scan failed for {ip_range}"))
+                LOGGER.exception("Scheduled network scan failed")
+                self.stderr.write(self.style.ERROR("Scheduled network scan failed"))
             finally:
                 close_old_connections()
 
@@ -173,11 +182,23 @@ class Command(BaseCommand):
         adguard_sync_thread = threading.Thread(target=adguard_sync_loop, daemon=True)
         adguard_sync_thread.start()
 
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Scheduled network scans {interval} minutes after each scan completes for {ip_range}"
+        if ip_range_override or interval_override:
+            scan_ranges, interval = load_scan_schedule(
+                ip_range_override,
+                interval_override,
             )
-        )
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "Scheduled network scans "
+                    f"{interval} minutes after each scan completes for {', '.join(scan_ranges)}"
+                )
+            )
+        else:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "Scheduled network scans follow the saved ranges and interval"
+                )
+            )
         self.stdout.write(
             self.style.SUCCESS(
                 f"Scheduled notification retries every {retry_interval} minutes"
@@ -190,5 +211,9 @@ class Command(BaseCommand):
             self.style.SUCCESS("AdGuard Home sync follows the saved integration interval")
         )
 
-        while not stop_event.wait(interval * 60):
+        while not stop_event.is_set():
+            _, interval = load_scan_schedule(ip_range_override, interval_override)
+            close_old_connections()
+            if stop_event.wait(interval * 60):
+                break
             run_scheduled_scan()

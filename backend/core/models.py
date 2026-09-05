@@ -10,6 +10,18 @@ def default_quiet_hours_days():
     return list(QUIET_HOURS_DAY_KEYS)
 
 
+def default_scan_ranges():
+    return ["192.168.1.0/24"]
+
+
+def default_scan_range_labels():
+    return {"192.168.1.0/24": "Primary network"}
+
+
+def default_scan_range_label(index):
+    return "Primary network" if index == 0 else f"Network {index + 1}"
+
+
 class Device(models.Model):
     class NotificationPreference(models.TextChoices):
         INHERIT = "inherit", "Use global setting"
@@ -194,6 +206,8 @@ class ScanRun(models.Model):
         FAILED = "failed", "Failed"
 
     ip_range = models.CharField(max_length=64)
+    scan_ranges = models.JSONField(default=list, blank=True)
+    scan_range_labels = models.JSONField(default=dict, blank=True)
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
@@ -327,6 +341,8 @@ class UserAccess(models.Model):
 class AppSettings(models.Model):
     singleton_key = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
     ip_range = models.CharField(max_length=64, default="192.168.1.0/24")
+    scan_ranges = models.JSONField(default=default_scan_ranges, blank=True)
+    scan_range_labels = models.JSONField(default=default_scan_range_labels, blank=True)
     scan_interval = models.PositiveIntegerField(default=10)
     time_zone = models.CharField(max_length=64, default="UTC")
     version_check_interval = models.PositiveIntegerField(default=21600)
@@ -372,10 +388,31 @@ class AppSettings(models.Model):
     def __str__(self):
         return "LanGuard settings"
 
+    @property
+    def effective_scan_ranges(self):
+        if isinstance(self.scan_ranges, list):
+            ranges = [str(value).strip() for value in self.scan_ranges if str(value).strip()]
+            if ranges:
+                return ranges
+        return [self.ip_range]
+
+    @property
+    def effective_scan_range_labels(self):
+        stored_labels = self.scan_range_labels if isinstance(self.scan_range_labels, dict) else {}
+        return {
+            network_range: (
+                str(stored_labels.get(network_range) or "").strip()
+                or default_scan_range_label(index)
+            )
+            for index, network_range in enumerate(self.effective_scan_ranges)
+        }
+
     @classmethod
     def load(cls):
         defaults = {
             "ip_range": settings.IP_RANGE,
+            "scan_ranges": [settings.IP_RANGE],
+            "scan_range_labels": {settings.IP_RANGE: "Primary network"},
             "scan_interval": settings.INTERVAL,
             "time_zone": settings.TIME_ZONE,
             "version_check_interval": settings.VERSION_CHECK_INTERVAL,

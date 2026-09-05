@@ -60,6 +60,8 @@ alerts when new devices appear.
 **Organize**
 
 - Assign names, icons, rooms, roles, and expected device behavior
+- Select multiple new devices and mark them as known in one action
+- Filter the device inventory by one or more configured network ranges
 - Arrange rooms and devices in the Docker Home Map view
 - Export and import device inventory between LanGuard installations
 - Grant each Docker user permission to edit devices, change the Home Map layout, or run manual scans
@@ -197,10 +199,18 @@ The scheduler container runs LanGuard's recurring background work:
 | Activity cleanup | Every 24 hours | Activity retention in Settings |
 | AdGuard Home sync | Every 5 minutes when enabled | AdGuard Home settings |
 
-The scan range and scan interval are loaded when the scheduler starts, so restart
-the scheduler container after changing either value. Activity retention and
-AdGuard Home settings are read from the database during their scheduled loops and
-do not require a restart.
+The scheduler reloads the network ranges and scan interval before each cycle.
+Changes apply after the current wait or scan completes and do not require a
+container restart. Activity retention and AdGuard Home settings are also read
+from the database during their scheduled loops.
+
+LanGuard can scan up to 16 named IPv4 CIDR ranges with up to 1,024 addresses per
+range in one scheduled run. Add each VLAN or subnet under
+**Settings > Scanning > Network ranges**. Results are combined
+into one scan run and devices are matched by MAC address. Because discovery uses
+ARP, the Docker host needs direct Layer 2 access to every configured network,
+typically through a tagged VLAN interface. Routing alone does not forward ARP,
+and LanGuard does not bypass VLAN isolation.
 
 > [!IMPORTANT]
 > When upgrading from version 1.7.0 or earlier, update the stack with the current
@@ -235,7 +245,7 @@ You normally do not need `CORS_ALLOWED_ORIGINS` in the Portainer stack. The fron
 
 Open `http://<docker-host-ip>:8080` and create the first user. That user becomes admin. There is no default admin password.
 
-After sign in, open Settings to change the scan range, scan interval, timezone, and notification channels.
+After sign in, open Settings to change the network ranges, scan interval, timezone, and notification channels.
 
 The scanner waits for the configured scan interval after a scan completes before starting the next scheduled scan. For example, with a 5 minute interval, a scan that finishes at 20:14 will schedule the next scan for about 20:19.
 

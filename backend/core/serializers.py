@@ -1,9 +1,11 @@
 import hashlib
 import json
 
+from django.conf import settings
+from django.contrib.auth.models import User
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
-from django.contrib.auth.models import User
+
 from .access_control import ACCESS_FIELDS, update_user_capabilities, user_capabilities
 from .datetime_utils import utc_isoformat
 from .models import (
@@ -16,6 +18,7 @@ from .models import (
     NotificationDelivery,
     QUIET_HOURS_DAY_KEYS,
     ScanRun,
+    default_scan_range_label,
 )
 from .user_messages import stored_error_message
 
@@ -498,6 +501,18 @@ class ScanRunSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
+class DeviceBulkUpdateSerializer(serializers.Serializer):
+    ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        allow_empty=False,
+        max_length=100,
+    )
+    known = serializers.BooleanField()
+
+    def validate_ids(self, value):
+        return list(dict.fromkeys(value))
+
+
 class NetworkEventSerializer(serializers.ModelSerializer):
     created_at = UTCDateTimeField(read_only=True)
     event_type_display = serializers.CharField(
@@ -623,6 +638,7 @@ class SpeedtestTrackerConnectionSerializer(serializers.Serializer):
 class AppSettingsSerializer(serializers.ModelSerializer):
     updated_at = UTCDateTimeField(read_only=True)
     adguard_last_sync_at = UTCDateTimeField(read_only=True)
+    scan_max_hosts = serializers.SerializerMethodField()
     discord_configured = serializers.SerializerMethodField()
     telegram_configured = serializers.SerializerMethodField()
     webhook_configured = serializers.SerializerMethodField()
@@ -663,6 +679,9 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         model = AppSettings
         fields = (
             "ip_range",
+            "scan_ranges",
+            "scan_range_labels",
+            "scan_max_hosts",
             "scan_interval",
             "time_zone",
             "version_check_interval",
@@ -718,6 +737,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "updated_at": {"read_only": True},
         }
 
+    @extend_schema_field(serializers.IntegerField)
+    def get_scan_max_hosts(self, obj):
+        return settings.SCAN_MAX_HOSTS
+
     @extend_schema_field(serializers.BooleanField)
     def get_discord_configured(self, obj):
         return bool(obj.discord_webhook)
@@ -744,6 +767,70 @@ class AppSettingsSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        if "scan_ranges" in attrs:
+            attrs["ip_range"] = attrs["scan_ranges"][0]
+        elif "ip_range" in attrs:
+            attrs["scan_ranges"] = [attrs["ip_range"]]
+        scan_ranges = attrs.get(
+            "scan_ranges",
+            self.instance.effective_scan_ranges if self.instance else [],
+        )
+        existing_labels = (
+            self.instance.effective_scan_range_labels if self.instance else {}
+        )
+        submitted_labels = attrs.get("scan_range_labels")
+        if submitted_labels is not None and not isinstance(submitted_labels, dict):
+            raise serializers.ValidationError(
+                {"scan_range_labels": "Network names must be provided as an object."}
+            )
+        normalized_submitted_labels = {}
+        if submitted_labels is not None:
+            from .scan import validate_ip_range
+
+            for network_range, label in submitted_labels.items():
+                try:
+                    normalized_range = validate_ip_range(str(network_range).strip())
+                except ValueError as exc:
+                    raise serializers.ValidationError(
+                        {"scan_range_labels": str(exc)}
+                    ) from exc
+                if normalized_range not in scan_ranges:
+                    raise serializers.ValidationError(
+                        {
+                            "scan_range_labels": (
+                                "Network names may only reference configured ranges."
+                            )
+                        }
+                    )
+                normalized_submitted_labels[normalized_range] = label
+
+        labels = {}
+        seen_labels = set()
+        label_source = (
+            normalized_submitted_labels
+            if submitted_labels is not None
+            else existing_labels
+        )
+        for index, network_range in enumerate(scan_ranges):
+            label = str(label_source.get(network_range) or "").strip()
+            if submitted_labels is not None and not label:
+                raise serializers.ValidationError(
+                    {"scan_range_labels": "Enter a name for every network range."}
+                )
+            if not label:
+                label = default_scan_range_label(index)
+            if len(label) > 64:
+                raise serializers.ValidationError(
+                    {"scan_range_labels": "Network names must be 64 characters or less."}
+                )
+            normalized_label = label.casefold()
+            if normalized_label in seen_labels:
+                raise serializers.ValidationError(
+                    {"scan_range_labels": "Network names must be unique."}
+                )
+            seen_labels.add(normalized_label)
+            labels[network_range] = label
+        attrs["scan_range_labels"] = labels
         webhook_enabled = attrs.get(
             "webhook_enabled",
             self.instance.webhook_enabled if self.instance else False,
@@ -823,6 +910,20 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             return validate_ip_range(value)
         except ValueError as exc:
             raise serializers.ValidationError(str(exc)) from exc
+
+    def validate_scan_ranges(self, value):
+        from .scan import validate_ip_ranges
+
+        try:
+            return validate_ip_ranges(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["scan_ranges"] = instance.effective_scan_ranges
+        data["scan_range_labels"] = instance.effective_scan_range_labels
+        return data
 
     def validate_scan_interval(self, value):
         if value < 1:

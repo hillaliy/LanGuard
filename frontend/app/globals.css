@@ -599,10 +599,6 @@ textarea {
   overflow: hidden;
 }
 
-.device-row:hover {
-  background: var(--hover-bg);
-}
-
 .device-list-toolbar {
   background: color-mix(in srgb, var(--muted-panel-bg) 72%, transparent);
 }
@@ -637,6 +633,18 @@ textarea {
 
 .device-list-row:hover {
   background: var(--hover-bg);
+}
+
+.device-list-row.bulk-edit {
+  grid-template-columns: 28px minmax(210px, 1.05fr) minmax(0, 2.75fr);
+}
+
+.device-list-row.bulk-edit.selected {
+  background: color-mix(in srgb, var(--brand-soft) 68%, transparent);
+}
+
+.device-list-row.bulk-edit[aria-disabled='true'] {
+  cursor: default;
 }
 
 .device-list-primary,
@@ -723,71 +731,8 @@ textarea {
   }
 }
 
-.devices-table {
-  table-layout: fixed;
-  width: 100%;
-}
-
 .device-mobile-list {
   display: none;
-}
-
-.devices-table th,
-.devices-table td {
-  vertical-align: middle;
-}
-
-.device-status-cell {
-  width: 10%;
-  white-space: nowrap;
-}
-
-.device-name-cell {
-  width: 18%;
-}
-
-.device-room-cell {
-  width: 9%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.device-role-cell {
-  width: 8%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.device-ip-cell {
-  width: 11%;
-  white-space: nowrap;
-}
-
-.device-mac-cell {
-  width: 14%;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-.device-ports-cell {
-  width: 9%;
-}
-
-.device-risk-cell {
-  width: 7%;
-  white-space: nowrap;
-}
-
-.device-lastseen-cell {
-  width: 9%;
-  white-space: nowrap;
-}
-
-.device-known-cell {
-  width: 5%;
-  white-space: nowrap;
 }
 
 .device-known-badge {
@@ -798,13 +743,6 @@ textarea {
 .device-risk-badge {
   justify-content: center;
   min-width: 64px;
-}
-
-.device-table-icon {
-  align-items: center;
-  color: var(--brand);
-  display: inline-flex;
-  flex: 0 0 auto;
 }
 
 .ports-list {
@@ -871,22 +809,10 @@ textarea {
   overflow-wrap: anywhere;
 }
 
-.network-map-panel {
-  background:
-    linear-gradient(180deg, color-mix(in srgb, var(--muted-panel-bg) 90%, transparent), transparent),
-    var(--panel-strong-bg);
-  border: 1px solid var(--border-color);
-  overflow: hidden;
-}
-
 .rooms-map-panel {
   background: var(--panel-strong-bg);
   border: 1px solid var(--border-color);
   overflow: hidden;
-}
-
-.network-map {
-  padding: 18px;
 }
 
 .rooms-map {
@@ -1558,10 +1484,6 @@ textarea {
     width: 100%;
   }
 
-  .devices-table {
-    display: none;
-  }
-
   .device-list,
   .device-list-toolbar {
     display: none;
@@ -1581,11 +1503,6 @@ textarea {
 
   .ports-list {
     flex-wrap: wrap;
-  }
-
-  .devices-pagination {
-    align-items: flex-start;
-    gap: 12px;
   }
 
   .network-device-grid {

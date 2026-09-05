@@ -61,12 +61,6 @@ struct TCPPortScanner: PortScanning {
     }
 }
 
-struct DisabledPortScanner: PortScanning {
-    func scanOpenPorts(host: String, ports: [Int]) async -> [Int] {
-        []
-    }
-}
-
 private final class PortScanContinuationGate: @unchecked Sendable {
     private let lock = NSLock()
     private var didResume = false

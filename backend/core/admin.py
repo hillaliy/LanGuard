@@ -84,6 +84,8 @@ class AdGuardUnmatchedClientAdmin(admin.ModelAdmin):
 class ScanRunAdmin(admin.ModelAdmin):
     list_display = (
         "ip_range",
+        "scan_ranges",
+        "scan_range_labels",
         "status",
         "started_at",
         "finished_at",
@@ -116,6 +118,8 @@ class NotificationDeliveryAdmin(admin.ModelAdmin):
 class AppSettingsAdmin(admin.ModelAdmin):
     list_display = (
         "ip_range",
+        "scan_ranges",
+        "scan_range_labels",
         "scan_interval",
         "version_check_interval",
         "activity_cleanup_retention_days",

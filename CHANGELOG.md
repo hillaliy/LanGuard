@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.13.0 - 2026-09-05
+
+- Added Docker support for scanning multiple VLANs and routed IPv4 networks in one combined scan run, with up to 1,024 addresses per configured range.
+- Added device inventory filtering by one or more configured network ranges, including devices outside the monitored ranges.
+- Added friendly names for configured networks across Settings, device filters, scan status, comparisons, and history.
+- Added bulk device selection for marking multiple new devices as known in one action.
+- Applied saved network ranges and scan intervals automatically on scheduler cycles, and safely marked devices outside removed ranges offline without sending false alerts.
+- Improved logout security by revoking the active API token when a user signs out.
+- Cleaned up unused legacy code, frontend styles, macOS fallback implementations, and outdated internal documentation.
+
 ## 1.12.0 - 2026-09-04
 
 - **Docker/web only:** Added reliable discovery of the Docker scanner host itself, with local-interface status reporting and duplicate-safe updates of imported devices.
