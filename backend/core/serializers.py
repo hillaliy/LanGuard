@@ -555,7 +555,11 @@ class NotificationTestSerializer(serializers.Serializer):
             NotificationDelivery.Channel.WEBHOOK,
         )
     )
-    discord_webhook = serializers.URLField(required=False, allow_blank=True)
+    discord_webhook = serializers.URLField(
+        required=False,
+        allow_blank=True,
+        write_only=True,
+    )
     webhook_url = serializers.URLField(required=False, allow_blank=True, max_length=2048)
     webhook_secret = serializers.CharField(
         required=False,
@@ -567,6 +571,7 @@ class NotificationTestSerializer(serializers.Serializer):
         required=False,
         allow_blank=True,
         max_length=255,
+        write_only=True,
     )
     telegram_user_id = serializers.CharField(
         required=False,
@@ -577,21 +582,24 @@ class NotificationTestSerializer(serializers.Serializer):
     def validate(self, attrs):
         channel = attrs["channel"]
         if channel == NotificationDelivery.Channel.DISCORD:
-            if not attrs.get("discord_webhook", "").strip():
+            saved_webhook = AppSettings.load().discord_webhook
+            if not (attrs.get("discord_webhook", "").strip() or saved_webhook):
                 raise serializers.ValidationError(
                     {"discord_webhook": "Enter a Discord webhook URL."}
                 )
-        elif channel == NotificationDelivery.Channel.TELEGRAM and (
-            not attrs.get("telegram_token", "").strip()
-            or not attrs.get("telegram_user_id", "").strip()
-        ):
-            raise serializers.ValidationError(
-                {
-                    "telegram": (
-                        "Enter both a Telegram bot token and user ID."
-                    )
-                }
-            )
+        elif channel == NotificationDelivery.Channel.TELEGRAM:
+            saved_token = AppSettings.load().telegram_token
+            if (
+                not (attrs.get("telegram_token", "").strip() or saved_token)
+                or not attrs.get("telegram_user_id", "").strip()
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "telegram": (
+                            "Enter both a Telegram bot token and user ID."
+                        )
+                    }
+                )
         elif channel == NotificationDelivery.Channel.WEBHOOK:
             if not attrs.get("webhook_url", "").strip():
                 raise serializers.ValidationError(
@@ -645,7 +653,18 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     webhook_signature_configured = serializers.SerializerMethodField()
     adguard_configured = serializers.SerializerMethodField()
     speedtest_tracker_configured = serializers.SerializerMethodField()
+    discord_webhook = serializers.URLField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
     adguard_password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=255,
+    )
+    telegram_token = serializers.CharField(
         write_only=True,
         required=False,
         allow_blank=True,
@@ -725,8 +744,6 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "updated_at",
         )
         extra_kwargs = {
-            "discord_webhook": {"required": False, "allow_blank": True},
-            "telegram_token": {"required": False, "allow_blank": True},
             "telegram_user_id": {"required": False, "allow_blank": True},
             "webhook_url": {"required": False, "allow_blank": True},
             "adguard_url": {"required": False, "allow_blank": True},
@@ -893,8 +910,12 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             validated_data["webhook_secret"] = ""
         elif not validated_data.get("webhook_secret"):
             validated_data.pop("webhook_secret", None)
+        if not validated_data.get("discord_webhook"):
+            validated_data.pop("discord_webhook", None)
         if not validated_data.get("adguard_username", instance.adguard_username):
             validated_data.setdefault("adguard_password", "")
+        if not validated_data.get("telegram_token"):
+            validated_data.pop("telegram_token", None)
         if not validated_data.get("speedtest_tracker_api_token"):
             validated_data.pop("speedtest_tracker_api_token", None)
         return super().update(instance, validated_data)

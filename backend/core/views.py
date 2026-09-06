@@ -1,4 +1,6 @@
+import csv
 import ipaddress
+import io
 import json
 import urllib.error
 import urllib.request
@@ -183,6 +185,16 @@ DEVICE_ORDERING_FIELDS = {
 }
 FIRST_SEEN_PERIODS = {"today", "7d", "30d"}
 OUTSIDE_NETWORK_RANGE_FILTER = "outside"
+DEVICE_AVAILABILITY_PERIODS = {
+    "week": timedelta(days=7),
+    "month": timedelta(days=30),
+    "year": timedelta(days=365),
+}
+PRESENCE_EVENT_STATUSES = {
+    NetworkEvent.EventType.NEW_DEVICE: "online",
+    NetworkEvent.EventType.DEVICE_ONLINE: "online",
+    NetworkEvent.EventType.DEVICE_OFFLINE: "offline",
+}
 
 
 @extend_schema(exclude=True)
@@ -316,6 +328,82 @@ def paginated_device_payload(request, devices):
         default_limit=10,
         max_limit=100,
     )
+
+
+def append_availability_segment(segments, state, started_at, ended_at):
+    duration_seconds = max((ended_at - started_at).total_seconds(), 0)
+    if duration_seconds <= 0:
+        return
+    if segments and segments[-1]["status"] == state:
+        segments[-1]["ended_at"] = utc_isoformat(ended_at)
+        segments[-1]["duration_seconds"] += duration_seconds
+        return
+    segments.append(
+        {
+            "status": state,
+            "started_at": utc_isoformat(started_at),
+            "ended_at": utc_isoformat(ended_at),
+            "duration_seconds": duration_seconds,
+        }
+    )
+
+
+def device_availability_payload(device, period, now=None):
+    now = now or timezone.now()
+    started_at = now - DEVICE_AVAILABILITY_PERIODS[period]
+    presence_events = device.events.filter(
+        event_type__in=PRESENCE_EVENT_STATUSES,
+        created_at__lte=now,
+    )
+    previous_event = presence_events.filter(created_at__lte=started_at).first()
+    state = (
+        PRESENCE_EVENT_STATUSES[previous_event.event_type]
+        if previous_event
+        else "unknown"
+    )
+    events = list(
+        presence_events.filter(created_at__gt=started_at).order_by("created_at", "id")
+    )
+
+    segments = []
+    cursor = started_at
+    status_changes = 0
+    for event in events:
+        append_availability_segment(segments, state, cursor, event.created_at)
+        state = PRESENCE_EVENT_STATUSES[event.event_type]
+        cursor = event.created_at
+        if event.event_type != NetworkEvent.EventType.NEW_DEVICE:
+            status_changes += 1
+    append_availability_segment(segments, state, cursor, now)
+
+    online_seconds = sum(
+        segment["duration_seconds"]
+        for segment in segments
+        if segment["status"] == "online"
+    )
+    offline_seconds = sum(
+        segment["duration_seconds"]
+        for segment in segments
+        if segment["status"] == "offline"
+    )
+    tracked_seconds = online_seconds + offline_seconds
+    total_seconds = max((now - started_at).total_seconds(), 1)
+
+    return {
+        "period": period,
+        "started_at": utc_isoformat(started_at),
+        "ended_at": utc_isoformat(now),
+        "availability_percent": (
+            round((online_seconds / tracked_seconds) * 100, 1)
+            if tracked_seconds
+            else None
+        ),
+        "coverage_percent": round((tracked_seconds / total_seconds) * 100, 1),
+        "online_seconds": round(online_seconds),
+        "offline_seconds": round(offline_seconds),
+        "status_changes": status_changes,
+        "segments": segments,
+    }
 
 
 def auth_payload(user, token, *, account_created=False):
@@ -576,6 +664,134 @@ def watchyourlan_devices_from_payload(payload):
                 "last_seen": last_seen,
             }
         )
+
+    return {
+        "format": INVENTORY_FORMAT,
+        "version": 1,
+        "devices": devices,
+    }
+
+
+NETALERTX_MAX_CSV_BYTES = 5 * 1024 * 1024
+NETALERTX_MAX_DEVICES = 10000
+NETALERTX_ROLE_MAP = {
+    "access point": "router",
+    "ap": "router",
+    "camera": "camera",
+    "computer": "computer",
+    "desktop": "computer",
+    "firewall": "router",
+    "gateway": "gateway",
+    "hub": "hub",
+    "hypervisor": "server",
+    "intercom": "intercom",
+    "laptop": "computer",
+    "light": "light",
+    "lock": "lock",
+    "nas": "server",
+    "network attached storage": "server",
+    "phone": "phone",
+    "printer": "printer",
+    "router": "router",
+    "sensor": "sensor",
+    "server": "server",
+    "smart plug": "smartPlug",
+    "smartphone": "phone",
+    "speaker": "speaker",
+    "streamer": "streamer",
+    "tablet": "tablet",
+    "television": "tv",
+    "tv": "tv",
+    "watch": "watch",
+    "workstation": "computer",
+}
+
+
+def netalertx_devices_from_csv(payload):
+    if not isinstance(payload, dict) or not isinstance(payload.get("content"), str):
+        raise ValidationError(
+            {"detail": "Choose a devices.csv file exported from NetAlertX."}
+        )
+
+    content = payload["content"].lstrip("\ufeff")
+    if not content.strip():
+        raise ValidationError({"detail": "The selected NetAlertX CSV file is empty."})
+    if len(content.encode("utf-8")) > NETALERTX_MAX_CSV_BYTES:
+        raise ValidationError(
+            {"detail": "The selected NetAlertX CSV file is larger than 5 MB."}
+        )
+
+    try:
+        reader = csv.DictReader(io.StringIO(content, newline=""))
+        fieldnames = {
+            str(name or "").strip().lower() for name in reader.fieldnames or []
+        }
+        if "devmac" not in fieldnames or not ({"devlastip", "devip"} & fieldnames):
+            raise ValidationError(
+                {
+                    "detail": (
+                        "The selected file does not contain NetAlertX device export columns."
+                    )
+                }
+            )
+        rows = list(reader)
+    except csv.Error as exc:
+        raise ValidationError(
+            {"detail": "The selected NetAlertX CSV file could not be parsed."}
+        ) from exc
+
+    if len(rows) > NETALERTX_MAX_DEVICES:
+        raise ValidationError(
+            {"detail": "The NetAlertX CSV file contains more than 10,000 devices."}
+        )
+
+    devices = []
+    for source_row in rows:
+        row = {
+            str(key or "").strip().lower(): value
+            for key, value in source_row.items()
+            if key is not None
+        }
+        device_type = str(row.get("devtype") or "").strip()
+        normalized_type = " ".join(
+            device_type.lower().replace("_", " ").replace("-", " ").split()
+        )
+        role = NETALERTX_ROLE_MAP.get(normalized_type)
+        hostname = str(row.get("devfqdn") or "").strip()
+        if hostname.lower() in {"(unknown)", "(name not found)", "unknown"}:
+            hostname = ""
+        is_new = row.get("devisnew")
+
+        device = {
+            "name": row.get("devname") or hostname or "Device",
+            "hostname": hostname,
+            "hostname_source": Device.IdentitySource.IMPORTED if hostname else "",
+            "ip": row.get("devlastip") or row.get("devip"),
+            "mac": row.get("devmac"),
+            "vendor": row.get("devvendor") or "",
+            "vendor_source": (
+                Device.IdentitySource.IMPORTED if row.get("devvendor") else ""
+            ),
+            "comments": row.get("devcomments") or "",
+            "room": row.get("devlocation") or "",
+            "known": (
+                not parse_inventory_bool(is_new)
+                if is_new not in (None, "")
+                else False
+            ),
+            "status": (
+                Device.Status.ONLINE
+                if parse_inventory_bool(row.get("devpresentlastscan"))
+                else Device.Status.OFFLINE
+            ),
+            "first_seen": row.get("devfirstconnection"),
+            "last_seen": row.get("devlastconnection"),
+        }
+        if role:
+            device["role"] = role
+        if normalized_type == "gateway":
+            device["is_gateway"] = True
+        devices.append(device)
 
     return {
         "format": INVENTORY_FORMAT,
@@ -1258,10 +1474,14 @@ def test_notification_channel(request):
 
     try:
         if channel == NotificationDelivery.Channel.DISCORD:
-            send_discord_test(data["discord_webhook"].strip())
+            saved_webhook = AppSettings.load().discord_webhook
+            send_discord_test(
+                data.get("discord_webhook", "").strip() or saved_webhook
+            )
         elif channel == NotificationDelivery.Channel.TELEGRAM:
+            saved_token = AppSettings.load().telegram_token
             send_telegram_test(
-                data["telegram_token"].strip(),
+                data.get("telegram_token", "").strip() or saved_token,
                 data["telegram_user_id"].strip(),
             )
         else:
@@ -2040,6 +2260,20 @@ def events(request):
     )
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def device_availability(request):
+    device_id = parse_int_param(request.query_params, "device", 0, 1)
+    period = request.query_params.get("period", "week")
+    if period not in DEVICE_AVAILABILITY_PERIODS:
+        raise ValidationError({"period": "Must be one of: week, month, year."})
+    device_instance = get_object_or_404(Device, id=device_id)
+    return Response(
+        {"status": "OK", "data": device_availability_payload(device_instance, period)}
+    )
+
+
 @extend_schema(responses=NotificationDeliverySerializer(many=True))
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
@@ -2103,4 +2337,15 @@ def import_devices(request):
 def import_watchyourlan_devices(request):
     payload = watchyourlan_devices_from_payload(request.data)
     return inventory_import_response(payload, source="WatchYourLAN")
+
+
+@extend_schema(
+    request=OpenApiTypes.OBJECT,
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def import_netalertx_devices(request):
+    payload = netalertx_devices_from_csv(request.data)
+    return inventory_import_response(payload, source="NetAlertX")
     GlobalDNSActivitySerializer,

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.14.0 - 2026-09-06
+
+- Added a Docker migration tool for importing device inventory from the official NetAlertX `devices.csv` export.
+- Added Week, Month, and Year device availability timelines with online time, status changes, and retained-history coverage.
+- Renamed the Docker Settings Add-ons category to Integrations to better describe its built-in service connections.
+- Protected saved Telegram bot tokens and Discord webhook URLs from API responses while allowing tests and updates to reuse stored credentials safely.
+- Added distinct desktop, tablet, and phone layouts with compact device rows, responsive dashboard cards, better filter placement, and Burger navigation on constrained portrait and phone displays.
+
 ## 1.13.0 - 2026-09-05
 
 - Added Docker support for scanning multiple VLANs and routed IPv4 networks in one combined scan run, with up to 1,024 addresses per configured range.

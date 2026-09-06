@@ -2362,6 +2362,94 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 401)
 
+    def test_device_availability_uses_presence_events_across_selected_period(self):
+        now = timezone.now()
+        device = Device.objects.create(
+            name="Availability device",
+            ip="192.168.1.30",
+            mac="bb:bb:bb:bb:bb:bb",
+            firstseen=now - timedelta(days=20),
+        )
+        NetworkEvent.objects.create(
+            device=device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Device came online",
+            created_at=now - timedelta(days=10),
+        )
+        NetworkEvent.objects.create(
+            device=device,
+            event_type=NetworkEvent.EventType.DEVICE_OFFLINE,
+            message="Device went offline",
+            created_at=now - timedelta(days=3),
+        )
+        NetworkEvent.objects.create(
+            device=device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Device came online",
+            created_at=now - timedelta(days=1),
+        )
+
+        response = self.client.get(
+            "/api/v1/device/availability/",
+            {"device": device.id, "period": "week"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.data["data"]
+        self.assertEqual(data["period"], "week")
+        self.assertEqual(
+            [segment["status"] for segment in data["segments"]],
+            ["online", "offline", "online"],
+        )
+        self.assertAlmostEqual(data["availability_percent"], 71.4, delta=0.1)
+        self.assertEqual(data["coverage_percent"], 100.0)
+        self.assertEqual(data["status_changes"], 2)
+        self.assertAlmostEqual(data["online_seconds"], 5 * 86400, delta=2)
+
+    def test_device_availability_reports_missing_history_as_unknown(self):
+        now = timezone.now()
+        device = Device.objects.create(
+            name="Partially tracked device",
+            ip="192.168.1.31",
+            mac="cc:cc:cc:cc:cc:cc",
+            firstseen=now - timedelta(days=20),
+        )
+        NetworkEvent.objects.create(
+            device=device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Device came online",
+            created_at=now - timedelta(days=1),
+        )
+
+        response = self.client.get(
+            "/api/v1/device/availability/",
+            {"device": device.id, "period": "week"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.data["data"]
+        self.assertEqual(
+            [segment["status"] for segment in data["segments"]],
+            ["unknown", "online"],
+        )
+        self.assertEqual(data["availability_percent"], 100.0)
+        self.assertAlmostEqual(data["coverage_percent"], 14.3, delta=0.1)
+
+    def test_device_availability_validates_period_and_authentication(self):
+        response = self.client.get(
+            "/api/v1/device/availability/",
+            {"device": self.device.id, "period": "decade"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("period", response.data)
+
+        unauthenticated_client = APIClient()
+        response = unauthenticated_client.get(
+            "/api/v1/device/availability/",
+            {"device": self.device.id, "period": "week"},
+        )
+        self.assertEqual(response.status_code, 401)
+
     def test_users_endpoint_lists_users(self):
         response = self.client.get("/api/v1/users/")
 
@@ -2808,6 +2896,21 @@ class ScanApiTests(TestCase):
         self.assertEqual(NotificationDelivery.objects.count(), delivery_count)
         self.assertEqual(NetworkEvent.objects.count(), event_count)
 
+    @patch("core.views.send_discord_test")
+    def test_notification_test_endpoint_uses_saved_discord_webhook(self, send_test):
+        config = AppSettings.load()
+        config.discord_webhook = "https://discord.example/saved-webhook"
+        config.save(update_fields=["discord_webhook"])
+
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {"channel": "discord"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        send_test.assert_called_once_with("https://discord.example/saved-webhook")
+
     @patch("core.views.send_telegram_test")
     def test_notification_test_endpoint_sends_telegram(self, send_test):
         response = self.client.post(
@@ -2822,6 +2925,24 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         send_test.assert_called_once_with("bot-token", "123456")
+
+    @patch("core.views.send_telegram_test")
+    def test_notification_test_endpoint_uses_saved_telegram_token(self, send_test):
+        config = AppSettings.load()
+        config.telegram_token = "saved-bot-token"
+        config.save(update_fields=["telegram_token"])
+
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "telegram",
+                "telegram_user_id": "123456",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        send_test.assert_called_once_with("saved-bot-token", "123456")
 
     @patch("core.views.send_webhook_test")
     def test_notification_test_endpoint_sends_webhook(self, send_test):
@@ -3016,11 +3137,8 @@ class ScanApiTests(TestCase):
             "https://automation.example/webhook/languard",
         )
         self.assertEqual(config.webhook_secret, "shared-secret")
-        self.assertEqual(
-            response.data["data"]["discord_webhook"],
-            "https://discord.example/webhook",
-        )
-        self.assertEqual(response.data["data"]["telegram_token"], "token")
+        self.assertNotIn("discord_webhook", response.data["data"])
+        self.assertNotIn("telegram_token", response.data["data"])
         self.assertEqual(response.data["data"]["telegram_user_id"], "123")
         self.assertFalse(response.data["data"]["discord_enabled"])
         self.assertTrue(response.data["data"]["telegram_enabled"])
@@ -3045,6 +3163,56 @@ class ScanApiTests(TestCase):
             response.data["data"]["home_map_layout"],
             {"order": ["Floor", "Bedroom"], "parents": {"Bedroom": "Floor"}},
         )
+
+    def test_settings_endpoint_keeps_telegram_token_secret_and_preserves_blank(self):
+        config = AppSettings.load()
+        config.telegram_token = "saved-bot-token"
+        config.telegram_user_id = "123456"
+        config.save(update_fields=["telegram_token", "telegram_user_id"])
+
+        response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "telegram_token": "",
+                "telegram_user_id": "654321",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        config.refresh_from_db()
+        self.assertEqual(config.telegram_token, "saved-bot-token")
+        self.assertEqual(config.telegram_user_id, "654321")
+        self.assertTrue(response.data["data"]["telegram_configured"])
+        self.assertNotIn("telegram_token", response.data["data"])
+
+        get_response = self.client.get("/api/v1/settings/")
+        self.assertEqual(get_response.status_code, 200)
+        self.assertNotIn("telegram_token", get_response.data["data"])
+
+    def test_settings_endpoint_keeps_discord_webhook_secret_and_preserves_blank(self):
+        config = AppSettings.load()
+        config.discord_webhook = "https://discord.example/saved-webhook"
+        config.save(update_fields=["discord_webhook"])
+
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"discord_webhook": ""},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        config.refresh_from_db()
+        self.assertEqual(
+            config.discord_webhook,
+            "https://discord.example/saved-webhook",
+        )
+        self.assertTrue(response.data["data"]["discord_configured"])
+        self.assertNotIn("discord_webhook", response.data["data"])
+
+        get_response = self.client.get("/api/v1/settings/")
+        self.assertEqual(get_response.status_code, 200)
+        self.assertNotIn("discord_webhook", get_response.data["data"])
 
     def test_settings_endpoint_saves_multiple_network_ranges(self):
         response = self.client.put(
@@ -4475,6 +4643,99 @@ class ScanApiTests(TestCase):
         response = regular_client.post(
             "/api/v1/devices/import/watchyourlan/",
             [],
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_netalertx_inventory_import_maps_devices_csv(self):
+        csv_content = (
+            '"devMac","devName","devType","devVendor","devComments",'
+            '"devFirstConnection","devLastConnection","devLastIP",'
+            '"devPresentLastScan","devIsNew","devLocation","devFQDN"\n'
+            '"b0:be:76:12:34:56","Living Room TV","Television",'
+            '"TP-Link Systems Inc.","Imported, verified",'
+            '"2026-09-01 10:00:00+00:00","2026-09-05 07:30:00+00:00",'
+            '"192.168.1.50","1","0","Living room","tv.local"\n'
+            '"90:dd:5d:12:34:56","Guest phone","Smartphone","Apple, Inc.",'
+            '"","2026-09-02 11:00:00+00:00","2026-09-04 18:00:00+00:00",'
+            '"192.168.1.51","0","1","Guest room",""\n'
+            '"Internet","Internet","Gateway","","",'
+            '"2026-09-01 10:00:00+00:00","2026-09-05 07:30:00+00:00",'
+            '"192.168.1.1","1","0","",""\n'
+        )
+
+        response = self.client.post(
+            "/api/v1/devices/import/netalertx/",
+            {"content": csv_content},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["created"], 2)
+        self.assertEqual(response.data["data"]["skipped"], 1)
+        television = Device.objects.get(mac="b0:be:76:12:34:56")
+        self.assertEqual(television.name, "Living Room TV")
+        self.assertEqual(television.hostname, "tv.local")
+        self.assertEqual(television.hostname_source, Device.IdentitySource.IMPORTED)
+        self.assertEqual(television.vendor, "TP-Link Systems Inc.")
+        self.assertEqual(television.vendor_source, Device.IdentitySource.IMPORTED)
+        self.assertEqual(television.comments, "Imported, verified")
+        self.assertEqual(television.room, "Living room")
+        self.assertEqual(television.role, "tv")
+        self.assertTrue(television.known)
+        self.assertTrue(television.online)
+        self.assertEqual(television.status, Device.Status.ONLINE)
+        phone = Device.objects.get(mac="90:dd:5d:12:34:56")
+        self.assertEqual(phone.role, "phone")
+        self.assertFalse(phone.known)
+        self.assertFalse(phone.online)
+        self.assertEqual(phone.status, Device.Status.OFFLINE)
+
+    def test_netalertx_inventory_import_updates_existing_device_by_mac(self):
+        csv_content = (
+            "devMac,devName,devType,devVendor,devLastIP,devPresentLastScan,"
+            "devIsNew,devLocation\n"
+            "aa:aa:aa:aa:aa:aa,Migrated server,NAS,Example vendor,"
+            "192.168.1.40,1,0,Office\n"
+        )
+
+        response = self.client.post(
+            "/api/v1/devices/import/netalertx/",
+            {"content": csv_content},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["updated"], 1)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.name, "Migrated server")
+        self.assertEqual(self.device.ip, "192.168.1.40")
+        self.assertEqual(self.device.role, "server")
+        self.assertEqual(self.device.room, "Office")
+        self.assertTrue(self.device.known)
+
+    def test_netalertx_inventory_import_rejects_other_csv_shapes(self):
+        response = self.client.post(
+            "/api/v1/devices/import/netalertx/",
+            {"content": "name,ip,mac\nDevice,192.168.1.60,90:dd:5d:12:34:60\n"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("NetAlertX", response.data["detail"])
+
+    def test_netalertx_inventory_import_requires_admin(self):
+        regular_user = User.objects.create_user(
+            username="netalertx-viewer",
+            password="password",
+        )
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.post(
+            "/api/v1/devices/import/netalertx/",
+            {"content": "devMac,devLastIP\n"},
             format="json",
         )
 
