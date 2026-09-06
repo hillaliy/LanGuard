@@ -15,6 +15,9 @@
   <a href="https://github.com/hillaliy/LanGuard/pkgs/container/languard-backend">
     <img alt="Docker pulls" src="https://ghcr-badge.elias.eu.org/shield/hillaliy/LanGuard/languard-backend">
   </a>
+  <a href="https://www.paypal.me/hillaliy">
+    <img alt="Donate through PayPal" src="https://img.shields.io/badge/PayPal-Donate-blue.svg?logo=paypal&style=for-the-badge">
+  </a>
 </p>
 
 <p align="center">
@@ -262,7 +265,7 @@ requested and review them for private network details first.
 ## Integrations
 
 Docker installations can connect LanGuard to optional services from
-**Settings > Add-ons**. Each integration is disabled by default.
+**Settings > Integrations**. Each integration is disabled by default.
 
 | Integration | What it adds | Data handling |
 | --- | --- | --- |
@@ -308,7 +311,7 @@ upload, ping, packet loss, health, and test time, and links the card back to
 Speedtest Tracker.
 
 1. In Speedtest Tracker, create an API token with the `results:read` ability.
-2. In LanGuard, open **Settings > Add-ons** and enable **Speedtest Tracker**.
+2. In LanGuard, open **Settings > Integrations** and enable **Speedtest Tracker**.
 3. Enter the Speedtest Tracker URL and API token, then select **Test connection**.
 4. Save Settings. The latest result will appear on the dashboard.
 
@@ -410,6 +413,27 @@ WatchYourLAN does not provide LanGuard rooms, roles, icons, comments, open-port
 history, identity confidence, or Home Map layout through this endpoint. Configure
 those fields in LanGuard after the migration; later scans can enrich hostname,
 vendor, port, and status information. Scan history is intentionally not imported.
+
+## Migrate from NetAlertX
+
+LanGuard can import device inventory from the official NetAlertX `devices.csv`
+export. In NetAlertX, open **Maintenance**, download the device CSV backup, and
+then:
+
+1. Sign in to LanGuard as an administrator.
+2. Open **Settings** and select **Data & migration**.
+3. Under **NetAlertX migration**, select **Import from NetAlertX**.
+4. Choose the exported `devices.csv` file.
+
+LanGuard matches existing devices by MAC address and imports compatible names,
+hostnames, IP and MAC addresses, vendors, comments, locations as rooms, recognized
+device types as roles, known state, current status, and first/last-seen timestamps.
+Invalid records and NetAlertX's synthetic `Internet` device are skipped.
+
+NetAlertX settings, credentials, workflows, notification history, presence
+history, custom properties, embedded icons, topology relationships, and scan
+history are intentionally not imported. Later LanGuard scans can refresh device
+identity, status, and port information.
 
 If you override `DISCORD_ICON_URL`, use a versioned URL when replacing the icon so Discord mobile clients do not reuse an old cached image, for example:
 

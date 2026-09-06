@@ -209,6 +209,17 @@ textarea {
   box-shadow: var(--shadow-soft);
 }
 
+.mobile-navigation-bar {
+  align-items: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  display: none;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 12px;
+}
+
 .sidebar-nav-button {
   min-height: 42px;
   border-radius: 8px;
@@ -414,6 +425,7 @@ textarea {
   color: var(--muted-text);
   font-size: 1.05rem;
   line-height: 1.1;
+  white-space: nowrap;
 }
 
 .dashboard-status-value {
@@ -495,6 +507,43 @@ textarea {
   font-variant-numeric: tabular-nums;
   overflow-wrap: normal;
   white-space: nowrap;
+}
+
+.scan-ranges-summary {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+@media (min-width: 981px) and (max-width: 1400px) {
+  .dashboard-summary-card {
+    padding: 18px;
+  }
+
+  .dashboard-card-header {
+    gap: 10px;
+  }
+
+  .dashboard-card-header-title {
+    align-items: center;
+  }
+
+  .dashboard-card-header-title .mantine-Title-root {
+    font-size: 1.15rem;
+  }
+
+  .dashboard-status-badge {
+    font-size: 0.78rem;
+    min-height: 26px;
+    padding-inline: 9px;
+  }
+
+  .latest-scan-card .dashboard-summary-value-nowrap {
+    font-size: 0.82rem;
+    line-height: 1.3;
+    white-space: normal;
+  }
 }
 
 .dashboard-insight-grid {
@@ -729,6 +778,90 @@ textarea {
   .devices-content-panel .device-mobile-list {
     display: flex;
   }
+
+  .devices-content-panel .devices-panel-header {
+    align-items: stretch;
+    display: grid;
+    gap: 12px;
+    grid-template-areas:
+      'heading view'
+      'controls controls';
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .devices-content-panel .devices-panel-header > * {
+    max-width: none !important;
+  }
+
+  .devices-content-panel .devices-panel-heading {
+    grid-area: heading;
+    width: 100%;
+  }
+
+  .devices-content-panel .devices-panel-controls {
+    display: grid;
+    grid-area: controls;
+    grid-template-areas: 'status network first-seen search';
+    grid-template-columns: 140px minmax(220px, 1fr) 150px minmax(220px, 1fr);
+    width: 100%;
+  }
+
+  .devices-content-panel .devices-panel-controls > * {
+    width: 100% !important;
+  }
+
+  .devices-content-panel .device-view-control {
+    grid-area: view;
+  }
+
+  .devices-content-panel .device-status-filter {
+    grid-area: status;
+  }
+
+  .devices-content-panel .device-network-filter {
+    grid-area: network;
+  }
+
+  .devices-content-panel .device-first-seen-filter {
+    grid-area: first-seen;
+  }
+
+  .devices-content-panel .device-search {
+    grid-area: search;
+  }
+}
+
+@container (min-width: 700px) and (max-width: 1100px) {
+  .devices-content-panel .device-mobile-row {
+    align-items: center;
+    display: grid;
+    gap: 18px;
+    grid-template-columns: minmax(260px, 0.9fr) minmax(0, 1.6fr);
+    padding-block: 10px;
+  }
+
+  .devices-content-panel .device-mobile-details {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    margin-top: 0;
+    row-gap: 8px;
+  }
+
+  .devices-content-panel .device-mobile-badges {
+    align-items: stretch;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    width: 82px;
+  }
+
+  .devices-content-panel .device-mobile-badges .device-risk-badge,
+  .devices-content-panel .device-mobile-badges .device-gateway-badge,
+  .devices-content-panel .device-mobile-badges .device-known-badge {
+    width: 100%;
+  }
+
+  .devices-content-panel .device-mobile-wide {
+    grid-column: auto;
+  }
 }
 
 .device-mobile-list {
@@ -738,6 +871,20 @@ textarea {
 .device-known-badge {
   min-width: 76px;
   justify-content: center;
+}
+
+.device-list-state-badges {
+  align-items: stretch;
+  flex: 0 0 auto;
+}
+
+.device-list-state-badges .device-known-badge,
+.device-list-state-badges .device-gateway-badge {
+  width: 100%;
+}
+
+.device-gateway-badge {
+  flex: 0 0 auto;
 }
 
 .device-risk-badge {
@@ -1371,6 +1518,53 @@ textarea {
   white-space: nowrap;
 }
 
+.device-availability-section {
+  min-width: 0;
+}
+
+.availability-timeline {
+  display: flex;
+  width: 100%;
+  height: 16px;
+  overflow: hidden;
+  background: var(--muted-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.availability-segment {
+  display: block;
+  min-width: 0;
+  height: 100%;
+}
+
+.availability-segment.online,
+.availability-key.online {
+  background: #12b886;
+}
+
+.availability-segment.offline,
+.availability-key.offline {
+  background: #fa5252;
+}
+
+.availability-segment.unknown,
+.availability-key.unknown {
+  background: #adb5bd;
+}
+
+.availability-legend {
+  justify-content: center;
+}
+
+.availability-key {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 50%;
+}
+
 .wrap-text {
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -1447,12 +1641,33 @@ textarea {
   }
 
   .dashboard-status-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .dashboard-status-card {
-    min-height: 112px;
-    padding: 18px;
+    gap: 10px;
+    min-height: 92px;
+    padding: 12px;
+  }
+
+  .dashboard-status-icon {
+    border-radius: 10px;
+    height: 42px;
+    width: 42px;
+  }
+
+  .dashboard-status-icon svg {
+    height: 23px;
+    width: 23px;
+  }
+
+  .dashboard-status-label {
+    font-size: 0.82rem;
+  }
+
+  .dashboard-status-value {
+    font-size: 2rem;
   }
 
   .dashboard-summary-grid {
@@ -1473,15 +1688,17 @@ textarea {
     width: 100%;
   }
 
-  .devices-panel-controls {
+  .devices-content-panel .devices-panel-controls {
     display: grid;
-    grid-template-columns: 1fr 92px;
+    grid-template-areas:
+      'search search'
+      'status first-seen'
+      'network network';
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .devices-panel-controls > *:first-child,
-  .devices-panel-controls > *:last-child {
-    grid-column: 1 / -1;
-    width: 100%;
+  .devices-content-panel .devices-panel-controls > * {
+    width: 100% !important;
   }
 
   .device-list,
@@ -1558,7 +1775,167 @@ textarea {
   }
 }
 
+@media (min-width: 561px) and (max-width: 980px) and (max-height: 560px) {
+  .app-layout {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .app-sidebar {
+    display: none;
+  }
+
+  .mobile-navigation-bar {
+    display: flex;
+  }
+
+  .mobile-sidebar-nav {
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .mobile-sidebar-nav .mantine-Divider-root {
+    display: block;
+  }
+
+  .mobile-sidebar-nav .sidebar-nav-button {
+    min-width: 0;
+  }
+
+  .dashboard-summary-grid,
+  .dashboard-summary-grid.with-speedtest {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .devices-content-panel .devices-panel-controls {
+    gap: 8px;
+    grid-template-areas: 'search status network first-seen';
+    grid-template-columns:
+      minmax(160px, 1.25fr)
+      minmax(110px, 0.75fr)
+      minmax(170px, 1.3fr)
+      minmax(120px, 0.8fr);
+  }
+
+  .devices-content-panel .devices-panel-controls .mantine-Input-input {
+    min-height: 34px;
+  }
+}
+
+@media (min-width: 561px) and (max-width: 1100px) and (orientation: portrait) {
+  .app-layout {
+    gap: 10px;
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  .app-sidebar {
+    display: none;
+  }
+
+  .mobile-navigation-bar {
+    display: flex;
+  }
+
+  .mobile-sidebar-nav {
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .mobile-sidebar-nav .mantine-Divider-root {
+    display: block;
+  }
+
+  .mobile-sidebar-nav .sidebar-nav-button {
+    min-width: 0;
+  }
+
+  .dashboard-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dashboard-summary-grid.with-speedtest {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard-summary-card {
+    padding: 14px;
+  }
+
+  .dashboard-card-header {
+    gap: 8px;
+  }
+
+  .dashboard-card-header-title {
+    gap: 8px;
+  }
+
+  .dashboard-card-header-title .mantine-Title-root {
+    font-size: 1rem;
+  }
+
+  .dashboard-status-badge {
+    font-size: 0.7rem;
+    min-height: 24px;
+    padding-inline: 7px;
+  }
+
+  .latest-scan-card .dashboard-summary-value-nowrap {
+    font-size: 0.76rem;
+    line-height: 1.25;
+    white-space: normal;
+  }
+
+  .dashboard-insight-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .devices-content-panel .devices-panel-controls {
+    gap: 8px;
+    grid-template-areas: 'search status network first-seen';
+    grid-template-columns:
+      minmax(150px, 1.2fr)
+      minmax(105px, 0.75fr)
+      minmax(170px, 1.3fr)
+      minmax(115px, 0.8fr);
+  }
+
+  .devices-content-panel .devices-panel-controls .mantine-Input-input {
+    min-height: 34px;
+  }
+}
+
 @media (max-width: 560px) {
+  .app-layout {
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .app-sidebar {
+    display: none;
+  }
+
+  .mobile-navigation-bar {
+    display: flex;
+  }
+
+  .mobile-sidebar-nav {
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .mobile-sidebar-nav .mantine-Divider-root {
+    display: block;
+  }
+
+  .mobile-sidebar-nav .sidebar-nav-button {
+    min-width: 0;
+  }
+
   .device-detail-page {
     min-height: 520px;
     padding: 16px;
@@ -1575,7 +1952,98 @@ textarea {
   }
 
   .dashboard-status-grid {
-    grid-template-columns: 1fr;
+    gap: 6px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dashboard-status-card {
+    flex-direction: column;
+    gap: 4px;
+    justify-content: center;
+    min-height: 92px;
+    padding: 8px 3px;
+    text-align: center;
+  }
+
+  .dashboard-status-icon {
+    border-radius: 8px;
+    height: 32px;
+    width: 32px;
+  }
+
+  .dashboard-status-icon svg {
+    height: 18px;
+    width: 18px;
+  }
+
+  .dashboard-status-label {
+    font-size: 0.65rem;
+  }
+
+  .dashboard-status-value {
+    font-size: 1.55rem;
+  }
+
+  .device-mobile-row {
+    padding: 10px 12px;
+  }
+
+  .device-mobile-main {
+    gap: 8px;
+  }
+
+  .device-mobile-icon {
+    min-height: 24px;
+    width: 32px;
+  }
+
+  .device-mobile-title .mantine-Text-root:first-child {
+    font-size: 0.9rem;
+  }
+
+  .device-mobile-title .device-status-inline .mantine-Text-root {
+    font-size: 0.78rem;
+  }
+
+  .device-mobile-badges {
+    gap: 4px;
+  }
+
+  .device-mobile-badges .device-risk-badge,
+  .device-mobile-badges .device-gateway-badge,
+  .device-mobile-badges .device-known-badge {
+    font-size: 0.62rem;
+    min-height: 22px;
+    min-width: 56px;
+    padding-inline: 6px;
+  }
+
+  .devices-content-panel .device-mobile-details {
+    column-gap: 12px;
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr) !important;
+    margin-top: 8px;
+    row-gap: 7px;
+  }
+
+  .devices-content-panel .device-mobile-wide {
+    grid-column: auto;
+  }
+
+  .device-mobile-details > div > .mantine-Text-root:first-child {
+    font-size: 0.66rem;
+    line-height: 1.15;
+  }
+
+  .device-mobile-details > div > .mantine-Text-root:not(:first-child) {
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+
+  .device-mobile-details .port-badge {
+    font-size: 0.65rem;
+    min-height: 21px;
+    min-width: 36px;
+    padding-inline: 6px;
   }
 
   .home-map-room-grid {

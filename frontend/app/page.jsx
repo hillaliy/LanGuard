@@ -7,10 +7,12 @@ import {
   Autocomplete,
   Badge,
   Box,
+  Burger,
   Button,
   Checkbox,
   Container,
   Divider,
+  Drawer,
   FileButton,
   Group,
   Image,
@@ -1502,6 +1504,24 @@ function formatDuration(seconds) {
   return `${remainingSeconds}s`;
 }
 
+function formatAvailabilityDuration(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) {
+    return '-';
+  }
+  const totalMinutes = Math.round(value / 60);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) {
+    return `${days}d ${hours}h`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  return `${minutes}m`;
+}
+
 function deviceStatus(device) {
   const statusValue = device?.status || (device?.online ? 'online' : 'offline');
   const labels = {
@@ -1529,7 +1549,7 @@ function deviceStatus(device) {
 function DeviceStatusInline({ device, muted = false }) {
   const status = deviceStatus(device);
   return (
-    <Group gap="xs" wrap="nowrap">
+    <Group className="device-status-inline" gap="xs" wrap="nowrap">
       <span className={`status-dot ${status.dot}`} />
       <Text size="sm" c={muted ? 'dimmed' : undefined}>{status.label}</Text>
     </Group>
@@ -1580,6 +1600,7 @@ function GatewayBadge({ device, compact = false }) {
 
   return (
     <Badge
+      className="device-gateway-badge"
       color="blue"
       variant="light"
       size={compact ? 'sm' : 'md'}
@@ -1782,6 +1803,7 @@ function ThemeIconLike({ children, color, size = 42 }) {
         height: size,
         borderRadius: 8,
         display: 'grid',
+        flex: '0 0 auto',
         placeItems: 'center',
         background: `var(--mantine-color-${color}-1)`,
         color: `var(--mantine-color-${color}-7)`,
@@ -1894,15 +1916,19 @@ function AutomaticScanningCard({ appSettings, networkRanges, networkRangeLabels 
     : appSettings?.scan_range_labels || {};
   return (
     <Paper className="dashboard-summary-card automatic-scanning-card" radius="md">
-      <Group align="flex-start" gap="md" wrap="nowrap">
-        <ThemeIconLike color="blue">
-          <IconClock size={24} />
-        </ThemeIconLike>
-        <Box>
-          <Title order={3}>Automatic Scanning</Title>
-          <Text c="dimmed" fw={600}>Enabled</Text>
-        </Box>
-      </Group>
+      <DashboardCardHeader
+        icon={(
+          <ThemeIconLike color="blue">
+            <IconClock size={24} />
+          </ThemeIconLike>
+        )}
+        title="Automatic Scanning"
+        badge={(
+          <Badge className="dashboard-status-badge" color="blue" variant="light">
+            Enabled
+          </Badge>
+        )}
+      />
       <SimpleGrid cols={2} mt="xl">
         <SummaryMetric label="Interval" value={appSettings?.scan_interval ? `${appSettings.scan_interval} min` : '-'} />
         <SummaryMetric
@@ -2330,7 +2356,7 @@ function ScanRangesSummary({ ranges, labels = {}, namesOnly = false }) {
       <Popover position="bottom-end" width={360} shadow="md" withinPortal>
         <Popover.Target>
           <UnstyledButton aria-label={`Show ${ranges.length} configured networks`}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <span className="scan-ranges-summary">
               <span>{displayLabel}</span>
               <IconChevronDown size={17} aria-hidden="true" />
             </span>
@@ -2537,6 +2563,9 @@ function DeviceDetailsPage({
   const [device, setDevice] = useState(null);
   const [events, setEvents] = useState([]);
   const [eventPagination, setEventPagination] = useState(null);
+  const [availabilityPeriod, setAvailabilityPeriod] = useState('week');
+  const [availability, setAvailability] = useState(null);
+  const [loadingAvailability, setLoadingAvailability] = useState(false);
   const [icon, setIcon] = useState('');
   const [secondaryIcon, setSecondaryIcon] = useState('');
   const [name, setName] = useState('');
@@ -2682,6 +2711,8 @@ function DeviceDetailsPage({
 
   useEffect(() => {
     setActiveDeviceTab('overview');
+    setAvailabilityPeriod('week');
+    setAvailability(null);
     setDnsActivity([]);
     setDnsPagination(null);
     setDnsSummary(null);
@@ -2690,6 +2721,35 @@ function DeviceDetailsPage({
     setDnsFilter('all');
     setDnsOrdering('-last_seen');
   }, [deviceId]);
+
+  useEffect(() => {
+    if (activeDeviceTab !== 'history') {
+      return undefined;
+    }
+    let active = true;
+    setLoadingAvailability(true);
+    apiRequest('device/availability/', {
+      params: { device: deviceId, period: availabilityPeriod },
+    })
+      .then((payload) => {
+        if (active) {
+          setAvailability(payload.data || null);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          showErrorNotification(err);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoadingAvailability(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeDeviceTab, availabilityPeriod, deviceId]);
 
   useEffect(() => {
     if (activeDeviceTab !== 'dns') {
@@ -3096,6 +3156,87 @@ function DeviceDetailsPage({
 
             <Tabs.Panel value="history" pt="lg">
               <Stack gap="md">
+                <section className="device-availability-section">
+                  <Group justify="space-between" align="flex-start" wrap="wrap" gap="md">
+                    <Box>
+                      <Title order={4}>Availability</Title>
+                      <Text size="sm" c="dimmed">
+                        Online and offline time from retained device status history.
+                      </Text>
+                    </Box>
+                    <SegmentedControl
+                      value={availabilityPeriod}
+                      onChange={setAvailabilityPeriod}
+                      data={[
+                        { value: 'week', label: 'Week' },
+                        { value: 'month', label: 'Month' },
+                        { value: 'year', label: 'Year' },
+                      ]}
+                    />
+                  </Group>
+
+                  <Box pos="relative" mt="lg" mih={116}>
+                    <LoadingOverlay visible={loadingAvailability} />
+                    {availability && (
+                      <Stack gap="md">
+                        <SimpleGrid cols={{ base: 1, xs: 3 }}>
+                          <SummaryMetric
+                            label="Availability"
+                            value={
+                              availability.availability_percent == null
+                                ? 'No data'
+                                : `${availability.availability_percent}%`
+                            }
+                          />
+                          <SummaryMetric
+                            label="Online time"
+                            value={formatAvailabilityDuration(availability.online_seconds)}
+                          />
+                          <SummaryMetric
+                            label="Status changes"
+                            value={Number(availability.status_changes || 0).toLocaleString()}
+                          />
+                        </SimpleGrid>
+
+                        <div className="availability-timeline" aria-label="Device availability timeline">
+                          {(availability.segments || []).map((segment, index) => (
+                            <Tooltip
+                              key={`${segment.started_at}-${index}`}
+                              label={`${formatRoleLabel(segment.status)}: ${formatDate(segment.started_at, timeZone)} to ${formatDate(segment.ended_at, timeZone)}`}
+                            >
+                              <span
+                                className={`availability-segment ${segment.status}`}
+                                style={{ flexGrow: Math.max(Number(segment.duration_seconds || 0), 1) }}
+                              />
+                            </Tooltip>
+                          ))}
+                        </div>
+                        <Group justify="space-between" wrap="nowrap">
+                          <Text size="xs" c="dimmed">
+                            {availability.period === 'week'
+                              ? '7 days ago'
+                              : availability.period === 'month'
+                                ? '30 days ago'
+                                : '1 year ago'}
+                          </Text>
+                          <Text size="xs" c="dimmed">Now</Text>
+                        </Group>
+                        <Group gap="md" wrap="wrap" className="availability-legend">
+                          <Text size="xs"><span className="availability-key online" />Online</Text>
+                          <Text size="xs"><span className="availability-key offline" />Offline</Text>
+                          <Text size="xs"><span className="availability-key unknown" />No data</Text>
+                        </Group>
+                        {Number(availability.coverage_percent || 0) < 100 && (
+                          <Text size="xs" c="dimmed">
+                            History coverage: {availability.coverage_percent}%. Missing time is not included in the availability calculation.
+                          </Text>
+                        )}
+                      </Stack>
+                    )}
+                  </Box>
+                </section>
+
+                <Divider />
                 <Group justify="space-between">
                   <Box>
                     <Title order={4}>Device history</Title>
@@ -3695,6 +3836,7 @@ function SettingsPage({ onSaved }) {
   const [exporting, setExporting] = useState(false);
   const [exportingDiagnostics, setExportingDiagnostics] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importingNetAlertX, setImportingNetAlertX] = useState(false);
   const [importingWatchYourLan, setImportingWatchYourLan] = useState(false);
   const [cleanupDays, setCleanupDays] = useState(90);
   const [cleanupTarget, setCleanupTarget] = useState(null);
@@ -3733,8 +3875,8 @@ function SettingsPage({ onSaved }) {
       setTelegramConfigured(Boolean(data.telegram_configured));
       setWebhookConfigured(Boolean(data.webhook_configured));
       setWebhookSignatureConfigured(Boolean(data.webhook_signature_configured));
-      setDiscordWebhook(data.discord_webhook || '');
-      setTelegramToken(data.telegram_token || '');
+      setDiscordWebhook('');
+      setTelegramToken('');
       setTelegramUserId(data.telegram_user_id || '');
       setWebhookUrl(data.webhook_url || '');
       setWebhookSecret('');
@@ -3812,9 +3954,13 @@ function SettingsPage({ onSaved }) {
         speedtest_tracker_enabled: speedtestTrackerEnabled,
         speedtest_tracker_url: speedtestTrackerUrl.trim(),
       };
-      body.discord_webhook = discordWebhook;
-      body.telegram_token = telegramToken;
+      if (discordWebhook.trim()) {
+        body.discord_webhook = discordWebhook.trim();
+      }
       body.telegram_user_id = telegramUserId;
+      if (telegramToken.trim()) {
+        body.telegram_token = telegramToken.trim();
+      }
       body.webhook_url = webhookUrl.trim();
       if (webhookSecret) {
         body.webhook_secret = webhookSecret;
@@ -3875,13 +4021,18 @@ function SettingsPage({ onSaved }) {
     try {
       let body;
       if (channel === 'discord') {
-        body = { channel, discord_webhook: discordWebhook.trim() };
+        body = { channel };
+        if (discordWebhook.trim()) {
+          body.discord_webhook = discordWebhook.trim();
+        }
       } else if (channel === 'telegram') {
         body = {
           channel,
-          telegram_token: telegramToken.trim(),
           telegram_user_id: telegramUserId.trim(),
         };
+        if (telegramToken.trim()) {
+          body.telegram_token = telegramToken.trim();
+        }
       } else {
         body = {
           channel,
@@ -4063,6 +4214,29 @@ function SettingsPage({ onSaved }) {
     }
   }
 
+  async function importNetAlertXFile(file) {
+    if (!file) {
+      return;
+    }
+
+    setImportingNetAlertX(true);
+    setError('');
+    try {
+      const content = await file.text();
+      const result = await apiRequest('devices/import/netalertx/', {
+        method: 'POST',
+        body: { content },
+      });
+      await onSaved({});
+      showServerNotification(result);
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification('Could not import NetAlertX devices', err.message);
+    } finally {
+      setImportingNetAlertX(false);
+    }
+  }
+
   const cleanupTargetLabels = {
     events: 'Events',
     scan_runs: 'Scan history',
@@ -4130,7 +4304,7 @@ function SettingsPage({ onSaved }) {
           <Tabs.List className="settings-category-nav">
             <Tabs.Tab value="scanning" leftSection={<IconNetwork size={18} />}>Scanning</Tabs.Tab>
             <Tabs.Tab value="notifications" leftSection={<IconBell size={18} />}>Notifications</Tabs.Tab>
-            <Tabs.Tab value="addons" leftSection={<IconWorldSearch size={18} />}>Add-ons</Tabs.Tab>
+            <Tabs.Tab value="integrations" leftSection={<IconWorldSearch size={18} />}>Integrations</Tabs.Tab>
             <Tabs.Tab value="data" leftSection={<IconDownload size={18} />}>Data & migration</Tabs.Tab>
             <Tabs.Tab value="maintenance" leftSection={<IconTrash size={18} />}>Maintenance</Tabs.Tab>
           </Tabs.List>
@@ -4323,17 +4497,22 @@ function SettingsPage({ onSaved }) {
             </Badge>
           </Group>
           <Group align="flex-end" wrap="nowrap">
-            <TextInput
+            <PasswordInput
               style={{ flex: 1 }}
               label="Discord webhook"
               description={
                 discordConfigured
-                  ? 'Discord messages are configured with this webhook.'
+                  ? 'Leave blank to keep the saved webhook.'
                   : 'Paste a Discord channel webhook URL to enable Discord messages.'
               }
-              placeholder="https://discord.com/api/webhooks/..."
+              placeholder={
+                discordConfigured
+                  ? 'Saved webhook'
+                  : 'https://discord.com/api/webhooks/...'
+              }
               value={discordWebhook}
               onChange={(event) => setDiscordWebhook(event.currentTarget.value)}
+              autoComplete="new-password"
             />
             <Tooltip label="Send test notification">
               <ActionIcon
@@ -4342,7 +4521,7 @@ function SettingsPage({ onSaved }) {
                 aria-label="Send Discord test notification"
                 loading={testingChannel === 'discord'}
                 disabled={
-                  !discordWebhook.trim() ||
+                  (!discordWebhook.trim() && !discordConfigured) ||
                   Boolean(testingChannel && testingChannel !== 'discord')
                 }
                 onClick={() => testNotificationChannel('discord')}
@@ -4368,12 +4547,14 @@ function SettingsPage({ onSaved }) {
             </Badge>
           </Group>
           <Group align="flex-end" wrap="nowrap">
-            <TextInput
+            <PasswordInput
               style={{ flex: 1 }}
               label="Telegram bot token"
-              placeholder="123456:bot-token"
+              placeholder={telegramConfigured ? 'Saved token' : '123456:bot-token'}
+              description={telegramConfigured ? 'Leave blank to keep the saved token.' : undefined}
               value={telegramToken}
               onChange={(event) => setTelegramToken(event.currentTarget.value)}
+              autoComplete="new-password"
             />
             <TextInput
               style={{ flex: 1 }}
@@ -4389,7 +4570,7 @@ function SettingsPage({ onSaved }) {
                 aria-label="Send Telegram test notification"
                 loading={testingChannel === 'telegram'}
                 disabled={
-                  !telegramToken.trim() ||
+                  (!telegramToken.trim() && !telegramConfigured) ||
                   !telegramUserId.trim() ||
                   Boolean(testingChannel && testingChannel !== 'telegram')
                 }
@@ -4474,11 +4655,11 @@ function SettingsPage({ onSaved }) {
         </Stack>
           </Tabs.Panel>
 
-          <Tabs.Panel value="addons" className="settings-category-panel">
+          <Tabs.Panel value="integrations" className="settings-category-panel">
         <Stack gap="xl">
           <Group justify="space-between" align="flex-start">
             <Box>
-              <Title order={3}>Add-ons</Title>
+              <Title order={3}>Integrations</Title>
               <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
             </Box>
             <Badge variant="light">2 available</Badge>
@@ -4756,6 +4937,29 @@ function SettingsPage({ onSaved }) {
               )}
             </FileButton>
           </Group>
+        </Group>
+
+        <Divider />
+
+        <Group justify="space-between" align="flex-start" wrap="wrap">
+          <Box>
+            <Text fw={700}>NetAlertX migration</Text>
+            <Text size="sm" c="dimmed">
+              Import devices from the <code>devices.csv</code> export created by NetAlertX.
+            </Text>
+          </Box>
+          <FileButton onChange={importNetAlertXFile} accept="text/csv,.csv">
+            {(props) => (
+              <Button
+                {...props}
+                variant="light"
+                leftSection={<IconUpload size={18} />}
+                loading={importingNetAlertX}
+              >
+                Import from NetAlertX
+              </Button>
+            )}
+          </FileButton>
         </Group>
 
         <Divider />
@@ -5526,6 +5730,118 @@ function appendUniqueById(current, incoming) {
   ];
 }
 
+function PrimaryNavigation({
+  mainView,
+  devicePageId,
+  showDnsActivity,
+  canManageUsers,
+  onNavigate,
+  onNavigateComplete,
+  mobile = false,
+}) {
+  function navigate(view) {
+    onNavigate(view);
+    onNavigateComplete?.();
+  }
+
+  return (
+    <Stack className={`sidebar-nav${mobile ? ' mobile-sidebar-nav' : ''}`} gap={6}>
+      <Button
+        className="sidebar-nav-button"
+        variant={!devicePageId && mainView === 'dashboard' ? 'filled' : 'subtle'}
+        justify="flex-start"
+        leftSection={<IconLayoutDashboard size={18} />}
+        onClick={() => navigate('dashboard')}
+        fullWidth
+      >
+        Dashboard
+      </Button>
+      <Button
+        className="sidebar-nav-button"
+        variant={!devicePageId && mainView === 'home-map' ? 'filled' : 'subtle'}
+        justify="flex-start"
+        leftSection={<IconSmartHome size={18} />}
+        onClick={() => navigate('home-map')}
+        fullWidth
+      >
+        Home Map
+      </Button>
+      <Divider my={4} />
+      <Button
+        className="sidebar-nav-button"
+        variant={!devicePageId && mainView === 'events' ? 'filled' : 'subtle'}
+        justify="flex-start"
+        leftSection={<IconBell size={18} />}
+        onClick={() => navigate('events')}
+        fullWidth
+      >
+        Events
+      </Button>
+      <Button
+        className="sidebar-nav-button"
+        variant={!devicePageId && mainView === 'history' ? 'filled' : 'subtle'}
+        justify="flex-start"
+        leftSection={<IconHistory size={18} />}
+        onClick={() => navigate('history')}
+        fullWidth
+      >
+        Scan history
+      </Button>
+      <Button
+        className="sidebar-nav-button"
+        variant={!devicePageId && mainView === 'notifications' ? 'filled' : 'subtle'}
+        justify="flex-start"
+        leftSection={<IconBell size={18} />}
+        onClick={() => navigate('notifications')}
+        fullWidth
+      >
+        Notifications
+      </Button>
+      {showDnsActivity && (
+        <Button
+          className="sidebar-nav-button"
+          variant={!devicePageId && mainView === 'dns' ? 'filled' : 'subtle'}
+          justify="flex-start"
+          leftSection={<IconWorldSearch size={18} />}
+          onClick={() => navigate('dns')}
+          fullWidth
+        >
+          DNS Activity
+        </Button>
+      )}
+      {canManageUsers && (
+        <>
+          <Divider my={4} />
+          <Button
+            className="sidebar-nav-button"
+            component="a"
+            href={getAdminUrl()}
+            target="_blank"
+            rel="noreferrer"
+            variant="subtle"
+            justify="flex-start"
+            leftSection={<IconShieldLock size={18} />}
+            onClick={onNavigateComplete}
+            fullWidth
+          >
+            Admin site
+          </Button>
+          <Button
+            className="sidebar-nav-button"
+            variant={!devicePageId && mainView === 'settings' ? 'filled' : 'subtle'}
+            justify="flex-start"
+            leftSection={<IconSettings size={18} />}
+            onClick={() => navigate('settings')}
+            fullWidth
+          >
+            Settings
+          </Button>
+        </>
+      )}
+    </Stack>
+  );
+}
+
 function Dashboard({
   user,
   onLogout,
@@ -5596,6 +5912,7 @@ function Dashboard({
   const [loggingOut, setLoggingOut] = useState(false);
   const [usersModalOpened, usersModal] = useDisclosure(false);
   const [scanDetailsOpened, scanDetailsModal] = useDisclosure(false);
+  const [mobileNavigationOpened, mobileNavigation] = useDisclosure(false);
   const deviceListRef = useRef(null);
   const pendingDashboardScrollRef = useRef(null);
   const pendingDeviceListScrollRef = useRef(null);
@@ -6399,100 +6716,54 @@ function Dashboard({
       </header>
 
       <div className="app-layout">
+        <div className="mobile-navigation-bar">
+          <Burger
+            opened={mobileNavigationOpened}
+            onClick={mobileNavigation.toggle}
+            size="sm"
+            aria-label={mobileNavigationOpened ? 'Close navigation' : 'Open navigation'}
+          />
+          <Text fw={700}>
+            {devicePageId
+              ? 'Device details'
+              : {
+                  dashboard: 'Dashboard',
+                  'home-map': 'Home Map',
+                  events: 'Events',
+                  history: 'Scan history',
+                  notifications: 'Notifications',
+                  dns: 'DNS Activity',
+                  settings: 'Settings',
+                }[mainView] || 'Navigation'}
+          </Text>
+        </div>
+
+        <Drawer
+          opened={mobileNavigationOpened}
+          onClose={mobileNavigation.close}
+          title="Navigation"
+          size="min(82vw, 320px)"
+          className="mobile-navigation-drawer"
+        >
+          <PrimaryNavigation
+            mainView={mainView}
+            devicePageId={devicePageId}
+            showDnsActivity={showDnsActivity}
+            canManageUsers={canManageUsers}
+            onNavigate={navigateToView}
+            onNavigateComplete={mobileNavigation.close}
+            mobile
+          />
+        </Drawer>
+
         <aside className="app-sidebar" aria-label="Primary navigation">
-          <Stack className="sidebar-nav" gap={6}>
-            <Button
-              className="sidebar-nav-button"
-              variant={!devicePageId && mainView === 'dashboard' ? 'filled' : 'subtle'}
-              justify="flex-start"
-              leftSection={<IconLayoutDashboard size={18} />}
-              onClick={() => navigateToView('dashboard')}
-              fullWidth
-            >
-              Dashboard
-            </Button>
-            <Button
-              className="sidebar-nav-button"
-              variant={!devicePageId && mainView === 'home-map' ? 'filled' : 'subtle'}
-              justify="flex-start"
-              leftSection={<IconSmartHome size={18} />}
-              onClick={() => navigateToView('home-map')}
-              fullWidth
-            >
-              Home Map
-            </Button>
-            <Divider my={4} />
-            <Button
-              className="sidebar-nav-button"
-              variant={!devicePageId && mainView === 'events' ? 'filled' : 'subtle'}
-              justify="flex-start"
-              leftSection={<IconBell size={18} />}
-              onClick={() => navigateToView('events')}
-              fullWidth
-            >
-              Events
-            </Button>
-            <Button
-              className="sidebar-nav-button"
-              variant={!devicePageId && mainView === 'history' ? 'filled' : 'subtle'}
-              justify="flex-start"
-              leftSection={<IconHistory size={18} />}
-              onClick={() => navigateToView('history')}
-              fullWidth
-            >
-              Scan history
-            </Button>
-            <Button
-              className="sidebar-nav-button"
-              variant={!devicePageId && mainView === 'notifications' ? 'filled' : 'subtle'}
-              justify="flex-start"
-              leftSection={<IconBell size={18} />}
-              onClick={() => navigateToView('notifications')}
-              fullWidth
-            >
-              Notifications
-            </Button>
-            {showDnsActivity && (
-              <Button
-                className="sidebar-nav-button"
-                variant={!devicePageId && mainView === 'dns' ? 'filled' : 'subtle'}
-                justify="flex-start"
-                leftSection={<IconWorldSearch size={18} />}
-                onClick={() => navigateToView('dns')}
-                fullWidth
-              >
-                DNS Activity
-              </Button>
-            )}
-            {canManageUsers && (
-              <>
-                <Divider my={4} />
-                <Button
-                  className="sidebar-nav-button"
-                  component="a"
-                  href={getAdminUrl()}
-                  target="_blank"
-                  rel="noreferrer"
-                  variant="subtle"
-                  justify="flex-start"
-                  leftSection={<IconShieldLock size={18} />}
-                  fullWidth
-                >
-                  Admin site
-                </Button>
-                <Button
-                  className="sidebar-nav-button"
-                  variant={!devicePageId && mainView === 'settings' ? 'filled' : 'subtle'}
-                  justify="flex-start"
-                  leftSection={<IconSettings size={18} />}
-                  onClick={() => navigateToView('settings')}
-                  fullWidth
-                >
-                  Settings
-                </Button>
-              </>
-            )}
-          </Stack>
+          <PrimaryNavigation
+            mainView={mainView}
+            devicePageId={devicePageId}
+            showDnsActivity={showDnsActivity}
+            canManageUsers={canManageUsers}
+            onNavigate={navigateToView}
+          />
         </aside>
 
       <Container size="xl" py="xl" className="app-content">
@@ -6598,18 +6869,20 @@ function Dashboard({
           <Paper className="content-panel devices-content-panel" radius="md">
             <Stack gap={0}>
               <Group className="devices-panel-header" justify="space-between" p="md">
-                <Group>
+                <Group className="devices-panel-heading">
                   <IconNetwork size={22} />
                   <Title order={4}>Devices</Title>
                 </Group>
+                <SegmentedControl
+                  className="device-view-control"
+                  data={inventoryViewOptions}
+                  value={inventoryView}
+                  onChange={setInventoryView}
+                  aria-label="Inventory view"
+                />
                 <Group className="devices-panel-controls">
-                  <SegmentedControl
-                    data={inventoryViewOptions}
-                    value={inventoryView}
-                    onChange={setInventoryView}
-                    aria-label="Inventory view"
-                  />
                   <Select
+                    className="device-status-filter"
                     w={140}
                     placeholder="Status"
                     clearable
@@ -6619,6 +6892,7 @@ function Dashboard({
                     onChange={(value) => setDeviceStatus(value || '')}
                   />
                   <MultiSelect
+                    className="device-network-filter"
                     w={240}
                     placeholder="Network ranges"
                     clearable
@@ -6633,6 +6907,7 @@ function Dashboard({
                     styles={{ option: { whiteSpace: 'nowrap' } }}
                   />
                   <Select
+                    className="device-first-seen-filter"
                     w={150}
                     placeholder="First seen"
                     clearable
@@ -6642,6 +6917,7 @@ function Dashboard({
                     onChange={(value) => setFirstSeenPeriod(value || '')}
                   />
                   <TextInput
+                    className="device-search"
                     w={{ base: 180, sm: 260 }}
                     placeholder="Search"
                     leftSection={<IconSearch size={17} />}
@@ -6808,14 +7084,16 @@ function Dashboard({
                           <Box className="device-list-title">
                             <Group gap="xs" wrap="nowrap">
                               <Text fw={800} className="truncate-cell">{displayDeviceName(device)}</Text>
-                              <GatewayBadge device={device} compact />
-                              <Badge
-                                className="device-known-badge"
-                                color={device.known ? 'teal' : 'yellow'}
-                                variant="light"
-                              >
-                                {device.known ? 'Known' : 'New'}
-                              </Badge>
+                              <Stack className="device-list-state-badges" gap={4}>
+                                <Badge
+                                  className="device-known-badge"
+                                  color={device.known ? 'teal' : 'yellow'}
+                                  variant="light"
+                                >
+                                  {device.known ? 'Known' : 'New'}
+                                </Badge>
+                                <GatewayBadge device={device} compact />
+                              </Stack>
                             </Group>
                             <Text size="sm" c="dimmed" className="truncate-cell">
                               {deviceSubtitle(device)}
@@ -6879,7 +7157,7 @@ function Dashboard({
                               <DeviceStatusInline device={device} muted />
                             </Box>
                           </Group>
-                          <Group gap={6} justify="flex-end" wrap="wrap">
+                          <Group className="device-mobile-badges" gap={6} justify="flex-end" wrap="wrap">
                             <RiskBadge device={device} compact />
                             <GatewayBadge device={device} compact />
                             <Badge
@@ -6891,7 +7169,7 @@ function Dashboard({
                             </Badge>
                           </Group>
                         </Group>
-                        <SimpleGrid cols={2} spacing="xs" mt="sm">
+                        <SimpleGrid className="device-mobile-details" cols={2} spacing="xs" mt="sm">
                           <Box>
                             <Text size="xs" c="dimmed">IP</Text>
                             <Text size="sm" className="mobile-mono-value">{device.ip}</Text>
