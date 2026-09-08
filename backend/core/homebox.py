@@ -52,7 +52,14 @@ class HomeBoxClient:
         if not isinstance(items, list):
             raise HomeBoxError("HomeBox returned an unexpected item list.")
         try:
-            results = [{"value": str(UUID(item["id"])), "label": str(item["name"])} for item in items]
+            results = []
+            for item in items:
+                name = str(item["name"])
+                asset_id = str(item.get("assetId") or "").strip()
+                results.append({
+                    "value": str(UUID(item["id"])),
+                    "label": f"{asset_id} · {name}" if asset_id else name,
+                })
         except (KeyError, ValueError, TypeError) as exc:
             raise HomeBoxError("HomeBox returned an invalid item.") from exc
         return {"items": results, "page": page, "has_more": len(items) == 25}
