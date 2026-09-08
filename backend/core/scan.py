@@ -1609,7 +1609,7 @@ def scan(ip_ranges, scan_run=None):
     scan_run.finished_at = timezone.now()
     scan_run.devices_seen = len(answered_list)
     scan_run.new_devices = new_devices
-    scan_run.online_devices = Device.objects.filter(online=True).count()
+    scan_run.online_devices = Device.objects.filter(online=True, archived=False).count()
     scan_run.ports_opened = ports_opened
     scan_run.ports_closed = ports_closed
     scan_run.error = ""
@@ -1672,6 +1672,7 @@ def sync_discovered_device(
         device = Device.objects.get(mac=mac)
         was_online = device.online
         update_fields = [
+            "archived",
             "ip",
             "online",
             "lastseen",
@@ -1682,6 +1683,7 @@ def sync_discovered_device(
             "last_status_check",
         ]
         device.ip = ip
+        device.archived = False
         device.online = True
         device.lastseen = scan_started_at
         device.missed_scans = 0
@@ -1806,7 +1808,7 @@ def sync_discovered_device(
 
 
 def mark_missing_devices_offline(online_macs, scan_run=None, ip_ranges=None):
-    offline_devices = Device.objects.exclude(mac__in=online_macs).filter(online=True)
+    offline_devices = Device.objects.exclude(mac__in=online_macs).filter(online=True, archived=False)
     networks = [
         ipaddress.ip_network(network_range, strict=False)
         for network_range in validate_ip_ranges(ip_ranges)

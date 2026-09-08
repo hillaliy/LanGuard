@@ -61,6 +61,8 @@ def presence_notification_preference(event):
 
 
 def notification_event_allowed(event, app_config=None):
+    if event.device_id and event.device.archived:
+        return False
     app_config = app_config or AppSettings.load()
     preference = presence_notification_preference(event)
     if preference == Device.NotificationPreference.ALWAYS:
@@ -82,6 +84,8 @@ def notification_event_allowed(event, app_config=None):
 
 
 def notification_skip_reason(event):
+    if event.device_id and event.device.archived:
+        return "device_archived"
     if presence_notification_preference(event) == Device.NotificationPreference.NEVER:
         return "device_notification_disabled"
     return "event_type_not_enabled"

@@ -42,6 +42,8 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
+import { IconExternalLink } from '@tabler/icons-react';
+import { IconArchive, IconArchiveOff } from '@tabler/icons-react';
 import {
   IconAlertCircle,
   IconAirConditioning,
@@ -210,6 +212,7 @@ const deviceStatusOptions = [
   { value: 'online', label: 'Online' },
   { value: 'offline', label: 'Offline' },
   { value: 'new', label: 'New devices' },
+  { value: 'archived', label: 'Archived' },
 ];
 
 const outsideNetworkRangeFilter = 'outside';
@@ -2550,6 +2553,49 @@ function DeviceIconPicker({ value, onChange, label = 'Icon' }) {
   );
 }
 
+function HomeBoxItemPicker({ value, onChange }) {
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [items, setItems] = useState([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    setBusy(true);
+    const timer = setTimeout(async () => {
+      try {
+        const payload = await apiRequest('integrations/homebox/items/', { params: { q: query, page } });
+        if (cancelled) return;
+        setItems((old) => {
+          const combined = page === 1 ? payload.data.items : [...old, ...payload.data.items];
+          return [...new Map(combined.map((item) => [item.value, item])).values()];
+        });
+        setHasMore(payload.data.has_more);
+        setError('');
+      } catch (err) {
+        if (!cancelled) { setError(err.message); setHasMore(false); }
+      } finally {
+        if (!cancelled) setBusy(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [query, page]);
+  const options = value && !items.some((item) => item.value === value)
+    ? [{ value, label: value }, ...items] : items;
+  return (
+    <Stack gap="xs">
+      <Select label="HomeBox item" placeholder="Search HomeBox" searchable clearable
+        data={options} value={value || null} onChange={onChange}
+        searchValue={query} onSearchChange={(next) => { setQuery(next); setPage(1); }}
+        filter={({ options: available }) => available}
+        nothingFoundMessage={busy ? 'Loading...' : 'No items found'} error={error}
+      />
+      {hasMore && <Button variant="subtle" size="xs" leftSection={<IconChevronDown size={16} />} loading={busy} onClick={() => setPage((old) => old + 1)}>Load more</Button>}
+    </Stack>
+  );
+}
+
 function DeviceDetailsPage({
   deviceId,
   onBack,
@@ -2576,6 +2622,7 @@ function DeviceDetailsPage({
   const [offlineNotificationPreference, setOfflineNotificationPreference] = useState('inherit');
   const [comments, setComments] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
+  const [homeboxItemId, setHomeboxItemId] = useState(null);
   const [detectedWebUrl, setDetectedWebUrl] = useState('');
   const [detectingWebUrl, setDetectingWebUrl] = useState(false);
   const [attentionAcknowledged, setAttentionAcknowledged] = useState(false);
@@ -2595,6 +2642,7 @@ function DeviceDetailsPage({
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirmOpened, deleteConfirm] = useDisclosure(false);
+  const [archiveConfirmOpened, archiveConfirm] = useDisclosure(false);
 
   function populateForm(nextDevice) {
     setIcon(nextDevice?.icon || '');
@@ -2607,6 +2655,7 @@ function DeviceDetailsPage({
     setOfflineNotificationPreference(nextDevice?.offline_notification_preference || 'inherit');
     setComments(nextDevice?.comments || '');
     setExternalUrl(nextDevice?.external_url || '');
+    setHomeboxItemId(nextDevice?.homebox_item_id || null);
     setAttentionAcknowledged(Boolean(nextDevice?.attention_acknowledged));
   }
 
@@ -2802,6 +2851,25 @@ function DeviceDetailsPage({
     };
   }, [device]);
 
+  async function changeArchiveState() {
+    setSaving(true);
+    setError('');
+    try {
+      const payload = await apiRequest(`device/?id=${device.id}`, {
+        method: 'PUT', body: { archived: !device.archived },
+      });
+      const updatedDevice = await loadDevice({ quiet: true });
+      await onSaved(updatedDevice);
+      archiveConfirm.close();
+      setEditing(false);
+      showServerNotification(payload);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function save() {
     if (!device || !name.trim()) {
       if (!name.trim()) {
@@ -2832,6 +2900,7 @@ function DeviceDetailsPage({
           offline_notification_preference: offlineNotificationPreference,
           comments,
           external_url: externalUrl.trim(),
+          homebox_item_id: homeboxItemId,
           acknowledge_attention: known && attentionAcknowledged,
         },
       });
@@ -2926,6 +2995,7 @@ function DeviceDetailsPage({
             <Box>
               <Group gap="xs" wrap="wrap">
                 <Title order={2}>{device ? displayDeviceName(device) : 'Device'}</Title>
+                {device?.archived && <Badge color="gray" variant="light">Archived</Badge>}
                 {device && <GatewayBadge device={device} compact />}
                 {device && <RiskBadge device={device} compact />}
               </Group>
@@ -2950,9 +3020,15 @@ function DeviceDetailsPage({
                 </Button>
               </Group>
             ) : (
+              <Group gap="xs">
+              <Button variant="default" leftSection={device.archived ? <IconArchiveOff size={18} /> : <IconArchive size={18} />}
+                onClick={archiveConfirm.open}>
+                {device.archived ? 'Restore device' : 'Archive device'}
+              </Button>
               <Button leftSection={<IconEdit size={18} />} onClick={startEditing}>
                 Edit device
               </Button>
+              </Group>
             )
           )}
         </Group>
@@ -2975,6 +3051,12 @@ function DeviceDetailsPage({
             </Tabs.List>
 
             <Tabs.Panel value="overview" pt="lg">
+              {!editing && device.homebox_link && (
+                <Button component="a" href={device.homebox_link} target="_blank" rel="noopener noreferrer"
+                  variant="default" leftSection={<IconExternalLink size={18} />} mb="md">
+                  Open in HomeBox
+                </Button>
+              )}
               {editing ? (
                 <Stack gap="lg">
                   <SimpleGrid cols={{ base: 1, md: 2 }}>
@@ -3002,6 +3084,11 @@ function DeviceDetailsPage({
                       error={!validExternalUrl(externalUrl) ? 'Enter a valid HTTP or HTTPS URL.' : null}
                       onChange={(event) => setExternalUrl(event.currentTarget.value)}
                     />
+                    {device.homebox_available ? (
+                      <HomeBoxItemPicker value={homeboxItemId} onChange={setHomeboxItemId} />
+                    ) : homeboxItemId && (
+                      <Button variant="default" leftSection={<IconX size={16} />} onClick={() => setHomeboxItemId(null)}>Unlink HomeBox item</Button>
+                    )}
                   </SimpleGrid>
                   <SimpleGrid cols={{ base: 1, md: 2 }}>
                     <DeviceIconPicker value={icon} onChange={setIcon} />
@@ -3168,6 +3255,7 @@ function DeviceDetailsPage({
                       value={availabilityPeriod}
                       onChange={setAvailabilityPeriod}
                       data={[
+                        { value: 'day', label: 'Day' },
                         { value: 'week', label: 'Week' },
                         { value: 'month', label: 'Month' },
                         { value: 'year', label: 'Year' },
@@ -3213,8 +3301,10 @@ function DeviceDetailsPage({
                         </div>
                         <Group justify="space-between" wrap="nowrap">
                           <Text size="xs" c="dimmed">
-                            {availability.period === 'week'
-                              ? '7 days ago'
+                            {availability.period === 'day'
+                              ? '24 hours ago'
+                              : availability.period === 'week'
+                                ? '7 days ago'
                               : availability.period === 'month'
                                 ? '30 days ago'
                                 : '1 year ago'}
@@ -3439,6 +3529,19 @@ function DeviceDetailsPage({
             >
               Delete
             </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal opened={archiveConfirmOpened} onClose={archiveConfirm.close}
+        title={device?.archived ? 'Restore device' : 'Archive device'} centered>
+        <Stack>
+          <Text>{device?.archived
+            ? `Restore ${device.name} to the active inventory?`
+            : `Archive ${device?.name}? Its history will be kept. It will return automatically if detected by a future scan.`}</Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={archiveConfirm.close} disabled={saving}>Cancel</Button>
+            <Button leftSection={device?.archived ? <IconArchiveOff size={18} /> : <IconArchive size={18} />}
+              onClick={changeArchiveState} loading={saving}>{device?.archived ? 'Restore' : 'Archive'}</Button>
           </Group>
         </Stack>
       </Modal>
@@ -3816,6 +3919,11 @@ function SettingsPage({ onSaved }) {
   const [adguardLastSyncAt, setAdguardLastSyncAt] = useState(null);
   const [adguardLastError, setAdguardLastError] = useState('');
   const [speedtestTrackerEnabled, setSpeedtestTrackerEnabled] = useState(false);
+  const [homeboxEnabled, setHomeboxEnabled] = useState(false);
+  const [homeboxUrl, setHomeboxUrl] = useState('');
+  const [homeboxToken, setHomeboxToken] = useState('');
+  const [homeboxConfigured, setHomeboxConfigured] = useState(false);
+  const [testingHomebox, setTestingHomebox] = useState(false);
   const [speedtestTrackerConfigured, setSpeedtestTrackerConfigured] = useState(false);
   const [speedtestTrackerUrl, setSpeedtestTrackerUrl] = useState('');
   const [speedtestTrackerApiToken, setSpeedtestTrackerApiToken] = useState('');
@@ -3891,6 +3999,10 @@ function SettingsPage({ onSaved }) {
       setAdguardLastSyncAt(data.adguard_last_sync_at || null);
       setAdguardLastError(data.adguard_last_error || '');
       setSpeedtestTrackerEnabled(Boolean(data.speedtest_tracker_enabled));
+      setHomeboxEnabled(Boolean(data.homebox_enabled));
+      setHomeboxUrl(data.homebox_url || '');
+      setHomeboxToken('');
+      setHomeboxConfigured(Boolean(data.homebox_configured));
       setSpeedtestTrackerConfigured(Boolean(data.speedtest_tracker_configured));
       setSpeedtestTrackerUrl(data.speedtest_tracker_url || '');
       setSpeedtestTrackerApiToken('');
@@ -3952,6 +4064,9 @@ function SettingsPage({ onSaved }) {
         adguard_sync_interval: adguardSyncInterval,
         adguard_retention_days: adguardRetentionDays,
         speedtest_tracker_enabled: speedtestTrackerEnabled,
+        homebox_enabled: homeboxEnabled,
+        homebox_url: homeboxUrl.trim(),
+        ...(homeboxToken ? { homebox_api_token: homeboxToken } : {}),
         speedtest_tracker_url: speedtestTrackerUrl.trim(),
       };
       if (discordWebhook.trim()) {
@@ -4107,6 +4222,21 @@ function SettingsPage({ onSaved }) {
       showErrorNotification(err);
     } finally {
       setTestingSpeedtestTracker(false);
+    }
+  }
+
+  async function testHomeboxConnection() {
+    setTestingHomebox(true);
+    setError('');
+    try {
+      await apiRequest('integrations/homebox/test/', {
+        method: 'POST', body: { url: homeboxUrl.trim(), api_token: homeboxToken },
+      });
+      notifications.show({ title: 'HomeBox', message: 'Connection successful', color: 'teal' });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setTestingHomebox(false);
     }
   }
 
@@ -4684,7 +4814,7 @@ function SettingsPage({ onSaved }) {
             </Badge>
           </Group>
 
-          <SimpleGrid cols={{ base: 1, md: 3 }}>
+          <SimpleGrid className="adguard-connection-fields" cols={{ base: 1, md: 3 }}>
             <TextInput
               label="AdGuard Home URL"
               placeholder="http://192.168.1.2:3000"
@@ -4711,8 +4841,8 @@ function SettingsPage({ onSaved }) {
             <Text size="xs" c="dimmed">Leave the password blank to keep the saved password.</Text>
           )}
 
-          <Group justify="space-between" align="flex-end" wrap="wrap">
-            <Group align="flex-end" wrap="wrap">
+          <Group className="adguard-sync-controls" justify="space-between" align="flex-end" wrap="wrap">
+            <Group className="adguard-sync-fields" align="flex-end" wrap="wrap">
               <NumberInput
                 w={170}
                 label="Sync interval"
@@ -4733,7 +4863,7 @@ function SettingsPage({ onSaved }) {
                 suffix=" days"
                 disabled={!adguardEnabled}
               />
-              <Box pb={6}>
+              <Box className="adguard-sync-status" pb={6}>
                 <Text size="xs" c="dimmed">
                   {adguardLastSyncAt
                     ? `Last sync: ${formatDate(adguardLastSyncAt, timeZone)}`
@@ -4746,7 +4876,7 @@ function SettingsPage({ onSaved }) {
                 )}
               </Box>
             </Group>
-            <Group gap="sm">
+            <Group className="adguard-sync-actions" gap="sm">
               <Button
                 variant="default"
                 leftSection={<IconSend size={18} />}
@@ -4787,7 +4917,8 @@ function SettingsPage({ onSaved }) {
               {speedtestTrackerConfigured ? 'Configured' : 'Not configured'}
             </Badge>
           </Group>
-          <SimpleGrid cols={{ base: 1, md: 2 }}>
+          <Stack className="speedtest-connection-controls" gap="sm">
+          <SimpleGrid className="speedtest-connection-fields" cols={{ base: 1, md: 2 }}>
             <TextInput
               label="Speedtest Tracker URL"
               placeholder="http://192.168.1.2:8080"
@@ -4804,9 +4935,9 @@ function SettingsPage({ onSaved }) {
             />
           </SimpleGrid>
           {speedtestTrackerConfigured && (
-            <Text size="xs" c="dimmed">Leave the API token blank to keep the saved token.</Text>
+            <Text className="speedtest-connection-hint" size="xs" c="dimmed">Leave the API token blank to keep the saved token.</Text>
           )}
-          <Group justify="flex-end">
+          <Group className="speedtest-connection-actions" justify="flex-end">
             <Button
               variant="default"
               leftSection={<IconSend size={18} />}
@@ -4816,6 +4947,28 @@ function SettingsPage({ onSaved }) {
             >
               Test connection
             </Button>
+          </Group>
+          </Stack>
+        </Stack>
+        <Stack className="settings-subsection" gap="sm">
+          <Group justify="space-between">
+            <Group><Text fw={700}>HomeBox</Text><Switch label="Enabled" checked={homeboxEnabled}
+              onChange={(event) => setHomeboxEnabled(event.currentTarget.checked)} /></Group>
+            <Badge color={homeboxConfigured && homeboxEnabled ? 'teal' : 'gray'} variant="light">
+              {homeboxConfigured ? 'Configured' : 'Not configured'}
+            </Badge>
+          </Group>
+          <SimpleGrid cols={{ base: 1, md: 2 }}>
+            <TextInput label="HomeBox URL" value={homeboxUrl} disabled={!homeboxEnabled}
+              onChange={(event) => setHomeboxUrl(event.currentTarget.value)} />
+            <PasswordInput label="API key" value={homeboxToken} disabled={!homeboxEnabled}
+              placeholder={homeboxConfigured ? 'Saved API key' : 'API key'}
+              onChange={(event) => setHomeboxToken(event.currentTarget.value)} />
+          </SimpleGrid>
+          <Group justify="flex-end">
+            <Button variant="default" leftSection={<IconSend size={18} />}
+              disabled={!homeboxEnabled || !homeboxUrl.trim()} loading={testingHomebox}
+              onClick={testHomeboxConnection}>Test connection</Button>
           </Group>
         </Stack>
         </Stack>
@@ -4851,7 +5004,7 @@ function SettingsPage({ onSaved }) {
               Scheduled cleanup runs every 24 hours using this retention period. Use clean all only for manual resets.
             </Text>
           </Box>
-          <Group gap="sm" align="flex-end">
+          <Group className="activity-cleanup-controls" gap="sm" align="flex-end">
             <NumberInput
               w={150}
               label="Older than"
@@ -4964,8 +5117,8 @@ function SettingsPage({ onSaved }) {
 
         <Divider />
 
-        <Group justify="space-between" align="flex-start" wrap="wrap">
-          <Box>
+        <Group className="watchyourlan-migration-row" justify="space-between" align="flex-start" wrap="wrap">
+          <Box className="watchyourlan-migration-description">
             <Text fw={700}>WatchYourLAN migration</Text>
             <Text size="sm" c="dimmed">
               Import devices from the JSON returned by the WatchYourLAN <code>/api/all</code> endpoint.
@@ -6134,10 +6287,11 @@ function Dashboard({
       const deviceParams = {
         search: currentTableState.search,
         status:
-          currentTableState.deviceStatus && currentTableState.deviceStatus !== 'new'
+          currentTableState.deviceStatus && !['new', 'archived'].includes(currentTableState.deviceStatus)
             ? currentTableState.deviceStatus
             : undefined,
         known: currentTableState.deviceStatus === 'new' ? 'false' : undefined,
+        archived: currentTableState.deviceStatus === 'archived' ? 'true' : undefined,
         network_ranges: currentTableState.networkRangeFilter.length
           ? currentTableState.networkRangeFilter.join(',')
           : undefined,
@@ -6943,7 +7097,7 @@ function Dashboard({
               {inventoryView === 'roles' ? (
                 <Box p="md">
                   <RolesMap
-                    devices={mapDevices}
+                    devices={deviceStatus === 'archived' ? devices : mapDevices}
                     onSelectDevice={openDevicePage}
                   />
                   <Text size="xs" c="dimmed" mt="sm">

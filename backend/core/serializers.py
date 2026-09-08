@@ -370,6 +370,38 @@ def device_needs_attention(device, risk_data=None):
 
 
 class DeviceSerializer(serializers.ModelSerializer):
+    homebox_link = serializers.SerializerMethodField()
+    homebox_available = serializers.SerializerMethodField()
+
+    def homebox_config(self):
+        if "homebox_config" not in self.context:
+            self.context["homebox_config"] = AppSettings.load()
+        return self.context["homebox_config"]
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_homebox_available(self, obj):
+        config = self.homebox_config()
+        return bool(config.homebox_enabled and config.homebox_url and config.homebox_api_token)
+
+    @extend_schema_field(serializers.CharField)
+    def get_homebox_link(self, obj):
+        if obj.homebox_item_id and self.get_homebox_available(obj):
+            return f"{self.homebox_config().homebox_url.rstrip('/')}/item/{obj.homebox_item_id}"
+        return ""
+
+    def validate_homebox_item_id(self, value):
+        if not value or (self.instance and value == self.instance.homebox_item_id):
+            return value
+        from .homebox import HomeBoxClient, HomeBoxError
+        config = self.homebox_config()
+        if not config.homebox_enabled:
+            raise serializers.ValidationError("Enable HomeBox before linking an item.")
+        try:
+            HomeBoxClient(config.homebox_url, config.homebox_api_token).item(value)
+        except HomeBoxError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+        return value
+
     hostname_source = serializers.CharField(read_only=True)
     vendor_source = serializers.CharField(read_only=True)
     attention_acknowledged_signature = serializers.HiddenField(
@@ -653,6 +685,22 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     webhook_signature_configured = serializers.SerializerMethodField()
     adguard_configured = serializers.SerializerMethodField()
     speedtest_tracker_configured = serializers.SerializerMethodField()
+    homebox_configured = serializers.SerializerMethodField()
+    homebox_api_token = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=512)
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_homebox_configured(self, obj):
+        return bool(obj.homebox_url and obj.homebox_api_token)
+
+    def validate_homebox_url(self, value):
+        from .homebox import normalize_url, HomeBoxError
+        if not value:
+            return ""
+        try:
+            return normalize_url(value)
+        except HomeBoxError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
     discord_webhook = serializers.URLField(
         write_only=True,
         required=False,
@@ -737,6 +785,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "adguard_last_sync_at",
             "adguard_last_error",
             "speedtest_tracker_enabled",
+            "homebox_enabled",
+            "homebox_url",
+            "homebox_api_token",
+            "homebox_configured",
             "speedtest_tracker_url",
             "speedtest_tracker_api_token",
             "speedtest_tracker_configured",
@@ -784,6 +836,15 @@ class AppSettingsSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        if attrs.get("homebox_enabled", getattr(self.instance, "homebox_enabled", False)):
+            if not attrs.get("homebox_url", getattr(self.instance, "homebox_url", "")):
+                raise serializers.ValidationError({"homebox_url": "Enter the HomeBox URL."})
+            if not (attrs.get("homebox_api_token") or getattr(self.instance, "homebox_api_token", "")):
+                raise serializers.ValidationError({"homebox_api_token": "Enter a HomeBox API key."})
+        if (self.instance and self.instance.homebox_api_token and "homebox_url" in attrs
+                and attrs["homebox_url"] != self.instance.homebox_url
+                and not attrs.get("homebox_api_token")):
+            raise serializers.ValidationError({"homebox_api_token": "Enter an API key when changing the HomeBox URL."})
         if "scan_ranges" in attrs:
             attrs["ip_range"] = attrs["scan_ranges"][0]
         elif "ip_range" in attrs:
@@ -918,6 +979,8 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             validated_data.pop("telegram_token", None)
         if not validated_data.get("speedtest_tracker_api_token"):
             validated_data.pop("speedtest_tracker_api_token", None)
+        if not validated_data.get("homebox_api_token"):
+            validated_data.pop("homebox_api_token", None)
         return super().update(instance, validated_data)
 
     def validate_home_map_layout(self, value):
