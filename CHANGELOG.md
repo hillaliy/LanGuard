@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Included HomeBox asset IDs in device-link search results so similarly named inventory items can be distinguished.
+
 ## 1.15.0 - 2026-09-08
 
 - Added device archiving with an Archived filter, manual restore, retained history, and automatic restoration when a scanner rediscovers the device.

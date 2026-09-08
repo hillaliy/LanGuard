@@ -46,13 +46,24 @@ class HomeBoxTests(TestCase):
 
     @patch("core.homebox.requests.get")
     def test_search_and_pagination(self, get):
-        get.return_value = self.response({"items": [{"id": ITEM_ID, "name": "Router"}]})
+        get.return_value = self.response({"items": [
+            {"id": ITEM_ID, "name": "Router", "assetId": "NET-0042"},
+        ]})
         response = self.client.get("/api/v1/integrations/homebox/items/", {"q": "Router", "page": 2})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["data"]["items"], [{"value": ITEM_ID, "label": "Router"}])
+        self.assertEqual(response.data["data"]["items"], [
+            {"value": ITEM_ID, "label": "NET-0042 · Router"},
+        ])
         self.assertEqual(get.call_args.kwargs["params"], {"q": "Router", "page": 2, "pageSize": 25})
         self.assertFalse(get.call_args.kwargs["allow_redirects"])
         self.assertEqual(get.call_args.kwargs["headers"]["Authorization"], "Bearer secret-key")
+
+    @patch("core.homebox.requests.get")
+    def test_search_uses_name_when_asset_id_is_missing(self, get):
+        get.return_value = self.response({"items": [{"id": ITEM_ID, "name": "Router"}]})
+        response = self.client.get("/api/v1/integrations/homebox/items/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["items"], [{"value": ITEM_ID, "label": "Router"}])
 
     @patch("core.homebox.requests.get")
     def test_connection_uses_saved_key(self, get):
