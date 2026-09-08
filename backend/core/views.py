@@ -1,4 +1,5 @@
 import csv
+from uuid import UUID
 import ipaddress
 import io
 import json
@@ -186,6 +187,7 @@ DEVICE_ORDERING_FIELDS = {
 FIRST_SEEN_PERIODS = {"today", "7d", "30d"}
 OUTSIDE_NETWORK_RANGE_FILTER = "outside"
 DEVICE_AVAILABILITY_PERIODS = {
+    "day": timedelta(days=1),
     "week": timedelta(days=7),
     "month": timedelta(days=30),
     "year": timedelta(days=365),
@@ -497,6 +499,8 @@ def inventory_device_payload(device):
         "room": getattr(device, "room", ""),
         "comments": device.comments,
         "external_url": device.external_url,
+        "homebox_item_id": str(device.homebox_item_id) if device.homebox_item_id else None,
+        "archived": device.archived,
         "online_notification_preference": device.online_notification_preference,
         "offline_notification_preference": device.offline_notification_preference,
         "risk": risk_data["level"],
@@ -840,6 +844,13 @@ def import_inventory_devices(payload):
         if vendor_source not in valid_identity_sources:
             vendor_source = Device.IdentitySource.IMPORTED if imported_vendor else ""
         comments_present = "comments" in item
+        homebox_present = "homebox_item_id" in item
+        homebox_item_id = None
+        if homebox_present and item["homebox_item_id"]:
+            try:
+                homebox_item_id = UUID(str(item["homebox_item_id"]))
+            except ValueError:
+                homebox_present = False
         comments = str(item.get("comments") or "").strip()
         external_url_present = "external_url" in item or "externalUrl" in item
         external_url = str(item.get("external_url") or item.get("externalUrl") or "").strip()
@@ -894,7 +905,7 @@ def import_inventory_devices(payload):
             raw_status if raw_status in Device.Status.values else Device.Status.OFFLINE
         )
 
-        duplicate_devices = Device.objects.filter(ip=ip).exclude(mac=mac)
+        duplicate_devices = Device.objects.filter(ip=ip, archived=False).exclude(mac=mac)
         for duplicate in duplicate_devices:
             if should_remove_import_ip_duplicate(duplicate):
                 duplicate.delete()
@@ -930,6 +941,10 @@ def import_inventory_devices(payload):
             defaults["comments"] = comments
         if external_url_present:
             defaults["external_url"] = external_url[:2048]
+        if homebox_present:
+            defaults["homebox_item_id"] = homebox_item_id
+        if isinstance(item.get("archived"), bool):
+            defaults["archived"] = item["archived"]
 
         device, was_created = Device.objects.get_or_create(
             mac=mac,
@@ -959,6 +974,8 @@ def import_inventory_devices(payload):
                     *(['room'] if room is not None else []),
                     *(["comments"] if comments_present else []),
                     *(["external_url"] if external_url_present else []),
+                    *(["homebox_item_id"] if homebox_present else []),
+                    *(["archived"] if "archived" in defaults else []),
                     "known",
                     "is_gateway",
                     "online",
@@ -1860,11 +1877,12 @@ def users(request):
 @api_view(["GET", "PUT", "DELETE"])
 @permission_classes([permissions.IsAuthenticated, CanEditDevices])
 def device(request):
-    all_devices = Device.objects.all().count()
-    online_devices = Device.objects.exclude(status=Device.Status.OFFLINE).count()
-    offline_devices = Device.objects.filter(status=Device.Status.OFFLINE).count()
-    new_devices = Device.objects.filter(known=False).count()
-    open_ports = DevicePort.objects.filter(open=True).count()
+    active_devices = Device.objects.filter(archived=False)
+    all_devices = active_devices.count()
+    online_devices = active_devices.exclude(status=Device.Status.OFFLINE).count()
+    offline_devices = active_devices.filter(status=Device.Status.OFFLINE).count()
+    new_devices = active_devices.filter(known=False).count()
+    open_ports = DevicePort.objects.filter(open=True, device__archived=False).count()
     counters = {
         "all_devices": all_devices,
         "online_devices": online_devices,
@@ -1877,7 +1895,8 @@ def device(request):
     if request.method == "GET":
         id_ = request.query_params.get("id", None)
         if not id_:
-            devices = Device.objects.prefetch_related("ports").all()
+            archived = parse_bool_param(request.query_params, "archived") is True
+            devices = Device.objects.prefetch_related("ports").filter(archived=archived)
             online = parse_bool_param(request.query_params, "online")
             device_status = request.query_params.get("status")
             known = parse_bool_param(request.query_params, "known")
@@ -2209,10 +2228,10 @@ def scan_status(request):
             },
             "permissions": user_capabilities(request.user),
             "counters": {
-                "all_devices": Device.objects.count(),
-                "online_devices": Device.objects.exclude(status=Device.Status.OFFLINE).count(),
-                "offline_devices": Device.objects.filter(status=Device.Status.OFFLINE).count(),
-                "open_ports": DevicePort.objects.filter(open=True).count(),
+                "all_devices": Device.objects.filter(archived=False).count(),
+                "online_devices": Device.objects.filter(archived=False).exclude(status=Device.Status.OFFLINE).count(),
+                "offline_devices": Device.objects.filter(archived=False, status=Device.Status.OFFLINE).count(),
+                "open_ports": DevicePort.objects.filter(open=True, device__archived=False).count(),
                 "unnotified_events": NetworkEvent.objects.filter(notified=False).count(),
             },
         },
@@ -2267,7 +2286,7 @@ def device_availability(request):
     device_id = parse_int_param(request.query_params, "device", 0, 1)
     period = request.query_params.get("period", "week")
     if period not in DEVICE_AVAILABILITY_PERIODS:
-        raise ValidationError({"period": "Must be one of: week, month, year."})
+        raise ValidationError({"period": "Must be one of: day, week, month, year."})
     device_instance = get_object_or_404(Device, id=device_id)
     return Response(
         {"status": "OK", "data": device_availability_payload(device_instance, period)}

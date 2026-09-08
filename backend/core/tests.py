@@ -2450,6 +2450,39 @@ class ScanApiTests(TestCase):
         )
         self.assertEqual(response.status_code, 401)
 
+    def test_device_availability_day_clips_to_last_24_hours(self):
+        self.device.events.all().delete()
+        now = timezone.now()
+        for hours, event_type in (
+            (30, NetworkEvent.EventType.DEVICE_ONLINE),
+            (6, NetworkEvent.EventType.DEVICE_OFFLINE),
+            (2, NetworkEvent.EventType.DEVICE_ONLINE),
+        ):
+            NetworkEvent.objects.create(
+                device=self.device, event_type=event_type,
+                message="Presence", created_at=now - timedelta(hours=hours),
+            )
+        with patch("core.views.timezone.now", return_value=now):
+            response = self.client.get("/api/v1/device/availability/", {"device": self.device.id, "period": "day"})
+        self.assertEqual(response.status_code, 200)
+        data = response.data["data"]
+        self.assertEqual(data["period"], "day")
+        self.assertEqual(data["online_seconds"], 20 * 3600)
+        self.assertEqual(data["offline_seconds"], 4 * 3600)
+        self.assertEqual(data["coverage_percent"], 100)
+        self.assertEqual(data["availability_percent"], 83.3)
+        self.assertEqual(data["status_changes"], 2)
+        self.assertEqual(sum(segment["duration_seconds"] for segment in data["segments"]), 86400)
+
+    def test_device_availability_day_without_history_is_unknown(self):
+        self.device.events.all().delete()
+        response = self.client.get("/api/v1/device/availability/", {"device": self.device.id, "period": "day"})
+        self.assertEqual(response.status_code, 200)
+        data = response.data["data"]
+        self.assertIsNone(data["availability_percent"])
+        self.assertEqual(data["coverage_percent"], 0)
+        self.assertEqual(data["segments"][0]["status"], "unknown")
+
     def test_users_endpoint_lists_users(self):
         response = self.client.get("/api/v1/users/")
 

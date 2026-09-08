@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 1.15.0 - 2026-09-08
+
+- Added device archiving with an Archived filter, manual restore, retained history, and automatic restoration when a scanner rediscovers the device.
+
+- Added a Day view for the last 24 hours of device availability history.
+
+- Added a HomeBox integration for searching existing inventory items, linking them to devices, and opening them from the device overview without synchronizing inventory.
+- Improved phone portrait dashboard cards to prevent overlapping headings, status badges, and dates.
+- Made integration settings and maintenance controls more compact in phone landscape layouts.
+- Updated Django to 6.1.1, Mantine to 9.6.0, and Next.js to 16.3.4.
+- Updated the Browserslist build dependency to address security advisories.
+
 ## 1.14.0 - 2026-09-06
 
 - Added a Docker migration tool for importing device inventory from the official NetAlertX `devices.csv` export.

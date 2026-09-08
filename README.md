@@ -262,6 +262,17 @@ usernames, device names, IP and MAC addresses, network ranges, and raw exception
 text. Attach this report to a GitHub issue; only provide container logs when
 requested and review them for private network details first.
 
+Device availability history supports Day, Week, Month, and Year views. Day
+shows the last 24 hours, with missing retained history marked as No data.
+
+Use **Archive device** on a device page to remove retired equipment from the
+active inventory, Home Map, and dashboard counters without deleting history.
+Archived devices do not generate notifications. Select **Archived** in the
+device filter to find them, then use **Restore device** to restore one manually.
+A device detected again by a future scan is restored automatically. Archiving
+is not a scan exclusion, so equipment still on the network can return on the
+next scan. Inventory export and import preserve the archived state.
+
 ## Integrations
 
 Docker installations can connect LanGuard to optional services from
@@ -271,6 +282,7 @@ Docker installations can connect LanGuard to optional services from
 | --- | --- | --- |
 | AdGuard Home | Network-wide and per-device DNS activity | Stores aggregated domain and query counters using the configured retention period |
 | Speedtest Tracker | Latest download, upload, ping, packet loss, and health on the dashboard | Stores connection settings only; the latest result is cached in memory for five minutes |
+| HomeBox | Link a device to an existing inventory item and open it in HomeBox | Stores connection settings and the linked item ID; no inventory synchronization |
 
 ### AdGuard Home
 
@@ -320,6 +332,26 @@ history into its database. The backend reads the latest result on dashboard
 requests and caches it in memory for five minutes, while a manual dashboard
 refresh requests fresh data immediately. The scheduler container is not used
 for this integration.
+
+### HomeBox
+
+The HomeBox integration targets the `/api/v1/entities` API used by HomeBox
+v0.26.2. Older releases with only an `/items` API are not supported.
+
+1. Create a HomeBox API key for an account that can access the intended inventory.
+2. Enable **HomeBox** in **Settings > Integrations**, enter its base URL and API
+   key, test the connection, and save Settings. Leave the key blank on later
+   saves to preserve it; changing the URL requires entering a key again.
+3. Open a device, select **Edit device**, search for a **HomeBox item**, and save.
+4. Select **Open in HomeBox** on the device overview to open the linked item.
+   Clearing the selection and saving removes the link without deleting the item.
+
+Search runs through the LanGuard backend on demand and requires device-edit
+permission. The API key is never returned to the browser. LanGuard does not
+create or update HomeBox items or copy documents and warranty information.
+The browser needs access to HomeBox and may require a separate HomeBox login.
+Inventory exports preserve item IDs; the HomeBox connection is configured
+separately on the destination instance.
 
 ## Automation webhooks
 

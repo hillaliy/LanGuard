@@ -76,6 +76,8 @@ class Device(models.Model):
     )
     comments = models.TextField(blank=True, default="")
     external_url = models.URLField(max_length=2048, blank=True, default="")
+    homebox_item_id = models.UUIDField(null=True, blank=True)
+    archived = models.BooleanField(default=False, db_index=True)
     online_notification_preference = models.CharField(
         max_length=16,
         choices=NotificationPreference.choices,
@@ -376,6 +378,9 @@ class AppSettings(models.Model):
     adguard_last_sync_at = models.DateTimeField(blank=True, null=True)
     adguard_last_error = models.TextField(blank=True, default="")
     speedtest_tracker_enabled = models.BooleanField(default=False)
+    homebox_enabled = models.BooleanField(default=False)
+    homebox_url = models.URLField(max_length=2048, blank=True, default="")
+    homebox_api_token = models.CharField(max_length=512, blank=True, default="")
     speedtest_tracker_url = models.URLField(max_length=2048, blank=True, default="")
     speedtest_tracker_api_token = models.CharField(max_length=512, blank=True, default="")
     home_map_layout = models.JSONField(default=dict, blank=True)

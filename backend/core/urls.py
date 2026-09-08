@@ -1,4 +1,5 @@
 from django.urls import path
+from .homebox_views import test_homebox, search_homebox
 
 from .views import (
     UserRegistrationView,
@@ -36,6 +37,8 @@ from .views import (
 )
 
 urlpatterns = [
+    path("integrations/homebox/test/", test_homebox, name="test-homebox"),
+    path("integrations/homebox/items/", search_homebox, name="homebox-items"),
     path("health/", health_status, name="health-status"),
     path("register/", UserRegistrationView.as_view(), name="register"),
     path("setup/", setup_status, name="setup-status"),
