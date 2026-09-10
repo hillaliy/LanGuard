@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.16.0 - 2026-09-10
+
 - Included HomeBox asset IDs in device-link search results so similarly named inventory items can be distinguished.
 - Added a HomeBox link filter for finding devices that are linked or not linked to inventory items.
 - Moved device inventory to a dedicated Devices page and made MAC addresses consistently visible in the device list.
