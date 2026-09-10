@@ -89,6 +89,7 @@ from .adguard import AdGuardError, sync_adguard_query_log, test_adguard_connecti
 from .speedtest_tracker import SpeedtestTrackerError, latest_speedtest_result
 from .diagnostics import build_diagnostics_report
 from .user_messages import error_response, scan_error_message, success_response
+from .wake_on_lan import send_magic_packet, wake_broadcast_address
 
 LOGGER = logging.getLogger(__name__)
 
@@ -2048,6 +2049,50 @@ def bulk_update_devices(request):
         },
         "Devices updated",
         f"{selected_count} selected device{'s' if selected_count != 1 else ''} marked as {state_label}.",
+        status="OK",
+    )
+
+
+@extend_schema(
+    request=inline_serializer(
+        name="WakeDeviceRequest",
+        fields={"id": serializers.IntegerField(min_value=1)},
+    ),
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated, CanRunScans])
+def wake_device(request):
+    try:
+        device_id = int(request.data.get("id"))
+    except (TypeError, ValueError):
+        raise ValidationError({"id": "A valid device ID is required."})
+    if device_id < 1:
+        raise ValidationError({"id": "A valid device ID is required."})
+
+    device = get_object_or_404(Device, pk=device_id, archived=False)
+    try:
+        broadcast_address = wake_broadcast_address(
+            device.ip,
+            AppSettings.load().effective_scan_ranges,
+        )
+        send_magic_packet(device.mac, broadcast_address)
+    except ValueError as exc:
+        raise ValidationError({"device": str(exc)}) from exc
+    except OSError:
+        LOGGER.exception("Could not send Wake-on-LAN packet for device %s", device.id)
+        return error_response(
+            "Wake request failed",
+            "LanGuard could not send the Wake-on-LAN packet. Check the host network configuration.",
+            response_status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    LOGGER.info("Wake-on-LAN packet sent for device %s", device.id)
+    return success_response(
+        {"id": device.id},
+        "Wake request sent",
+        f"Wake-on-LAN packet sent to {device.name}.",
+        response_status=status.HTTP_202_ACCEPTED,
         status="OK",
     )
 
