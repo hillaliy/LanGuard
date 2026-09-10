@@ -1,6 +1,13 @@
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import './globals.css';
+import './styles/shell.css';
+import './styles/pages.css';
+import './styles/dashboard.css';
+import './styles/devices.css';
+import './styles/maps.css';
+import './styles/device-details.css';
+import './styles/responsive.css';
 import { ColorSchemeScript, MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { theme } from './theme';

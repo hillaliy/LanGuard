@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Refactored Docker frontend styling around Mantine theme defaults, scoped modules, and focused layout styles while preserving the existing light, dark, desktop, tablet, and phone appearance.
+- Simplified the Docker Not Found page so the LanGuard logo cleanly replaces the zero in the 404 mark.
+
 ## 1.16.0 - 2026-09-10
 
 - Included HomeBox asset IDs in device-link search results so similarly named inventory items can be distinguished.

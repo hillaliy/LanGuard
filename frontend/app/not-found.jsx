@@ -10,34 +10,24 @@ import {
 } from '@mantine/core';
 import {
   IconArrowLeft,
-  IconNetworkOff,
-  IconRadar,
-  IconShieldX,
 } from '@tabler/icons-react';
+import classes from './not-found.module.css';
 
 export default function NotFound() {
   return (
-    <main className="not-found-shell">
+    <main className={classes.shell}>
       <Container size={760}>
         <Stack align="center" gap="xl" ta="center">
-          <Box className="not-found-visual" aria-hidden="true">
-            <Text className="not-found-code">404</Text>
-            <Box className="not-found-logo">
+          <Box className={classes.visual} aria-hidden="true">
+            <Text className={classes.digit}>4</Text>
+            <Box className={classes.logo}>
               <Image src="/logo.png" alt="" h={88} w={88} fit="contain" />
             </Box>
-            <Box className="not-found-node node-one">
-              <IconRadar size={22} />
-            </Box>
-            <Box className="not-found-node node-two">
-              <IconNetworkOff size={22} />
-            </Box>
-            <Box className="not-found-node node-three">
-              <IconShieldX size={22} />
-            </Box>
+            <Text className={classes.digit}>4</Text>
           </Box>
 
           <Stack align="center" gap="sm">
-            <Title order={1} className="not-found-title">
+            <Title order={1} className={classes.title}>
               Route not found
             </Title>
             <Text c="dimmed" size="lg" maw={540}>

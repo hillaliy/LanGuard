@@ -35,6 +35,7 @@ import {
   Text,
   TextInput,
   Textarea,
+  ThemeIcon,
   Title,
   Tooltip,
   UnstyledButton,
@@ -119,6 +120,7 @@ import {
   storeUser,
 } from './api';
 import { APP_VERSION, CHANGELOG_ENTRIES } from './version';
+import authClasses from './auth.module.css';
 
 const changelogSeenStorageKey = 'languard_changelog_seen_version';
 const versionCheckFallbackInterval = 6 * 60 * 60 * 1000;
@@ -1727,8 +1729,8 @@ function AuthScreen({ onLogin }) {
   }
 
   return (
-    <main className="auth-shell">
-      <Paper className="auth-panel" radius="md" p="xl">
+    <main className={authClasses.shell}>
+      <Paper className={authClasses.panel} p="xl">
         <LoadingOverlay visible={loading} />
         <Stack gap="lg">
           <Group gap="sm">
@@ -1795,20 +1797,26 @@ function AuthScreen({ onLogin }) {
 
 function ThemeIconLike({ children, color, size = 42 }) {
   return (
-    <Box
+    <ThemeIcon
+      color={color}
+      size={size}
+      radius="md"
+      variant="light"
       style={{
-        width: size,
-        height: size,
-        borderRadius: 8,
-        display: 'grid',
-        flex: '0 0 auto',
-        placeItems: 'center',
         background: `var(--mantine-color-${color}-1)`,
         color: `var(--mantine-color-${color}-7)`,
       }}
     >
       {children}
-    </Box>
+    </ThemeIcon>
+  );
+}
+
+function PageIcon({ children }) {
+  return (
+    <ThemeIcon className="page-icon" size={52} radius={12} variant="light">
+      {children}
+    </ThemeIcon>
   );
 }
 
@@ -1845,10 +1853,16 @@ function DashboardStatusCards({ counters = {} }) {
 
 function DashboardStatusCard({ icon, label, value, color }) {
   return (
-    <Paper className="dashboard-status-card" radius="md">
-      <span className={`dashboard-status-icon ${color}`}>
+    <Paper className="dashboard-status-card">
+      <ThemeIcon
+        className={`dashboard-status-icon ${color}`}
+        color={color}
+        size={56}
+        radius={14}
+        variant="light"
+      >
         {icon}
-      </span>
+      </ThemeIcon>
       <Box>
         <Text className="dashboard-status-label" fw={800}>{label}</Text>
         <Text className="dashboard-status-value" fw={900}>{value}</Text>
@@ -4440,9 +4454,9 @@ function SettingsPage({ onSaved }) {
       <Stack>
         <Group justify="space-between" align="flex-start">
           <Group gap="sm">
-            <span className="page-icon">
+            <PageIcon>
               <IconSettings size={26} />
-            </span>
+            </PageIcon>
             <Box>
               <Title order={2}>Settings</Title>
               <Text c="dimmed">Scanner, notifications, and inventory tools</Text>
@@ -5313,9 +5327,9 @@ function EventsPage({
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end" wrap="wrap">
         <Group gap="sm">
-          <span className="page-icon">
+          <PageIcon>
             <IconBell size={26} />
-          </span>
+          </PageIcon>
           <Box>
             <Title order={2}>Events</Title>
             <Text c="dimmed">Network changes and alert decisions</Text>
@@ -5601,7 +5615,9 @@ function DNSActivityPage({ timeZone, onSelectDevice }) {
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end" wrap="wrap">
         <Group gap="sm">
-          <span className="page-icon"><IconWorldSearch size={26} /></span>
+          <PageIcon>
+            <IconWorldSearch size={26} />
+          </PageIcon>
           <Box>
             <Title order={2}>DNS Activity</Title>
             <Text c="dimmed">AdGuard Home destinations grouped by device</Text>
@@ -5730,9 +5746,9 @@ function ScanHistoryPage({ scanRuns, timeZone, pagination, loadingMore, onLoadMo
       <Stack gap="lg">
         <Group justify="space-between" align="flex-end">
           <Group gap="sm">
-            <span className="page-icon">
+            <PageIcon>
               <IconHistory size={26} />
-            </span>
+            </PageIcon>
             <Box>
               <Title order={2}>Scan history</Title>
               <Text c="dimmed">Recent scan runs and detected changes</Text>
@@ -5810,9 +5826,9 @@ function NotificationsPage({
     <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
         <Group gap="sm">
-          <span className="page-icon">
+          <PageIcon>
             <IconBell size={26} />
-          </span>
+          </PageIcon>
           <Box>
             <Title order={2}>Notifications</Title>
             <Text c="dimmed">Delivery status for external notification channels</Text>
@@ -6879,7 +6895,7 @@ function Dashboard({
               <Group className="topbar-clock" gap="xs" wrap="nowrap">
                 <IconClock size={18} />
                 <Box>
-                  <Text size="xs" c="dimmed" lh={1.1}>
+                  <Text size="xs" c="var(--muted-text)" lh={1.1}>
                     {formatTopbarDate(currentTime, displayTimeZone)}
                   </Text>
                   <Text size="sm" fw={700} lh={1.15}>

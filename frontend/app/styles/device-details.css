@@ -1,0 +1,243 @@
+.sortable-header {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 700;
+  gap: 6px;
+  padding: 0;
+}
+
+.sortable-header:hover,
+.sortable-header.active {
+  color: var(--brand-strong);
+}
+
+.sort-icon {
+  color: var(--subtle-text);
+  transition: color 120ms ease, transform 120ms ease;
+}
+
+.sortable-header.active .sort-icon {
+  color: var(--brand-strong);
+}
+
+.sort-icon.desc {
+  transform: rotate(180deg);
+}
+
+.device-field {
+  background: var(--muted-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.identity-confidence-field {
+  grid-column: 1 / -1;
+  min-height: 74px;
+}
+
+.device-field.editable {
+  background: var(--input-panel-bg);
+}
+
+.device-field-input {
+  background: transparent;
+  border: 0;
+  color: var(--field-text);
+  display: block;
+  font: inherit;
+  margin-top: 4px;
+  outline: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.device-room-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.user-list-panel {
+  min-width: 0;
+  padding: 12px;
+  background: var(--muted-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.user-list-button {
+  width: 100%;
+  min-width: 0;
+  padding: 10px;
+  color: var(--field-text);
+  background: var(--input-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.user-list-button:hover,
+.user-list-button.active {
+  color: var(--brand-strong);
+  background: var(--brand-soft);
+  border-color: var(--brand);
+}
+
+.icon-picker-field {
+  grid-column: 1 / -1;
+}
+
+.icon-picker-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(46px, 1fr));
+  margin-top: 8px;
+}
+
+.icon-picker-button {
+  align-items: center;
+  aspect-ratio: 1;
+  background: var(--input-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--muted-text);
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 46px;
+  min-width: 0;
+}
+
+.icon-picker-button:hover,
+.icon-picker-button.selected {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.device-detail-page {
+  position: relative;
+  min-height: 620px;
+  padding: 24px;
+  overflow: hidden;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-soft);
+}
+
+.device-detail-icon {
+  width: 54px;
+  height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 54px;
+  color: var(--brand-strong);
+  background: var(--brand-soft);
+  border: 1px solid var(--soft-border-color);
+  border-radius: 8px;
+}
+
+.device-detail-section {
+  min-width: 0;
+}
+
+.device-detail-section + .device-detail-section {
+  border-left: 1px solid var(--border-color);
+  padding-left: 24px;
+}
+
+.device-history-time {
+  min-width: 190px;
+  white-space: nowrap;
+}
+
+.device-availability-section {
+  min-width: 0;
+}
+
+.availability-timeline {
+  display: flex;
+  width: 100%;
+  height: 16px;
+  overflow: hidden;
+  background: var(--muted-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+}
+
+.availability-segment {
+  display: block;
+  min-width: 0;
+  height: 100%;
+}
+
+.availability-segment.online,
+.availability-key.online {
+  background: #12b886;
+}
+
+.availability-segment.offline,
+.availability-key.offline {
+  background: #fa5252;
+}
+
+.availability-segment.unknown,
+.availability-key.unknown {
+  background: #adb5bd;
+}
+
+.availability-legend {
+  justify-content: center;
+}
+
+.availability-key {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 50%;
+}
+
+.wrap-text {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.truncate-cell {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.online {
+  background: #12b886;
+}
+
+.status-dot.offline {
+  background: #adb5bd;
+}
+
+.status-dot.recently-seen {
+  background: #339af0;
+}
+
+.status-dot.sleeping {
+  background: #fab005;
+}

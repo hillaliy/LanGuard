@@ -1,0 +1,74 @@
+.content-panel {
+  border: 1px solid var(--border-color);
+  background: var(--panel-bg);
+}
+
+.activity-table-panel {
+  overflow: hidden;
+}
+
+.activity-table-scroll {
+  min-height: 100%;
+}
+
+.activity-table-scroll table {
+  min-width: 760px;
+}
+
+.activity-table-scroll thead {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--panel-bg);
+  box-shadow: 0 1px 0 var(--border-color);
+}
+
+.activity-clickable-row {
+  cursor: pointer;
+}
+
+.activity-clickable-row:hover,
+.activity-clickable-row:focus-visible {
+  background: var(--mantine-color-blue-light);
+  outline: none;
+}
+
+.settings-page {
+  position: relative;
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: var(--mantine-spacing-xl);
+  min-height: 520px;
+}
+
+.settings-category-nav {
+  align-self: start;
+  padding: var(--mantine-spacing-xs);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--muted-panel-bg);
+}
+
+.settings-category-nav [role='tab'] {
+  width: 100%;
+  justify-content: flex-start;
+  border-radius: 4px;
+}
+
+.settings-category-panel {
+  min-width: 0;
+  padding: var(--mantine-spacing-sm) 0;
+}
+
+.settings-subsection {
+  padding-left: var(--mantine-spacing-lg);
+  border-left: 3px solid var(--soft-border-color);
+}
+
+.page-icon {
+  color: var(--brand-strong);
+  background: var(--brand-soft);
+}
