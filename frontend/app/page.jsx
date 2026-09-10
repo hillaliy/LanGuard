@@ -187,18 +187,7 @@ function displayDeviceName(device) {
 function deviceSubtitle(device) {
   const hostname = String(device?.hostname || '').trim();
   const vendor = String(device?.vendor || '').trim();
-  const mac = String(device?.mac || '').trim();
-  const details = [hostname, vendor].filter(Boolean);
-
-  if (details.length) {
-    return [mac, ...details].filter(Boolean).join(' - ');
-  }
-
-  if (isLocallyAdministeredMac(mac)) {
-    return `Private/random MAC - ${mac}`;
-  }
-
-  return mac || '-';
+  return [hostname, vendor].filter(Boolean).join(' - ') || '-';
 }
 
 const eventTypeOptions = [
@@ -7349,8 +7338,11 @@ function Dashboard({
                             <DeviceStatusInline device={device} muted />
                           </Box>
                           <Box>
-                            <Text size="xs" c="dimmed">IP</Text>
+                            <Text size="xs" c="dimmed">IP / MAC</Text>
                             <Text size="sm" fw={700} className="mobile-mono-value device-list-ip-value">{device.ip}</Text>
+                            <Text size="xs" c="dimmed" className="mobile-mono-value device-list-mac-value">
+                              {device.mac || '-'}
+                            </Text>
                           </Box>
                           <Box>
                             <Text size="xs" c="dimmed">Room</Text>
@@ -7414,8 +7406,11 @@ function Dashboard({
                         </Group>
                         <SimpleGrid className="device-mobile-details" cols={2} spacing="xs" mt="sm">
                           <Box>
-                            <Text size="xs" c="dimmed">IP</Text>
+                            <Text size="xs" c="dimmed">IP / MAC</Text>
                             <Text size="sm" className="mobile-mono-value">{device.ip}</Text>
+                            <Text size="xs" c="dimmed" className="mobile-mono-value device-list-mac-value">
+                              {device.mac || '-'}
+                            </Text>
                           </Box>
                           <Box>
                             <Text size="xs" c="dimmed">
@@ -7435,10 +7430,6 @@ function Dashboard({
                           <Box className="device-mobile-wide">
                             <Text size="xs" c="dimmed">Role</Text>
                             <Text size="sm">{formatRoleLabel(device.role)}</Text>
-                          </Box>
-                          <Box className="device-mobile-wide">
-                            <Text size="xs" c="dimmed">MAC</Text>
-                            <Text size="sm" className="mobile-mono-value">{device.mac}</Text>
                           </Box>
                           <Box className="device-mobile-wide">
                             <Text size="xs" c="dimmed">Ports</Text>
