@@ -190,7 +190,7 @@ function deviceSubtitle(device) {
   const details = [hostname, vendor].filter(Boolean);
 
   if (details.length) {
-    return details.join(' - ');
+    return [mac, ...details].filter(Boolean).join(' - ');
   }
 
   if (isLocallyAdministeredMac(mac)) {
@@ -5835,6 +5835,7 @@ const activityPageLimit = 500;
 const dashboardStateStorageKey = 'languard_dashboard_navigation_state';
 const mainViewPaths = {
   dashboard: '/dashboard',
+  devices: '/devices',
   'home-map': '/home-map',
   events: '/events',
   history: '/scan-history',
@@ -5913,6 +5914,16 @@ function PrimaryNavigation({
         fullWidth
       >
         Dashboard
+      </Button>
+      <Button
+        className="sidebar-nav-button"
+        variant={!devicePageId && mainView === 'devices' ? 'filled' : 'subtle'}
+        justify="flex-start"
+        leftSection={<IconDeviceDesktop size={18} />}
+        onClick={() => navigate('devices')}
+        fullWidth
+      >
+        Devices
       </Button>
       <Button
         className="sidebar-nav-button"
@@ -6906,6 +6917,7 @@ function Dashboard({
               ? 'Device details'
               : {
                   dashboard: 'Dashboard',
+                  devices: 'Devices',
                   'home-map': 'Home Map',
                   events: 'Events',
                   history: 'Scan history',
@@ -6960,14 +6972,14 @@ function Dashboard({
               onSaved={async () => loadData({ quiet: true })}
               onDeleted={async () => {
                 await loadData({ quiet: true });
-                storeDashboardNavigationState({ mainView: 'dashboard', scrollY: 0 });
+                storeDashboardNavigationState({ mainView: 'devices', scrollY: 0 });
                 window.history.replaceState(
-                  { languardMainView: 'dashboard' },
+                  { languardMainView: 'devices' },
                   '',
-                  mainViewPath('dashboard')
+                  mainViewPath('devices')
                 );
                 setDevicePageId('');
-                setMainView('dashboard');
+                setMainView('devices');
               }}
               timeZone={displayTimeZone}
               roomOptions={roomOptions}
@@ -7017,6 +7029,8 @@ function Dashboard({
             <DNSActivityPage timeZone={displayTimeZone} onSelectDevice={openDevicePage} />
           ) : (
             <>
+          {mainView === 'dashboard' && (
+            <>
           <DashboardStatusCards counters={counters} />
 
           <div className={`dashboard-summary-grid ${speedtestTrackerPayload?.integration?.enabled && speedtestTrackerPayload?.integration?.configured ? 'with-speedtest' : ''}`}>
@@ -7043,7 +7057,10 @@ function Dashboard({
             onSelectDevice={openDevicePage}
             timeZone={displayTimeZone}
           />
+            </>
+          )}
 
+          {mainView === 'devices' && (
           <Paper className="content-panel devices-content-panel" radius="md">
             <Stack gap={0}>
               <Group className="devices-panel-header" justify="space-between" p="md">
@@ -7399,6 +7416,7 @@ function Dashboard({
               )}
             </Stack>
           </Paper>
+          )}
 
             </>
           )}

@@ -1,5 +1,5 @@
 import { LanGuardApplication } from '../page';
 
 export default function DevicesPage() {
-  return <LanGuardApplication />;
+  return <LanGuardApplication initialView="devices" />;
 }
