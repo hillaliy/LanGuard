@@ -113,6 +113,35 @@ class HomeBoxTests(TestCase):
         self.assertEqual(DeviceSerializer(self.device).data["homebox_link"], "")
         self.assertEqual(self.client.get("/api/v1/integrations/homebox/items/").status_code, 400)
 
+    def test_device_list_filters_by_homebox_link(self):
+        linked = Device.objects.create(
+            mac="00:11:22:33:44:66",
+            ip="192.168.0.11",
+            homebox_item_id=UUID(ITEM_ID),
+        )
+
+        linked_response = self.client.get("/api/v1/device/", {"homebox_linked": "true"})
+        unlinked_response = self.client.get("/api/v1/device/", {"homebox_linked": "false"})
+        invalid_response = self.client.get("/api/v1/device/", {"homebox_linked": "invalid"})
+
+        self.assertEqual(linked_response.status_code, 200)
+        self.assertEqual([item["id"] for item in linked_response.data["data"]], [linked.id])
+        self.assertEqual(unlinked_response.status_code, 200)
+        self.assertEqual([item["id"] for item in unlinked_response.data["data"]], [self.device.id])
+        self.assertEqual(invalid_response.status_code, 400)
+        self.assertIn("homebox_linked", invalid_response.data)
+
+    def test_scan_status_exposes_safe_homebox_state(self):
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["integrations"]["homebox"],
+            {"enabled": True, "configured": True},
+        )
+        self.assertNotIn("homebox.example", str(response.data))
+        self.assertNotIn("secret-key", str(response.data))
+
     @patch("core.homebox.requests.get")
     def test_access_control(self, get):
         user = User.objects.create_user("homebox-reader")

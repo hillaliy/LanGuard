@@ -826,6 +826,15 @@ textarea {
     grid-area: first-seen;
   }
 
+  .devices-content-panel .device-homebox-filter {
+    grid-area: homebox;
+  }
+
+  .devices-content-panel .devices-panel-controls.with-homebox {
+    grid-template-areas: 'status homebox network first-seen search';
+    grid-template-columns: 120px 130px minmax(180px, 1fr) 135px minmax(180px, 1fr);
+  }
+
   .devices-content-panel .device-search {
     grid-area: search;
   }
@@ -1930,6 +1939,16 @@ textarea {
       minmax(120px, 0.8fr);
   }
 
+  .devices-content-panel .devices-panel-controls.with-homebox {
+    grid-template-areas: 'search status homebox network first-seen';
+    grid-template-columns:
+      minmax(135px, 1.1fr)
+      minmax(100px, 0.7fr)
+      minmax(125px, 0.85fr)
+      minmax(155px, 1.2fr)
+      minmax(110px, 0.8fr);
+  }
+
   .devices-content-panel .devices-panel-controls .mantine-Input-input {
     min-height: 34px;
   }
@@ -2013,12 +2032,30 @@ textarea {
       minmax(115px, 0.8fr);
   }
 
+  .devices-content-panel .devices-panel-controls.with-homebox {
+    grid-template-areas: 'search status homebox network first-seen';
+    grid-template-columns:
+      minmax(125px, 1fr)
+      minmax(90px, 0.7fr)
+      minmax(125px, 0.9fr)
+      minmax(145px, 1.2fr)
+      minmax(105px, 0.8fr);
+  }
+
   .devices-content-panel .devices-panel-controls .mantine-Input-input {
     min-height: 34px;
   }
 }
 
 @media (max-width: 560px) {
+  .devices-content-panel .devices-panel-controls.with-homebox {
+    grid-template-areas:
+      'search search'
+      'status homebox'
+      'network first-seen';
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dashboard-summary-grid,
   .dashboard-summary-grid.with-speedtest {
     grid-template-columns: minmax(0, 1fr);
