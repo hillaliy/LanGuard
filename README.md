@@ -57,6 +57,7 @@ alerts when new devices appear.
 **Monitor**
 
 - Track online and offline state, port changes, and device activity
+- Wake supported devices directly from their device page with Wake-on-LAN
 - Compare completed scans and retain scan, event, and notification history
 - Run scheduled scans after the configured interval
 

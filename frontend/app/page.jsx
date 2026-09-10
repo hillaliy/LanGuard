@@ -79,6 +79,7 @@ import {
   IconNetwork,
   IconOutlet,
   IconPlus,
+  IconPower,
   IconPrinter,
   IconPropeller,
   IconQuestionMark,
@@ -2599,6 +2600,7 @@ function DeviceDetailsPage({
   roomOptions,
   dnsActivityEnabled,
   canEditDevices,
+  canRunScans,
 }) {
   const [device, setDevice] = useState(null);
   const [events, setEvents] = useState([]);
@@ -2633,6 +2635,7 @@ function DeviceDetailsPage({
   const [loadingDnsActivity, setLoadingDnsActivity] = useState(false);
   const [loadingMoreDnsActivity, setLoadingMoreDnsActivity] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [waking, setWaking] = useState(false);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirmOpened, deleteConfirm] = useDisclosure(false);
@@ -2929,6 +2932,24 @@ function DeviceDetailsPage({
     }
   }
 
+  async function wake() {
+    if (!device) {
+      return;
+    }
+    setWaking(true);
+    try {
+      const payload = await apiRequest('device/wake/', {
+        method: 'POST',
+        body: { id: device.id },
+      });
+      showServerNotification(payload);
+    } catch (err) {
+      showErrorNotification(err);
+    } finally {
+      setWaking(false);
+    }
+  }
+
   function cancelEditing() {
     populateForm(device);
     setError('');
@@ -3005,8 +3026,8 @@ function DeviceDetailsPage({
               )}
             </Box>
           </Group>
-          {device && canEditDevices && (
-            editing ? (
+          {device && (canEditDevices || canRunScans) && (
+            editing && canEditDevices ? (
               <Group gap="xs">
                 <Button variant="default" onClick={cancelEditing} disabled={saving}>Cancel</Button>
                 <Button leftSection={<IconDeviceFloppy size={18} />} onClick={save} loading={saving}>
@@ -3015,13 +3036,27 @@ function DeviceDetailsPage({
               </Group>
             ) : (
               <Group gap="xs">
-              <Button variant="default" leftSection={device.archived ? <IconArchiveOff size={18} /> : <IconArchive size={18} />}
-                onClick={archiveConfirm.open}>
-                {device.archived ? 'Restore device' : 'Archive device'}
-              </Button>
-              <Button leftSection={<IconEdit size={18} />} onClick={startEditing}>
-                Edit device
-              </Button>
+              {canRunScans && !device.archived && (
+                <Button
+                  variant="light"
+                  leftSection={<IconPower size={18} />}
+                  loading={waking}
+                  onClick={wake}
+                >
+                  Wake device
+                </Button>
+              )}
+              {canEditDevices && (
+                <>
+                  <Button variant="default" leftSection={device.archived ? <IconArchiveOff size={18} /> : <IconArchive size={18} />}
+                    onClick={archiveConfirm.open}>
+                    {device.archived ? 'Restore device' : 'Archive device'}
+                  </Button>
+                  <Button leftSection={<IconEdit size={18} />} onClick={startEditing}>
+                    Edit device
+                  </Button>
+                </>
+              )}
               </Group>
             )
           )}
@@ -6974,6 +7009,7 @@ function Dashboard({
               roomOptions={roomOptions}
               dnsActivityEnabled={showDnsActivity}
               canEditDevices={canEditDevices}
+              canRunScans={canRunScans}
             />
           ) : mainView === 'home-map' ? (
             <HomeMap

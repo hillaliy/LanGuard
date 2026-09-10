@@ -15,6 +15,7 @@ from .views import (
     device_availability,
     bulk_update_devices,
     device_web_interface,
+    wake_device,
     events,
     scan_now,
     scan_runs,
@@ -70,6 +71,7 @@ urlpatterns = [
     path("device/availability/", device_availability, name="device-availability"),
     path("devices/bulk-update/", bulk_update_devices, name="bulk-update-devices"),
     path("device/web-interface/", device_web_interface, name="device-web-interface"),
+    path("device/wake/", wake_device, name="wake-device"),
     path("device/dns-activity/", device_dns_activity, name="device-dns-activity"),
     path("dns-activity/", dns_activity, name="dns-activity"),
     path(
