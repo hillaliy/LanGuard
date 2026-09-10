@@ -1904,6 +1904,7 @@ def device(request):
             open_port = request.query_params.get("open_port")
             first_seen = request.query_params.get("first_seen")
             network_ranges = request.query_params.get("network_ranges")
+            homebox_linked = parse_bool_param(request.query_params, "homebox_linked")
 
             if device_status:
                 if device_status not in Device.Status.values:
@@ -1936,6 +1937,8 @@ def device(request):
                 devices = devices.filter(
                     firstseen__gte=first_seen_threshold(first_seen)
                 )
+            if homebox_linked is not None:
+                devices = devices.filter(homebox_item_id__isnull=not homebox_linked)
             devices = filter_devices_by_network_ranges(devices, network_ranges)
 
             payload = paginated_device_payload(request, devices)
@@ -2223,6 +2226,12 @@ def scan_status(request):
                     "configured": bool(
                         app_config.speedtest_tracker_url
                         and app_config.speedtest_tracker_api_token
+                    ),
+                },
+                "homebox": {
+                    "enabled": app_config.homebox_enabled,
+                    "configured": bool(
+                        app_config.homebox_url and app_config.homebox_api_token
                     ),
                 },
             },

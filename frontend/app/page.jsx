@@ -230,6 +230,11 @@ const firstSeenPeriodOptions = [
   { value: '30d', label: 'Last 30 days' },
 ];
 
+const homeBoxLinkOptions = [
+  { value: 'linked', label: 'Linked' },
+  { value: 'not-linked', label: 'Not linked' },
+];
+
 const deviceRoleOptions = [
   'device',
   'gateway',
@@ -6048,6 +6053,7 @@ function Dashboard({
   const [selectedDeviceIds, setSelectedDeviceIds] = useState([]);
   const [bulkUpdatingDevices, setBulkUpdatingDevices] = useState(false);
   const [firstSeenPeriod, setFirstSeenPeriod] = useState('');
+  const [homeBoxLinkStatus, setHomeBoxLinkStatus] = useState('');
   const [inventoryView, setInventoryView] = useState('table');
   const [mainView, setMainView] = useState(initialView);
   const [deviceOrdering, setDeviceOrdering] = useState('');
@@ -6074,6 +6080,7 @@ function Dashboard({
     deviceStatus: '',
     networkRangeFilter: [],
     firstSeenPeriod: '',
+    homeBoxLinkStatus: '',
     deviceLimit: 100,
     deviceOffset: 0,
     deviceOrdering: '',
@@ -6122,6 +6129,10 @@ function Dashboard({
   const showDnsActivity = Boolean(
     integrationStatus?.adguard?.enabled && integrationStatus?.adguard?.configured
   );
+  const homeBoxStatusKnown = Boolean(integrationStatus?.homebox);
+  const showHomeBoxFilter = Boolean(
+    integrationStatus?.homebox?.enabled && integrationStatus?.homebox?.configured
+  );
   const showFirstSeen = deviceOrdering === 'firstseen' || deviceOrdering === '-firstseen';
 
   useEffect(() => {
@@ -6163,6 +6174,7 @@ function Dashboard({
         deviceStatus,
         networkRangeFilter,
         firstSeenPeriod,
+        homeBoxLinkStatus,
         inventoryView,
         mainView,
         deviceOrdering,
@@ -6268,11 +6280,18 @@ function Dashboard({
       deviceStatus,
       networkRangeFilter,
       firstSeenPeriod,
+      homeBoxLinkStatus,
       deviceLimit,
       deviceOffset,
       deviceOrdering,
     };
-  }, [search, deviceStatus, networkRangeFilter, firstSeenPeriod, deviceOrdering]);
+  }, [search, deviceStatus, networkRangeFilter, firstSeenPeriod, homeBoxLinkStatus, deviceOrdering]);
+
+  useEffect(() => {
+    if (homeBoxStatusKnown && !showHomeBoxFilter) {
+      setHomeBoxLinkStatus('');
+    }
+  }, [homeBoxStatusKnown, showHomeBoxFilter]);
 
   async function loadData({ quiet = false, notifyOnError = false, refreshIntegrations = false } = {}) {
     if (quiet) {
@@ -6296,6 +6315,9 @@ function Dashboard({
           ? currentTableState.networkRangeFilter.join(',')
           : undefined,
         first_seen: currentTableState.firstSeenPeriod || undefined,
+        homebox_linked: currentTableState.homeBoxLinkStatus
+          ? String(currentTableState.homeBoxLinkStatus === 'linked')
+          : undefined,
         limit: currentTableState.deviceLimit,
         offset: currentTableState.deviceOffset,
         ordering: currentTableState.deviceOrdering || undefined,
@@ -6518,6 +6540,7 @@ function Dashboard({
         Array.isArray(state.networkRangeFilter) ? state.networkRangeFilter : []
       );
       setFirstSeenPeriod(state.firstSeenPeriod || '');
+      setHomeBoxLinkStatus(state.homeBoxLinkStatus || '');
       setInventoryView(state.inventoryView || 'table');
       setMainView(mainViewFromPath(window.location.pathname));
       setDeviceOrdering(state.deviceOrdering || '');
@@ -6530,6 +6553,7 @@ function Dashboard({
           ? state.networkRangeFilter
           : [],
         firstSeenPeriod: state.firstSeenPeriod || '',
+        homeBoxLinkStatus: state.homeBoxLinkStatus || '',
         deviceOrdering: state.deviceOrdering || '',
       };
       pendingDashboardScrollRef.current = Math.max(Number(state.scrollY) || 0, 0);
@@ -6685,7 +6709,7 @@ function Dashboard({
   useEffect(() => {
     const timer = window.setTimeout(() => loadData({ quiet: true }), 250);
     return () => window.clearTimeout(timer);
-  }, [search, deviceStatus, networkRangeFilter, firstSeenPeriod, deviceOrdering]);
+  }, [search, deviceStatus, networkRangeFilter, firstSeenPeriod, homeBoxLinkStatus, deviceOrdering]);
 
   async function runScan() {
     setRefreshing(true);
@@ -7034,7 +7058,7 @@ function Dashboard({
                   onChange={setInventoryView}
                   aria-label="Inventory view"
                 />
-                <Group className="devices-panel-controls">
+                <Group className={`devices-panel-controls ${showHomeBoxFilter ? 'with-homebox' : ''}`}>
                   <Select
                     className="device-status-filter"
                     w={140}
@@ -7070,6 +7094,18 @@ function Dashboard({
                     aria-label="Filter by first seen"
                     onChange={(value) => setFirstSeenPeriod(value || '')}
                   />
+                  {showHomeBoxFilter && (
+                    <Select
+                      className="device-homebox-filter"
+                      w={140}
+                      placeholder="HomeBox"
+                      clearable
+                      data={homeBoxLinkOptions}
+                      value={homeBoxLinkStatus}
+                      aria-label="Filter by HomeBox link"
+                      onChange={(value) => setHomeBoxLinkStatus(value || '')}
+                    />
+                  )}
                   <TextInput
                     className="device-search"
                     w={{ base: 180, sm: 260 }}
