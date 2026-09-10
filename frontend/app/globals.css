@@ -759,6 +759,13 @@ textarea {
   white-space: nowrap;
 }
 
+.device-list-mac-value {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .device-list-last-seen {
   min-width: 0;
 }
