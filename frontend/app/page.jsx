@@ -196,6 +196,7 @@ const eventTypeOptions = [
   { value: 'new_device', label: 'New devices' },
   { value: 'device_online', label: 'Online events' },
   { value: 'device_offline', label: 'Offline events' },
+  { value: 'ip_changed', label: 'IP changes' },
   { value: 'port_opened', label: 'Opened ports' },
   { value: 'port_closed', label: 'Closed ports' },
 ];

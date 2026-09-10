@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added IP address change history to device timelines and the central event log.
 - Refactored Docker frontend styling around Mantine theme defaults, scoped modules, and focused layout styles while preserving the existing light, dark, desktop, tablet, and phone appearance.
 - Simplified the Docker Not Found page so the LanGuard logo cleanly replaces the zero in the 404 mark.
 

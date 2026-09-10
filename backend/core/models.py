@@ -240,6 +240,7 @@ class NetworkEvent(models.Model):
         NEW_DEVICE = "new_device", "New device"
         DEVICE_ONLINE = "device_online", "Device online"
         DEVICE_OFFLINE = "device_offline", "Device offline"
+        IP_CHANGED = "ip_changed", "IP changed"
         PORT_OPENED = "port_opened", "Port opened"
         PORT_CLOSED = "port_closed", "Port closed"
 

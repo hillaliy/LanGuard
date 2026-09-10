@@ -1671,6 +1671,7 @@ def sync_discovered_device(
     try:
         device = Device.objects.get(mac=mac)
         was_online = device.online
+        previous_ip = device.ip
         update_fields = [
             "archived",
             "ip",
@@ -1727,6 +1728,18 @@ def sync_discovered_device(
             device.icon = "router"
             update_fields.extend(["is_gateway", "known", "name", "icon"])
         device.save(update_fields=update_fields)
+
+        if previous_ip != ip:
+            create_event(
+                NetworkEvent.EventType.IP_CHANGED,
+                device=device,
+                scan_run=scan_run,
+                message=f"{device.name} changed IP from {previous_ip} to {ip}",
+                metadata={
+                    "old_ip": previous_ip,
+                    "new_ip": ip,
+                },
+            )
 
         if not was_online:
             create_event(
