@@ -948,6 +948,61 @@ class ScanStabilityTests(TestCase):
     def scan_element(self, ip, mac):
         return (None, SimpleNamespace(psrc=ip, hwsrc=mac))
 
+    @override_settings(PORT_SCAN_ENABLED=False)
+    def test_existing_device_ip_change_creates_history_event(self):
+        device = Device.objects.create(
+            name="Camera",
+            ip="192.168.1.10",
+            mac="aa:bb:cc:dd:ee:ff",
+            known=True,
+        )
+        scan_run = ScanRun.objects.create(ip_range="192.168.1.0/24")
+
+        sync_discovered_device(
+            self.scan_element("192.168.1.25", device.mac),
+            scan_run=scan_run,
+        )
+
+        device.refresh_from_db()
+        self.assertEqual(device.ip, "192.168.1.25")
+        event = NetworkEvent.objects.get(
+            device=device,
+            scan_run=scan_run,
+            event_type=NetworkEvent.EventType.IP_CHANGED,
+        )
+        self.assertEqual(
+            event.message,
+            "Camera changed IP from 192.168.1.10 to 192.168.1.25",
+        )
+        self.assertEqual(
+            event.metadata,
+            {
+                "old_ip": "192.168.1.10",
+                "new_ip": "192.168.1.25",
+                "notification_skipped": "known_device",
+            },
+        )
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    def test_unchanged_device_ip_does_not_create_history_event(self):
+        device = Device.objects.create(
+            name="Camera",
+            ip="192.168.1.10",
+            mac="aa:bb:cc:dd:ee:ff",
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        self.assertFalse(
+            NetworkEvent.objects.filter(
+                device=device,
+                event_type=NetworkEvent.EventType.IP_CHANGED,
+            ).exists()
+        )
+
     @override_settings(SCAN_ARP_RETRIES=2, SCAN_ARP_TIMEOUT=2)
     @patch("core.scan.scapy.conf.route.route", return_value=("eth0", "192.168.1.20", "0.0.0.0"))
     @patch("core.scan.scapy.srp")
