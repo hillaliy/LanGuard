@@ -1,0 +1,22 @@
+.shell {
+  width: 100%;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--auth-bg);
+}
+
+.panel {
+  width: min(440px, 100%);
+  background: var(--panel-strong-bg);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-auth);
+}
+
+@media (max-width: 61.25em) {
+  .shell {
+    padding: var(--mantine-spacing-md);
+    background-size: 320px;
+  }
+}

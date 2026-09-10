@@ -1,0 +1,127 @@
+.shell {
+  width: 100%;
+  min-height: 100vh;
+  background: var(--app-shell-bg);
+}
+
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--panel-strong-bg) 90%, transparent);
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(12px);
+}
+
+.topbar-clock {
+  min-width: 154px;
+  padding: 6px 10px;
+  color: var(--muted-text);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--muted-panel-bg);
+}
+
+.topbar-scan-button {
+  flex: 0 0 auto;
+}
+
+.app-layout {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  gap: 20px;
+  max-width: 1560px;
+  margin: 0 auto;
+  padding: 24px 24px 32px;
+}
+
+.app-sidebar {
+  position: sticky;
+  top: 82px;
+  align-self: start;
+  padding: 10px;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: var(--shadow-soft);
+}
+
+.mobile-navigation-bar {
+  align-items: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  display: none;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 12px;
+}
+
+.sidebar-nav-button {
+  min-height: 42px;
+  border-radius: 8px;
+}
+
+.app-content {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  padding-inline: 0;
+  padding-top: 0;
+}
+
+.version-pill {
+  align-items: center;
+  background: var(--muted-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  color: var(--muted-text);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.72rem;
+  font-weight: 800;
+  gap: 6px;
+  letter-spacing: 0;
+  line-height: 1;
+  min-height: 24px;
+  padding: 4px 9px;
+  position: relative;
+}
+
+.version-pill:hover,
+.version-pill.has-update {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.version-dot {
+  background: #fa5252;
+  border: 2px solid var(--panel-strong-bg);
+  border-radius: 50%;
+  height: 10px;
+  position: absolute;
+  right: -2px;
+  top: -2px;
+  width: 10px;
+}
+
+.changelog-bullet {
+  background: var(--brand);
+  border-radius: 50%;
+  flex: 0 0 auto;
+  height: 7px;
+  margin-top: 8px;
+  width: 7px;
+}
+
+.user-initials-button {
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.color-scheme-control {
+  flex: 0 0 auto;
+}
