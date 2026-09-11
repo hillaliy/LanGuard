@@ -122,6 +122,8 @@ class AppSettingsAdmin(admin.ModelAdmin):
         "scan_range_labels",
         "scan_interval",
         "version_check_interval",
+        "notify_version_updates",
+        "last_notified_version",
         "activity_cleanup_retention_days",
         "adguard_enabled",
         "adguard_sync_interval",

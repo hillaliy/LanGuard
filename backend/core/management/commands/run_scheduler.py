@@ -11,6 +11,7 @@ from core.models import AppSettings
 from core.notifications import retry_failed_notifications
 from core.scan import scan
 from core.adguard import sync_adguard_query_log
+from core.versioning import check_for_version_update
 
 
 LOGGER = logging.getLogger(__name__)
@@ -142,6 +143,22 @@ class Command(BaseCommand):
             finally:
                 close_old_connections()
 
+        def run_version_update_check():
+            close_old_connections()
+            try:
+                result = check_for_version_update()
+                if result["status"] == "notified":
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Sent LanGuard {result['latest_version']} update notification"
+                        )
+                    )
+            except Exception:
+                LOGGER.exception("Scheduled version update check failed")
+                self.stderr.write(self.style.ERROR("Scheduled version update check failed"))
+            finally:
+                close_old_connections()
+
         def retry_loop():
             while not stop_event.wait(retry_interval * 60):
                 run_notification_retry()
@@ -164,6 +181,20 @@ class Command(BaseCommand):
                 if stop_event.wait(interval_seconds):
                     break
 
+        def version_update_loop():
+            while not stop_event.is_set():
+                run_version_update_check()
+                close_old_connections()
+                try:
+                    interval_seconds = max(
+                        AppSettings.load().version_check_interval,
+                        300,
+                    )
+                finally:
+                    close_old_connections()
+                if stop_event.wait(interval_seconds):
+                    break
+
         def stop_scheduler(signum, frame):
             self.stdout.write("Stopping scheduler...")
             stop_event.set()
@@ -181,6 +212,8 @@ class Command(BaseCommand):
 
         adguard_sync_thread = threading.Thread(target=adguard_sync_loop, daemon=True)
         adguard_sync_thread.start()
+        version_update_thread = threading.Thread(target=version_update_loop, daemon=True)
+        version_update_thread.start()
 
         if ip_range_override or interval_override:
             scan_ranges, interval = load_scan_schedule(
@@ -209,6 +242,9 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS("AdGuard Home sync follows the saved integration interval")
+        )
+        self.stdout.write(
+            self.style.SUCCESS("LanGuard update checks follow the saved version interval")
         )
 
         while not stop_event.is_set():

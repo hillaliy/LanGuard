@@ -80,6 +80,8 @@ def notification_event_allowed(event, app_config=None):
         NetworkEvent.EventType.PORT_CLOSED,
     }:
         return app_config.notify_port_changes
+    if event.event_type == NetworkEvent.EventType.VERSION_AVAILABLE:
+        return app_config.notify_version_updates
     return event.event_type in notification_event_types()
 
 
@@ -344,12 +346,17 @@ def format_event_message(event):
     lines = [
         f"LanGuard: {event.get_event_type_display()}",
         event.message,
-        f"Device: {device.name}",
-        f"IP: {device.ip}",
-        f"MAC: {device.mac}",
     ]
-    if device.vendor:
-        lines.append(f"Vendor: {device.vendor}")
+    if device:
+        lines.extend(
+            [
+                f"Device: {device.name}",
+                f"IP: {device.ip}",
+                f"MAC: {device.mac}",
+            ]
+        )
+        if device.vendor:
+            lines.append(f"Vendor: {device.vendor}")
     return "\n".join(lines)
 
 
@@ -358,7 +365,7 @@ def format_webhook_payload(event, delivery_id=None):
     return {
         "schema_version": 1,
         "source": "languard",
-        "kind": "network_event",
+        "kind": "network_event" if device else "system_event",
         "delivery_id": delivery_id,
         "event": {
             "id": event.id,
@@ -368,19 +375,23 @@ def format_webhook_payload(event, delivery_id=None):
             "created_at": utc_isoformat(event.created_at),
             "metadata": event.metadata or {},
         },
-        "device": {
-            "id": device.id,
-            "name": device.name,
-            "hostname": device.hostname,
-            "ip": device.ip,
-            "mac": device.mac,
-            "vendor": device.vendor,
-            "role": device.role,
-            "room": device.room,
-            "known": device.known,
-            "online": device.online,
-            "status": device.status,
-        },
+        "device": (
+            {
+                "id": device.id,
+                "name": device.name,
+                "hostname": device.hostname,
+                "ip": device.ip,
+                "mac": device.mac,
+                "vendor": device.vendor,
+                "role": device.role,
+                "room": device.room,
+                "known": device.known,
+                "online": device.online,
+                "status": device.status,
+            }
+            if device
+            else None
+        ),
         "scan_run_id": event.scan_run_id,
     }
 
@@ -407,22 +418,31 @@ def format_discord_test_payload():
 def format_discord_payload(event):
     device = event.device
     icon_url = settings.DISCORD_ICON_URL
-    fields = [
-        {"name": "Device", "value": device.name or "-", "inline": True},
-        {"name": "IP", "value": device.ip or "-", "inline": True},
-        {"name": "MAC", "value": device.mac or "-", "inline": True},
-    ]
-    if device.vendor:
-        fields.append({"name": "Vendor", "value": device.vendor, "inline": False})
+    fields = []
+    if device:
+        fields.extend(
+            [
+                {"name": "Device", "value": device.name or "-", "inline": True},
+                {"name": "IP", "value": device.ip or "-", "inline": True},
+                {"name": "MAC", "value": device.mac or "-", "inline": True},
+            ]
+        )
+        if device.vendor:
+            fields.append({"name": "Vendor", "value": device.vendor, "inline": False})
 
     embed = {
         "title": f"LanGuard: {event.get_event_type_display()}",
         "description": event.message,
-        "color": DISCORD_ALERT_COLOR,
-        "fields": fields,
+        "color": (
+            DISCORD_TEST_COLOR
+            if event.event_type == NetworkEvent.EventType.VERSION_AVAILABLE
+            else DISCORD_ALERT_COLOR
+        ),
         "timestamp": utc_isoformat(event.created_at),
         "footer": {"text": "LanGuard"},
     }
+    if fields:
+        embed["fields"] = fields
     if icon_url:
         embed["author"] = {
             "name": "LanGuard",

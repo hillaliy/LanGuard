@@ -197,6 +197,7 @@ const eventTypeOptions = [
   { value: 'device_online', label: 'Online events' },
   { value: 'device_offline', label: 'Offline events' },
   { value: 'ip_changed', label: 'IP changes' },
+  { value: 'version_available', label: 'Version updates' },
   { value: 'port_opened', label: 'Opened ports' },
   { value: 'port_closed', label: 'Closed ports' },
 ];
@@ -3975,6 +3976,7 @@ function SettingsPage({ onSaved }) {
   const [notifyDeviceOnline, setNotifyDeviceOnline] = useState(false);
   const [notifyDeviceOffline, setNotifyDeviceOffline] = useState(false);
   const [notifyPortChanges, setNotifyPortChanges] = useState(false);
+  const [notifyVersionUpdates, setNotifyVersionUpdates] = useState(false);
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
   const [quietHoursStart, setQuietHoursStart] = useState('22:00');
   const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
@@ -4054,6 +4056,7 @@ function SettingsPage({ onSaved }) {
       setNotifyDeviceOnline(Boolean(data.notify_device_online));
       setNotifyDeviceOffline(Boolean(data.notify_device_offline));
       setNotifyPortChanges(Boolean(data.notify_port_changes));
+      setNotifyVersionUpdates(Boolean(data.notify_version_updates));
       setQuietHoursEnabled(Boolean(data.notification_quiet_hours_enabled));
       setQuietHoursStart(data.notification_quiet_hours_start || '22:00');
       setQuietHoursEnd(data.notification_quiet_hours_end || '07:00');
@@ -4097,6 +4100,7 @@ function SettingsPage({ onSaved }) {
         notify_device_online: notifyDeviceOnline,
         notify_device_offline: notifyDeviceOffline,
         notify_port_changes: notifyPortChanges,
+        notify_version_updates: notifyVersionUpdates,
         notification_quiet_hours_enabled: quietHoursEnabled,
         notification_quiet_hours_start: quietHoursStart,
         notification_quiet_hours_end: quietHoursEnd,
@@ -4612,6 +4616,11 @@ function SettingsPage({ onSaved }) {
               label="Port changes"
               checked={notifyPortChanges}
               onChange={(event) => setNotifyPortChanges(event.currentTarget.checked)}
+            />
+            <Switch
+              label="New LanGuard version"
+              checked={notifyVersionUpdates}
+              onChange={(event) => setNotifyVersionUpdates(event.currentTarget.checked)}
             />
           </SimpleGrid>
           <SimpleGrid cols={{ base: 1, sm: 3 }}>

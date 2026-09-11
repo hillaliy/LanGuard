@@ -42,6 +42,7 @@ from .notifications import (
 )
 from .serializers import device_identity
 from .views import parse_inventory_datetime
+from .versioning import check_for_version_update, is_newer_version
 from .scan import (
     clear_stale_gateways,
     create_event,
@@ -582,7 +583,7 @@ class VersionStatusTests(TestCase):
         LATEST_VERSION_URL="https://example.test/VERSION",
         VERSION_CHECK_TIMEOUT=1,
     )
-    @patch("core.views.urllib.request.urlopen")
+    @patch("core.versioning.urllib.request.urlopen")
     def test_version_endpoint_returns_latest_public_version(self, urlopen):
         response_mock = Mock()
         response_mock.read.return_value = b"1.0.3\n"
@@ -600,7 +601,7 @@ class VersionStatusTests(TestCase):
         LATEST_VERSION_URL="https://example.test/package.json",
         VERSION_CHECK_TIMEOUT=1,
     )
-    @patch("core.views.urllib.request.urlopen")
+    @patch("core.versioning.urllib.request.urlopen")
     def test_version_endpoint_accepts_legacy_json_source(self, urlopen):
         response_mock = Mock()
         response_mock.read.return_value = b'{"version": "1.0.3"}'
@@ -627,6 +628,60 @@ class VersionStatusTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["current_version"], "1.0.2")
         self.assertIsNone(response.data["data"]["latest_version"])
+
+    def test_version_comparison_handles_prefixes_and_different_lengths(self):
+        self.assertTrue(is_newer_version("v1.10.0", "1.9"))
+        self.assertFalse(is_newer_version("1.10", "v1.10.0"))
+        self.assertFalse(is_newer_version("not-a-version", "1.0.0"))
+
+    @override_settings(APP_VERSION="1.0.2")
+    @patch("core.versioning.notify_event")
+    @patch("core.versioning.fetch_latest_version", return_value="v1.1.0")
+    def test_version_update_notification_is_sent_once_per_version(
+        self,
+        fetch_latest_version,
+        notify_event_mock,
+    ):
+        config = AppSettings.objects.create(
+            notify_version_updates=True,
+            discord_enabled=True,
+            discord_webhook="https://discord.example/webhook",
+        )
+        notify_event_mock.return_value = [Mock()]
+
+        first_result = check_for_version_update()
+        second_result = check_for_version_update()
+
+        self.assertEqual(first_result["status"], "notified")
+        self.assertEqual(second_result["status"], "already_notified")
+        self.assertEqual(fetch_latest_version.call_count, 2)
+        notify_event_mock.assert_called_once()
+        event = NetworkEvent.objects.get(
+            event_type=NetworkEvent.EventType.VERSION_AVAILABLE
+        )
+        self.assertIsNone(event.device)
+        self.assertEqual(event.metadata["current_version"], "1.0.2")
+        self.assertEqual(event.metadata["latest_version"], "1.1.0")
+        self.assertEqual(
+            event.metadata["release_url"],
+            "https://github.com/hillaliy/LanGuard/releases/tag/v1.1.0",
+        )
+        config.refresh_from_db()
+        self.assertEqual(config.last_notified_version, "1.1.0")
+
+    @override_settings(APP_VERSION="1.0.2")
+    @patch("core.versioning.fetch_latest_version", return_value="1.1.0")
+    def test_version_update_waits_for_a_configured_channel(self, _):
+        AppSettings.objects.create(notify_version_updates=True)
+
+        result = check_for_version_update()
+
+        self.assertEqual(result["status"], "no_channels")
+        self.assertFalse(
+            NetworkEvent.objects.filter(
+                event_type=NetworkEvent.EventType.VERSION_AVAILABLE
+            ).exists()
+        )
 
 
 class HealthStatusTests(TestCase):
@@ -1892,6 +1947,37 @@ class NotificationTests(TestCase):
         self.assertEqual(payload["avatar_url"], "https://example.com/languard.png?v=1.1.4")
         self.assertEqual(embed["author"]["icon_url"], "https://example.com/languard.png?v=1.1.4")
         self.assertEqual(embed["thumbnail"]["url"], "https://example.com/languard.png?v=1.1.4")
+
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
+    def test_version_update_notification_supports_system_events(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        AppSettings.objects.create(
+            notify_version_updates=True,
+            discord_enabled=True,
+            discord_webhook="https://discord.example/webhook",
+        )
+        event = NetworkEvent.objects.create(
+            event_type=NetworkEvent.EventType.VERSION_AVAILABLE,
+            message="LanGuard 1.1.0 is available.",
+            metadata={"latest_version": "1.1.0"},
+        )
+
+        deliveries = notify_event(event)
+
+        self.assertEqual(len(deliveries), 1)
+        event.refresh_from_db()
+        self.assertTrue(event.notified)
+        discord_payload = post.call_args.kwargs["json"]
+        self.assertEqual(
+            discord_payload["embeds"][0]["title"],
+            "LanGuard: Version available",
+        )
+        self.assertEqual(discord_payload["embeds"][0]["color"], 0x228BE6)
+        self.assertNotIn("fields", discord_payload["embeds"][0])
+        webhook_payload = format_webhook_payload(event)
+        self.assertEqual(webhook_payload["kind"], "system_event")
+        self.assertIsNone(webhook_payload["device"])
 
     @override_settings(
         DISCORD_ICON_URL="https://example.com/languard.png",
@@ -3176,6 +3262,7 @@ class ScanApiTests(TestCase):
                 "notify_device_online": True,
                 "notify_device_offline": True,
                 "notify_port_changes": True,
+                "notify_version_updates": True,
                 "notification_quiet_hours_enabled": True,
                 "notification_quiet_hours_start": "23:00",
                 "notification_quiet_hours_end": "06:30",
@@ -3208,6 +3295,7 @@ class ScanApiTests(TestCase):
         self.assertTrue(config.notify_device_online)
         self.assertTrue(config.notify_device_offline)
         self.assertTrue(config.notify_port_changes)
+        self.assertTrue(config.notify_version_updates)
         self.assertTrue(config.notification_quiet_hours_enabled)
         self.assertEqual(config.notification_quiet_hours_start, "23:00")
         self.assertEqual(config.notification_quiet_hours_end, "06:30")
@@ -3239,6 +3327,7 @@ class ScanApiTests(TestCase):
         self.assertTrue(response.data["data"]["notify_device_online"])
         self.assertTrue(response.data["data"]["notify_device_offline"])
         self.assertTrue(response.data["data"]["notify_port_changes"])
+        self.assertTrue(response.data["data"]["notify_version_updates"])
         self.assertTrue(response.data["data"]["notification_quiet_hours_enabled"])
         self.assertEqual(response.data["data"]["notification_quiet_hours_start"], "23:00")
         self.assertEqual(response.data["data"]["notification_quiet_hours_end"], "06:30")

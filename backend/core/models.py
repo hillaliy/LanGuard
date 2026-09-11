@@ -241,6 +241,7 @@ class NetworkEvent(models.Model):
         DEVICE_ONLINE = "device_online", "Device online"
         DEVICE_OFFLINE = "device_offline", "Device offline"
         IP_CHANGED = "ip_changed", "IP changed"
+        VERSION_AVAILABLE = "version_available", "Version available"
         PORT_OPENED = "port_opened", "Port opened"
         PORT_CLOSED = "port_closed", "Port closed"
 
@@ -255,6 +256,8 @@ class NetworkEvent(models.Model):
         Device,
         related_name="events",
         on_delete=models.CASCADE,
+        blank=True,
+        null=True,
     )
     device_port = models.ForeignKey(
         DevicePort,
@@ -362,6 +365,8 @@ class AppSettings(models.Model):
     notify_device_online = models.BooleanField(default=False)
     notify_device_offline = models.BooleanField(default=False)
     notify_port_changes = models.BooleanField(default=False)
+    notify_version_updates = models.BooleanField(default=False)
+    last_notified_version = models.CharField(max_length=64, blank=True, default="")
     notification_quiet_hours_enabled = models.BooleanField(default=False)
     notification_quiet_hours_start = models.CharField(max_length=5, default="22:00")
     notification_quiet_hours_end = models.CharField(max_length=5, default="07:00")
@@ -438,6 +443,8 @@ class AppSettings(models.Model):
                 event_type in settings.NOTIFICATION_EVENT_TYPES
                 for event_type in ("port_opened", "port_closed")
             ),
+            "notify_version_updates": False,
+            "last_notified_version": "",
             "notification_quiet_hours_enabled": False,
             "notification_quiet_hours_start": "22:00",
             "notification_quiet_hours_end": "07:00",

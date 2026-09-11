@@ -3,8 +3,6 @@ from uuid import UUID
 import ipaddress
 import io
 import json
-import urllib.error
-import urllib.request
 from urllib.parse import urlparse
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -90,6 +88,7 @@ from .speedtest_tracker import SpeedtestTrackerError, latest_speedtest_result
 from .diagnostics import build_diagnostics_report
 from .user_messages import error_response, scan_error_message, success_response
 from .wake_on_lan import send_magic_packet, wake_broadcast_address
+from .versioning import fetch_latest_version
 
 LOGGER = logging.getLogger(__name__)
 
@@ -451,41 +450,6 @@ def reconcile_scan_status(latest_scan, active_scan):
     active_scan.finished_at = latest_finished_at
     active_scan.error = "Scan was superseded by a newer completed scan."
     active_scan.save(update_fields=["status", "finished_at", "error"])
-    return None
-
-
-def fetch_latest_version():
-    if not settings.LATEST_VERSION_URL:
-        return None
-
-    request = urllib.request.Request(
-        settings.LATEST_VERSION_URL,
-        headers={"User-Agent": "LanGuard"},
-    )
-    try:
-        with urllib.request.urlopen(
-            request,
-            timeout=settings.VERSION_CHECK_TIMEOUT,
-        ) as response:
-            response_text = response.read().decode("utf-8").strip()
-    except (
-        OSError,
-        TimeoutError,
-        urllib.error.URLError,
-        UnicodeDecodeError,
-    ) as exc:
-        LOGGER.info("Latest version check failed: %s", exc)
-        return None
-
-    try:
-        payload = json.loads(response_text)
-    except json.JSONDecodeError:
-        latest_version = response_text
-    else:
-        latest_version = payload.get("version") if isinstance(payload, dict) else None
-
-    if isinstance(latest_version, str) and latest_version.strip():
-        return latest_version.strip()
     return None
 
 
