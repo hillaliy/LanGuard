@@ -1405,7 +1405,7 @@ def create_event(event_type, device, message, scan_run=None, device_port=None, m
         NetworkEvent.EventType.DEVICE_ONLINE,
         NetworkEvent.EventType.DEVICE_OFFLINE,
     }
-    if device.known and event_type not in presence_events:
+    if device and device.known and event_type not in presence_events:
         event.notified = True
         event.metadata = {
             **metadata,

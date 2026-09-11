@@ -770,6 +770,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "notify_device_online",
             "notify_device_offline",
             "notify_port_changes",
+            "notify_version_updates",
             "notification_quiet_hours_enabled",
             "notification_quiet_hours_start",
             "notification_quiet_hours_end",
