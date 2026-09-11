@@ -4119,6 +4119,29 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["pagination"]["count"], 1)
         self.assertEqual(response.data["data"][0]["id"], recent.id)
 
+    def test_device_endpoint_filters_today_in_configured_timezone(self):
+        config = AppSettings.load()
+        config.time_zone = "Asia/Jerusalem"
+        config.save(update_fields=["time_zone"])
+        self.device.firstseen = datetime(2026, 9, 10, 20, 59)
+        self.device.save(update_fields=["firstseen"])
+        today = Device.objects.create(
+            name="Today device",
+            ip="192.168.1.30",
+            mac="bb:bb:bb:bb:bb:bb",
+            firstseen=datetime(2026, 9, 10, 21, 1),
+        )
+
+        with patch(
+            "core.views.timezone.now",
+            return_value=datetime(2026, 9, 10, 22, 30),
+        ):
+            response = self.client.get("/api/v1/device/", {"first_seen": "today"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["pagination"]["count"], 1)
+        self.assertEqual(response.data["data"][0]["id"], today.id)
+
     def test_device_endpoint_filters_by_configured_network_ranges(self):
         config = AppSettings.load()
         config.ip_range = "192.168.1.0/24"

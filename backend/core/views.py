@@ -226,8 +226,13 @@ def first_seen_threshold(period):
             app_timezone = ZoneInfo(config.time_zone)
         except ZoneInfoNotFoundError:
             app_timezone = timezone.get_current_timezone()
+        if timezone.is_naive(now):
+            now = timezone.make_aware(now, datetime_timezone.utc)
         local_now = timezone.localtime(now, app_timezone)
-        return local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        if not settings.USE_TZ:
+            return timezone.make_naive(local_midnight, datetime_timezone.utc)
+        return local_midnight
     days = 7 if period == "7d" else 30
     return now - timedelta(days=days)
 
