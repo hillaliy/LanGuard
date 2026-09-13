@@ -58,7 +58,7 @@ struct DashboardView: View {
                 metricCards
 
                 NetworkHealthCard(
-                    devices: appModel.devices.count,
+                    devices: appModel.deviceCount,
                     online: appModel.onlineCount,
                     unknown: appModel.unknownCount,
                     openPorts: appModel.openPortCount
@@ -110,7 +110,7 @@ struct DashboardView: View {
     private var compactOverviewRow: some View {
         HStack(alignment: .top, spacing: 14) {
             CompactNetworkHealthCard(
-                devices: appModel.devices.count,
+                devices: appModel.deviceCount,
                 online: appModel.onlineCount,
                 unknown: appModel.unknownCount,
                 openPorts: appModel.openPortCount
@@ -157,13 +157,15 @@ struct DashboardView: View {
     private var metricCards: some View {
         SummaryCard(
             title: "Devices",
-            value: "\(appModel.devices.count)",
+            value: "\(appModel.deviceCount)",
+            secondaryValue: visitorSummary(appModel.visitorCount),
             systemImage: "desktopcomputer",
             tint: .blue
         )
         SummaryCard(
             title: "Online",
             value: "\(appModel.onlineCount)",
+            secondaryValue: visitorSummary(appModel.onlineVisitorCount),
             systemImage: "wifi",
             tint: .green
         )
@@ -185,13 +187,15 @@ struct DashboardView: View {
     private var compactMetricCards: some View {
         CompactSummaryCard(
             title: "Devices",
-            value: "\(appModel.devices.count)",
+            value: "\(appModel.deviceCount)",
+            secondaryValue: visitorSummary(appModel.visitorCount),
             systemImage: "desktopcomputer",
             tint: .blue
         )
         CompactSummaryCard(
             title: "Online",
             value: "\(appModel.onlineCount)",
+            secondaryValue: visitorSummary(appModel.onlineVisitorCount),
             systemImage: "wifi",
             tint: .green
         )
@@ -207,6 +211,11 @@ struct DashboardView: View {
             systemImage: "point.3.connected.trianglepath.dotted",
             tint: .purple
         )
+    }
+
+    private func visitorSummary(_ count: Int) -> String? {
+        guard count > 0 else { return nil }
+        return count == 1 ? "1 visitor" : "\(count) visitors"
     }
 
     @ViewBuilder
@@ -350,7 +359,7 @@ private struct ScheduleCard: View {
             }
         }
         .padding(22)
-        .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 180, maxHeight: 180, alignment: .leading)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
         .overlay {
             RoundedRectangle(cornerRadius: 18)
@@ -932,6 +941,7 @@ private struct EmptyScanSummaryCard: View {
 private struct SummaryCard: View {
     let title: String
     let value: String
+    var secondaryValue: String? = nil
     let systemImage: String
     let tint: Color
 
@@ -957,6 +967,12 @@ private struct SummaryCard: View {
                 Text(value)
                     .font(.system(size: 36, weight: .semibold, design: .rounded))
                     .monospacedDigit()
+
+                if let secondaryValue {
+                    Text(secondaryValue)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
             }
         }
         .padding(20)
@@ -972,6 +988,7 @@ private struct SummaryCard: View {
 private struct CompactSummaryCard: View {
     let title: String
     let value: String
+    var secondaryValue: String? = nil
     let systemImage: String
     let tint: Color
 
@@ -993,12 +1010,19 @@ private struct CompactSummaryCard: View {
                 Text(value)
                     .font(.system(size: 30, weight: .semibold, design: .rounded))
                     .monospacedDigit()
+
+                if let secondaryValue {
+                    Text(secondaryValue)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
 
             Spacer()
         }
         .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 86, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 18))
         .overlay {
             RoundedRectangle(cornerRadius: 18)

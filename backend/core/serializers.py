@@ -498,6 +498,17 @@ class DeviceSerializer(serializers.ModelSerializer):
         return device_needs_attention(obj, self.get_device_risk(obj))
 
     def validate(self, attrs):
+        requested_known = attrs.get("known")
+        requested_visitor = attrs.get("is_visitor")
+        if requested_known is False and requested_visitor is True:
+            raise serializers.ValidationError(
+                {"is_visitor": "Visitor devices must be known devices."}
+            )
+        if requested_visitor is True:
+            attrs["known"] = True
+        elif requested_known is False:
+            attrs["is_visitor"] = False
+
         known = attrs.get("known", self.instance.known if self.instance else False)
         if attrs.get("acknowledge_attention") and not known:
             raise serializers.ValidationError(
@@ -539,10 +550,22 @@ class DeviceBulkUpdateSerializer(serializers.Serializer):
         allow_empty=False,
         max_length=100,
     )
-    known = serializers.BooleanField()
+    known = serializers.BooleanField(required=False)
+    is_visitor = serializers.BooleanField(required=False)
 
     def validate_ids(self, value):
         return list(dict.fromkeys(value))
+
+    def validate(self, attrs):
+        if "known" not in attrs and "is_visitor" not in attrs:
+            raise serializers.ValidationError(
+                "Provide known or is_visitor for the selected devices."
+            )
+        if attrs.get("known") is False and attrs.get("is_visitor") is True:
+            raise serializers.ValidationError(
+                {"is_visitor": "Visitor devices must be known devices."}
+            )
+        return attrs
 
 
 class NetworkEventSerializer(serializers.ModelSerializer):

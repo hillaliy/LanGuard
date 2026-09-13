@@ -299,6 +299,10 @@
   background: var(--hover-bg);
 }
 
+.device-mobile-row.bulk-edit.selected {
+  background: color-mix(in srgb, var(--brand-soft) 68%, transparent);
+}
+
 .device-mobile-main {
   min-width: 0;
 }

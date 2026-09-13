@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added visitor device classification with dedicated filtering, dashboard counts, bulk editing, and quiet-by-default presence notifications.
 - Added an optional notification rule for new LanGuard releases with one alert per version.
 - Fixed the Today device filter failing when the backend stores naive UTC timestamps.
 - Added IP address change history to device timelines and the central event log.

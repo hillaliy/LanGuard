@@ -2151,6 +2151,69 @@ class NotificationTests(TestCase):
         NOTIFICATION_TIMEOUT=1,
     )
     @patch("core.notifications.requests.post")
+    def test_visitor_presence_rule_is_quiet_by_default(self, post):
+        AppSettings.objects.create(
+            discord_webhook="https://discord.example/webhook",
+            notify_device_online=True,
+        )
+        self.device.known = True
+        self.device.is_visitor = True
+        self.device.save(update_fields=["known", "is_visitor"])
+        event = NetworkEvent.objects.create(
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Visitor came online",
+        )
+
+        deliveries = notify_event(event)
+
+        self.assertEqual(deliveries, [])
+        post.assert_not_called()
+        event.refresh_from_db()
+        self.assertEqual(
+            event.metadata["notification_skipped"],
+            "visitor_presence_default",
+        )
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
+    def test_visitor_always_preference_enables_presence_notification(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        AppSettings.objects.create(
+            discord_webhook="https://discord.example/webhook",
+            notify_device_online=False,
+        )
+        self.device.known = True
+        self.device.is_visitor = True
+        self.device.online_notification_preference = Device.NotificationPreference.ALWAYS
+        self.device.save(
+            update_fields=["known", "is_visitor", "online_notification_preference"]
+        )
+        event = NetworkEvent.objects.create(
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Visitor came online",
+        )
+
+        deliveries = notify_event(event)
+
+        self.assertEqual(len(deliveries), 1)
+        post.assert_called_once()
+
+    @override_settings(
+        NOTIFICATIONS_ENABLED=True,
+        DISCORD_WEBHOOK="https://discord.example/webhook",
+        TELEGRAM_TOKEN="",
+        TELEGRAM_USERID="",
+        NOTIFICATION_TIMEOUT=1,
+    )
+    @patch("core.notifications.requests.post")
     def test_device_always_preference_overrides_disabled_global_rule(self, post):
         post.return_value = Mock(raise_for_status=Mock())
         AppSettings.objects.create(
@@ -2816,6 +2879,66 @@ class ScanApiTests(TestCase):
             response.data["notification"]["message"],
             "2 selected devices marked as known.",
         )
+
+    def test_bulk_update_marks_visitors_and_marking_known_clears_visitor(self):
+        response = self.client.post(
+            "/api/v1/devices/bulk-update/",
+            {"ids": [self.device.id], "is_visitor": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        self.assertTrue(self.device.known)
+        self.assertTrue(self.device.is_visitor)
+        self.assertEqual(
+            response.data["notification"]["message"],
+            "1 selected device marked as visitor.",
+        )
+
+        response = self.client.post(
+            "/api/v1/devices/bulk-update/",
+            {"ids": [self.device.id], "known": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        self.assertTrue(self.device.known)
+        self.assertFalse(self.device.is_visitor)
+
+    def test_device_visitor_classification_enforces_known_invariant(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"is_visitor": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.device.refresh_from_db()
+        self.assertTrue(self.device.known)
+        self.assertTrue(self.device.is_visitor)
+
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"known": False},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.device.refresh_from_db()
+        self.assertFalse(self.device.known)
+        self.assertFalse(self.device.is_visitor)
+
+    def test_device_rejects_unknown_visitor_state(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"known": False, "is_visitor": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("is_visitor", response.data["info"])
 
     def test_bulk_update_rejects_missing_device(self):
         response = self.client.post(
@@ -3993,6 +4116,14 @@ class ScanApiTests(TestCase):
             online=True,
             status=Device.Status.OFFLINE,
         )
+        Device.objects.create(
+            name="Visitor phone",
+            ip="192.168.1.23",
+            mac="dd:dd:dd:dd:dd:dd",
+            known=True,
+            is_visitor=True,
+            status=Device.Status.ONLINE,
+        )
 
         response = self.client.get("/api/v1/scan/status/")
 
@@ -4001,6 +4132,8 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["counters"]["all_devices"], 3)
         self.assertEqual(response.data["counters"]["online_devices"], 2)
         self.assertEqual(response.data["counters"]["offline_devices"], 1)
+        self.assertEqual(response.data["counters"]["visitor_devices"], 1)
+        self.assertEqual(response.data["counters"]["online_visitors"], 1)
         self.assertEqual(response.data["counters"]["unnotified_events"], 1)
         self.assertEqual(response.data["time_zone"], "UTC")
         self.assertEqual(response.data["network_ranges"], ["192.168.1.0/24"])
@@ -4330,6 +4463,37 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["counters"]["open_ports"], 1)
 
+    def test_device_endpoint_separates_visitors_from_primary_counters(self):
+        online_visitor = Device.objects.create(
+            name="Visiting phone",
+            ip="192.168.1.40",
+            mac="bb:bb:bb:bb:bb:40",
+            known=True,
+            is_visitor=True,
+            status=Device.Status.ONLINE,
+        )
+        Device.objects.create(
+            name="Away visitor",
+            ip="192.168.1.41",
+            mac="bb:bb:bb:bb:bb:41",
+            known=True,
+            is_visitor=True,
+            online=False,
+            status=Device.Status.OFFLINE,
+        )
+
+        response = self.client.get("/api/v1/device/")
+        visitors = self.client.get("/api/v1/device/", {"is_visitor": "true"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["counters"]["all_devices"], 1)
+        self.assertEqual(response.data["counters"]["online_devices"], 1)
+        self.assertEqual(response.data["counters"]["visitor_devices"], 2)
+        self.assertEqual(response.data["counters"]["online_visitors"], 1)
+        self.assertEqual(visitors.data["pagination"]["count"], 2)
+        self.assertEqual(visitors.data["data"][0]["is_visitor"], True)
+        self.assertIn(online_visitor.id, [device["id"] for device in visitors.data["data"]])
+
     def test_device_endpoint_returns_utc_datetime_strings(self):
         self.device.last_status_check = timezone.now()
         self.device.last_port_scan = timezone.now()
@@ -4606,6 +4770,7 @@ class ScanApiTests(TestCase):
 
     def test_device_inventory_export_returns_shared_format(self):
         self.device.known = True
+        self.device.is_visitor = True
         self.device.comments = "Demo note"
         self.device.external_url = "https://192.168.1.10"
         self.device.online_notification_preference = Device.NotificationPreference.ALWAYS
@@ -4613,6 +4778,7 @@ class ScanApiTests(TestCase):
         self.device.save(
             update_fields=[
                 "known",
+                "is_visitor",
                 "comments",
                 "external_url",
                 "online_notification_preference",
@@ -4638,6 +4804,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(exported_device["external_url"], "https://192.168.1.10")
         self.assertEqual(exported_device["online_notification_preference"], "always")
         self.assertEqual(exported_device["offline_notification_preference"], "never")
+        self.assertTrue(exported_device["is_visitor"])
         self.assertTrue(exported_device["attention_acknowledged"])
         self.assertTrue(exported_device["first_seen"].endswith("Z"))
 
@@ -4680,6 +4847,33 @@ class ScanApiTests(TestCase):
             list(self.device.ports.filter(open=True).values_list("port", flat=True)),
             [80, 443],
         )
+
+    def test_legacy_inventory_import_preserves_existing_visitor_classification(self):
+        self.device.known = True
+        self.device.is_visitor = True
+        self.device.save(update_fields=["known", "is_visitor"])
+
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Visiting phone",
+                        "ip": self.device.ip,
+                        "mac": self.device.mac,
+                        "known": True,
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        self.assertTrue(self.device.known)
+        self.assertTrue(self.device.is_visitor)
 
     def test_device_inventory_import_restores_notification_preferences(self):
         response = self.client.post(
@@ -5178,6 +5372,7 @@ class ScanApiTests(TestCase):
                         "role": "sensor",
                         "room": "Kitchen",
                         "known": True,
+                        "is_visitor": True,
                         "is_gateway": False,
                         "status": "online",
                         "open_ports": [80, "443", 80],
@@ -5195,6 +5390,8 @@ class ScanApiTests(TestCase):
         self.assertEqual(imported.secondary_icon, "led-strip")
         self.assertEqual(imported.role, "sensor")
         self.assertEqual(imported.room, "Kitchen")
+        self.assertTrue(imported.known)
+        self.assertTrue(imported.is_visitor)
         self.assertEqual(
             list(imported.ports.filter(open=True).values_list("port", flat=True)),
             [80, 443],

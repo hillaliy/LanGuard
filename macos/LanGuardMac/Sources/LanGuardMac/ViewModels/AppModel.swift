@@ -37,12 +37,24 @@ final class AppModel {
         loadSavedState()
     }
 
+    var deviceCount: Int {
+        devices.filter { !$0.isVisitor }.count
+    }
+
+    var visitorCount: Int {
+        devices.filter(\.isVisitor).count
+    }
+
     var onlineCount: Int {
-        devices.filter { $0.status == .online }.count
+        devices.filter { !$0.isVisitor && $0.status == .online }.count
+    }
+
+    var onlineVisitorCount: Int {
+        devices.filter { $0.isVisitor && $0.status == .online }.count
     }
 
     var unknownCount: Int {
-        devices.filter { !$0.isKnown }.count
+        devices.filter { !$0.isKnown && !$0.isVisitor }.count
     }
 
     var openPortCount: Int {

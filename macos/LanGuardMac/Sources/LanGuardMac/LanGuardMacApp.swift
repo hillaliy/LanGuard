@@ -65,11 +65,14 @@ private struct LanGuardMenuBarView: View {
 
         Divider()
 
-        Label("Devices: \(appModel.devices.count)", systemImage: "desktopcomputer")
+        Label("Devices: \(appModel.deviceCount)", systemImage: "desktopcomputer")
         Label("Online: \(appModel.onlineCount)", systemImage: "wifi")
         Label("Offline: \(offlineCount)", systemImage: "wifi.slash")
         Label("Unknown: \(appModel.unknownCount)", systemImage: "questionmark.circle")
         Label("Open ports: \(appModel.openPortCount)", systemImage: "point.3.connected.trianglepath.dotted")
+        if appModel.visitorCount > 0 {
+            Label("Visitors: \(appModel.visitorCount)", systemImage: "person.crop.circle")
+        }
 
         if let latestScan = appModel.latestScan {
             Label("Last scan: \(title(for: latestScan.status))", systemImage: "clock.arrow.circlepath")
@@ -96,7 +99,7 @@ private struct LanGuardMenuBarView: View {
     }
 
     private var offlineCount: Int {
-        appModel.devices.filter { $0.status == .offline }.count
+        appModel.devices.filter { !$0.isVisitor && $0.status == .offline }.count
     }
 
     private func title(for status: ScanRecord.Status) -> String {

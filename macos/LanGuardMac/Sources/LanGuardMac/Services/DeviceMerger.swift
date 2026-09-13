@@ -56,6 +56,7 @@ enum DeviceMerger {
             merged.role = previous.role
             merged.room = previous.room
             merged.isKnown = previous.isKnown
+            merged.isVisitor = previous.isVisitor
             merged.firstSeen = previous.firstSeen
             merged.status = .online
             merged.missedScans = 0
@@ -125,6 +126,8 @@ enum DeviceMerger {
             current.role = current.role ?? latest.role
             current.room = current.room ?? latest.room
             current.isKnown = current.isKnown || latest.isKnown
+            current.isVisitor = current.isVisitor || latest.isVisitor
+            current.isKnown = current.isKnown || current.isVisitor
             current.isGateway = current.isGateway || latest.isGateway
             current.openPorts = Array(Set(current.openPorts).union(latest.openPorts)).sorted()
             current.missedScans = min(current.missedScans, latest.missedScans)

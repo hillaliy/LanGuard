@@ -109,10 +109,17 @@ class Device(models.Model):
     last_port_scan = models.DateTimeField(blank=True, null=True)
     missed_scans = models.PositiveIntegerField(default=0)
     known = models.BooleanField(default=False)
+    is_visitor = models.BooleanField(default=False, db_index=True)
     is_gateway = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["-online", "name", "ip"]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(is_visitor=False) | models.Q(known=True),
+                name="visitor_device_must_be_known",
+            ),
+        ]
 
     def __str__(self):
         return f"Device: {self.name} - IP:{self.ip}"

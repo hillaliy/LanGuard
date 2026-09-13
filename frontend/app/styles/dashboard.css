@@ -55,6 +55,12 @@
   line-height: 1.02;
 }
 
+.dashboard-status-secondary {
+  font-size: 0.78rem;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
 .dashboard-summary-grid {
   display: grid;
   gap: 18px;
