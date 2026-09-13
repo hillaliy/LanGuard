@@ -197,6 +197,7 @@ func deviceInventoryRoundTripPreservesCommentsAndAttentionAcknowledgement() thro
         risk: .high,
         role: .server,
         isKnown: true,
+        isVisitor: true,
         openPorts: [3389]
     )
     device.setAttentionAcknowledged(true)
@@ -208,6 +209,8 @@ func deviceInventoryRoundTripPreservesCommentsAndAttentionAcknowledgement() thro
     #expect(imported?.comments == "Remote access is expected on this trusted device.")
     #expect(imported?.externalURL == "https://192.168.1.20:8443")
     #expect(imported?.isAttentionAcknowledged == true)
+    #expect(imported?.isKnown == true)
+    #expect(imported?.isVisitor == true)
     #expect(imported?.needsAttention == false)
     #expect(imported?.vendorSource == .manuf)
     #expect(imported?.hostnameSource == .mdns)

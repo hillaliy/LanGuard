@@ -476,6 +476,7 @@ def inventory_device_payload(device):
         "risk": risk_data["level"],
         "attention_acknowledged": device_attention_acknowledged(device, risk_data),
         "known": device.known,
+        "is_visitor": device.is_visitor,
         "is_gateway": device.is_gateway,
         "status": device.status,
         "open_ports": list(
@@ -881,6 +882,13 @@ def import_inventory_devices(payload):
                 duplicate.delete()
                 removed_duplicates += 1
 
+        is_visitor_present = "is_visitor" in item or "isVisitor" in item
+        is_visitor = parse_inventory_bool(
+            item.get("is_visitor", item.get("isVisitor", False))
+        )
+        known = is_visitor or parse_inventory_bool(
+            item.get("known", item.get("isKnown", False))
+        )
         defaults = {
             "name": name,
             "ip": ip,
@@ -893,12 +901,14 @@ def import_inventory_devices(payload):
             ),
             "hostname": hostname,
             "hostname_source": hostname_source,
-            "known": parse_inventory_bool(item.get("known", item.get("isKnown", False))),
+            "known": known,
             "is_gateway": is_gateway,
             "online": device_status != Device.Status.OFFLINE,
             "status": device_status,
             "lastseen": last_seen,
         }
+        if is_visitor_present or not known:
+            defaults["is_visitor"] = is_visitor
         if online_notification_preference_present:
             defaults["online_notification_preference"] = online_notification_preference
         if offline_notification_preference_present:
@@ -947,6 +957,7 @@ def import_inventory_devices(payload):
                     *(["homebox_item_id"] if homebox_present else []),
                     *(["archived"] if "archived" in defaults else []),
                     "known",
+                    *(["is_visitor"] if "is_visitor" in defaults else []),
                     "is_gateway",
                     "online",
                     "status",
@@ -1830,6 +1841,24 @@ def users(request):
     )
 
 
+def active_device_counters():
+    active_devices = Device.objects.filter(archived=False)
+    regular_devices = active_devices.filter(is_visitor=False)
+    visitor_devices = active_devices.filter(is_visitor=True)
+    return {
+        "all_devices": regular_devices.count(),
+        "online_devices": regular_devices.exclude(status=Device.Status.OFFLINE).count(),
+        "offline_devices": regular_devices.filter(status=Device.Status.OFFLINE).count(),
+        "new_devices": regular_devices.filter(known=False).count(),
+        "open_ports": DevicePort.objects.filter(
+            open=True,
+            device__archived=False,
+        ).count(),
+        "visitor_devices": visitor_devices.count(),
+        "online_visitors": visitor_devices.exclude(status=Device.Status.OFFLINE).count(),
+    }
+
+
 # Endpoint for managing devices (GET, PUT, DELETE)
 @extend_schema(
     methods=["GET"],
@@ -1847,19 +1876,7 @@ def users(request):
 @api_view(["GET", "PUT", "DELETE"])
 @permission_classes([permissions.IsAuthenticated, CanEditDevices])
 def device(request):
-    active_devices = Device.objects.filter(archived=False)
-    all_devices = active_devices.count()
-    online_devices = active_devices.exclude(status=Device.Status.OFFLINE).count()
-    offline_devices = active_devices.filter(status=Device.Status.OFFLINE).count()
-    new_devices = active_devices.filter(known=False).count()
-    open_ports = DevicePort.objects.filter(open=True, device__archived=False).count()
-    counters = {
-        "all_devices": all_devices,
-        "online_devices": online_devices,
-        "offline_devices": offline_devices,
-        "new_devices": new_devices,
-        "open_ports": open_ports,
-    }
+    counters = active_device_counters()
 
     # Handle GET request to retrieve devices
     if request.method == "GET":
@@ -1870,6 +1887,7 @@ def device(request):
             online = parse_bool_param(request.query_params, "online")
             device_status = request.query_params.get("status")
             known = parse_bool_param(request.query_params, "known")
+            is_visitor = parse_bool_param(request.query_params, "is_visitor")
             search = request.query_params.get("search")
             open_port = request.query_params.get("open_port")
             first_seen = request.query_params.get("first_seen")
@@ -1884,6 +1902,8 @@ def device(request):
                 devices = devices.filter(online=online)
             if known is not None:
                 devices = devices.filter(known=known)
+            if is_visitor is not None:
+                devices = devices.filter(is_visitor=is_visitor)
             if search:
                 devices = devices.filter(
                     Q(name__icontains=search)
@@ -1999,7 +2019,8 @@ def bulk_update_devices(request):
     serializer = DeviceBulkUpdateSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     device_ids = serializer.validated_data["ids"]
-    known = serializer.validated_data["known"]
+    known = serializer.validated_data.get("known")
+    is_visitor = serializer.validated_data.get("is_visitor")
     devices = Device.objects.filter(id__in=device_ids)
     found_ids = set(devices.values_list("id", flat=True))
     if len(found_ids) != len(device_ids):
@@ -2007,13 +2028,25 @@ def bulk_update_devices(request):
             {"ids": "One or more selected devices no longer exist. Refresh and try again."}
         )
 
-    updated_count = devices.exclude(known=known).update(known=known)
+    if is_visitor is True:
+        update_values = {"known": True, "is_visitor": True}
+        state_label = "visitor"
+    elif known is True:
+        update_values = {"known": True, "is_visitor": False}
+        state_label = "known"
+    elif known is False:
+        update_values = {"known": False, "is_visitor": False}
+        state_label = "new"
+    else:
+        update_values = {"is_visitor": False}
+        state_label = "not visitor"
+    updated_count = devices.exclude(**update_values).update(**update_values)
     selected_count = len(device_ids)
-    state_label = "known" if known else "new"
     return success_response(
         {
             "ids": device_ids,
             "known": known,
+            "is_visitor": is_visitor,
             "updated_count": updated_count,
         },
         "Devices updated",
@@ -2251,10 +2284,7 @@ def scan_status(request):
             },
             "permissions": user_capabilities(request.user),
             "counters": {
-                "all_devices": Device.objects.filter(archived=False).count(),
-                "online_devices": Device.objects.filter(archived=False).exclude(status=Device.Status.OFFLINE).count(),
-                "offline_devices": Device.objects.filter(archived=False, status=Device.Status.OFFLINE).count(),
-                "open_ports": DevicePort.objects.filter(open=True, device__archived=False).count(),
+                **active_device_counters(),
                 "unnotified_events": NetworkEvent.objects.filter(notified=False).count(),
             },
         },

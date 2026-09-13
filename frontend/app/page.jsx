@@ -206,6 +206,7 @@ const deviceStatusOptions = [
   { value: 'online', label: 'Online' },
   { value: 'offline', label: 'Offline' },
   { value: 'new', label: 'New devices' },
+  { value: 'visitors', label: 'Visitors' },
   { value: 'archived', label: 'Archived' },
 ];
 
@@ -1613,6 +1614,22 @@ function GatewayBadge({ device, compact = false }) {
   );
 }
 
+function DeviceClassificationBadge({ device, compact = false }) {
+  const visitor = Boolean(device?.is_visitor);
+  const known = Boolean(device?.known);
+
+  return (
+    <Badge
+      className="device-known-badge"
+      color={visitor ? 'blue' : known ? 'teal' : 'yellow'}
+      variant="light"
+      size={compact ? 'sm' : 'md'}
+    >
+      {visitor ? 'Visitor' : known ? 'Known' : 'New'}
+    </Badge>
+  );
+}
+
 function formatTopbarDate(value, timeZone) {
   return new Intl.DateTimeFormat(undefined, {
     weekday: 'short',
@@ -1829,12 +1846,14 @@ function DashboardStatusCards({ counters = {} }) {
         icon={<IconDeviceDesktop size={30} />}
         label="Devices"
         value={counters.all_devices ?? 0}
+        secondaryValue={counters.visitor_devices}
         color="blue"
       />
       <DashboardStatusCard
         icon={<IconWifi size={30} />}
         label="Online"
         value={counters.online_devices ?? 0}
+        secondaryValue={counters.online_visitors}
         color="green"
       />
       <DashboardStatusCard
@@ -1853,7 +1872,8 @@ function DashboardStatusCards({ counters = {} }) {
   );
 }
 
-function DashboardStatusCard({ icon, label, value, color }) {
+function DashboardStatusCard({ icon, label, value, secondaryValue, color }) {
+  const visitors = Number(secondaryValue) || 0;
   return (
     <Paper className="dashboard-status-card">
       <ThemeIcon
@@ -1868,6 +1888,11 @@ function DashboardStatusCard({ icon, label, value, color }) {
       <Box>
         <Text className="dashboard-status-label" fw={800}>{label}</Text>
         <Text className="dashboard-status-value" fw={900}>{value}</Text>
+        {visitors > 0 && (
+          <Text className="dashboard-status-secondary" c="dimmed" fw={700}>
+            {visitors.toLocaleString()} {visitors === 1 ? 'visitor' : 'visitors'}
+          </Text>
+        )}
       </Box>
     </Paper>
   );
@@ -2630,6 +2655,7 @@ function DeviceDetailsPage({
   const [role, setRole] = useState('device');
   const [room, setRoom] = useState('');
   const [known, setKnown] = useState(false);
+  const [isVisitor, setIsVisitor] = useState(false);
   const [onlineNotificationPreference, setOnlineNotificationPreference] = useState('inherit');
   const [offlineNotificationPreference, setOfflineNotificationPreference] = useState('inherit');
   const [comments, setComments] = useState('');
@@ -2664,6 +2690,7 @@ function DeviceDetailsPage({
     setRole(nextDevice?.role || 'device');
     setRoom(nextDevice?.room || '');
     setKnown(Boolean(nextDevice?.known));
+    setIsVisitor(Boolean(nextDevice?.is_visitor));
     setOnlineNotificationPreference(nextDevice?.online_notification_preference || 'inherit');
     setOfflineNotificationPreference(nextDevice?.offline_notification_preference || 'inherit');
     setComments(nextDevice?.comments || '');
@@ -2909,6 +2936,7 @@ function DeviceDetailsPage({
           role,
           room,
           known,
+          is_visitor: isVisitor,
           online_notification_preference: onlineNotificationPreference,
           offline_notification_preference: offlineNotificationPreference,
           comments,
@@ -3027,6 +3055,7 @@ function DeviceDetailsPage({
               <Group gap="xs" wrap="wrap">
                 <Title order={2}>{device ? displayDeviceName(device) : 'Device'}</Title>
                 {device?.archived && <Badge color="gray" variant="light">Archived</Badge>}
+                {device?.is_visitor && <DeviceClassificationBadge device={device} compact />}
                 {device && <GatewayBadge device={device} compact />}
                 {device && <RiskBadge device={device} compact />}
               </Group>
@@ -3179,7 +3208,20 @@ function DeviceDetailsPage({
                         const nextKnown = event.currentTarget.checked;
                         setKnown(nextKnown);
                         if (!nextKnown) {
+                          setIsVisitor(false);
                           setAttentionAcknowledged(false);
+                        }
+                      }}
+                    />
+                    <Switch
+                      label="Visitor device"
+                      description="Keeps this device recognized while treating its presence as temporary."
+                      checked={isVisitor}
+                      onChange={(event) => {
+                        const nextVisitor = event.currentTarget.checked;
+                        setIsVisitor(nextVisitor);
+                        if (nextVisitor) {
+                          setKnown(true);
                         }
                       }}
                     />
@@ -6149,7 +6191,7 @@ function Dashboard({
 
   const filteredDevices = useMemo(() => devices, [devices]);
   const selectableDeviceIds = useMemo(
-    () => filteredDevices.filter((device) => !device.known).map((device) => device.id),
+    () => filteredDevices.map((device) => device.id),
     [filteredDevices]
   );
   const allSelectableDevicesSelected = Boolean(
@@ -6367,10 +6409,12 @@ function Dashboard({
       const deviceParams = {
         search: currentTableState.search,
         status:
-          currentTableState.deviceStatus && !['new', 'archived'].includes(currentTableState.deviceStatus)
+          currentTableState.deviceStatus
+            && !['new', 'visitors', 'archived'].includes(currentTableState.deviceStatus)
             ? currentTableState.deviceStatus
             : undefined,
         known: currentTableState.deviceStatus === 'new' ? 'false' : undefined,
+        is_visitor: currentTableState.deviceStatus === 'visitors' ? 'true' : undefined,
         archived: currentTableState.deviceStatus === 'archived' ? 'true' : undefined,
         network_ranges: currentTableState.networkRangeFilter.length
           ? currentTableState.networkRangeFilter.join(',')
@@ -6791,9 +6835,6 @@ function Dashboard({
   }
 
   function toggleBulkDevice(device) {
-    if (device.known) {
-      return;
-    }
     setSelectedDeviceIds((current) =>
       current.includes(device.id)
         ? current.filter((deviceId) => deviceId !== device.id)
@@ -6810,7 +6851,7 @@ function Dashboard({
     setSelectedDeviceIds(allSelectableDevicesSelected ? [] : selectableDeviceIds);
   }
 
-  async function markSelectedDevicesKnown() {
+  async function updateSelectedDevices(classification) {
     if (!selectedDeviceIds.length) {
       return;
     }
@@ -6821,6 +6862,7 @@ function Dashboard({
         body: {
           ids: selectedDeviceIds,
           known: true,
+          is_visitor: classification === 'visitor',
         },
       });
       closeBulkEdit();
@@ -7275,9 +7317,19 @@ function Dashboard({
                               leftSection={<IconShieldCheck size={16} />}
                               disabled={!selectedDeviceIds.length}
                               loading={bulkUpdatingDevices}
-                              onClick={markSelectedDevicesKnown}
+                              onClick={() => updateSelectedDevices('known')}
                             >
                               Mark as known
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="light"
+                              leftSection={<IconUserPlus size={16} />}
+                              disabled={!selectedDeviceIds.length}
+                              loading={bulkUpdatingDevices}
+                              onClick={() => updateSelectedDevices('visitor')}
+                            >
+                              Mark as visitor
                             </Button>
                           </>
                         ) : (
@@ -7290,7 +7342,7 @@ function Dashboard({
                                 size="xs"
                                 variant="light"
                                 leftSection={<IconEdit size={16} />}
-                                disabled={!selectableDeviceIds.length}
+                                disabled={!filteredDevices.length}
                                 onClick={() => setBulkEditEnabled(true)}
                               >
                                 Bulk edit
@@ -7309,7 +7361,6 @@ function Dashboard({
                         key={device.id}
                         role={bulkEditEnabled ? 'checkbox' : undefined}
                         aria-checked={bulkEditEnabled ? selectedDeviceIds.includes(device.id) : undefined}
-                        aria-disabled={bulkEditEnabled && device.known ? true : undefined}
                         tabIndex={bulkEditEnabled ? 0 : undefined}
                         onClick={() => (
                           bulkEditEnabled ? toggleBulkDevice(device) : openDevicePage(device)
@@ -7317,7 +7368,6 @@ function Dashboard({
                         onKeyDown={(event) => {
                           if (
                             bulkEditEnabled
-                            && !device.known
                             && (event.key === 'Enter' || event.key === ' ')
                           ) {
                             event.preventDefault();
@@ -7328,7 +7378,6 @@ function Dashboard({
                         {bulkEditEnabled && (
                           <Checkbox
                             checked={selectedDeviceIds.includes(device.id)}
-                            disabled={device.known}
                             readOnly
                             tabIndex={-1}
                             aria-label={`Select ${displayDeviceName(device)}`}
@@ -7343,13 +7392,7 @@ function Dashboard({
                             <Group gap="xs" wrap="nowrap">
                               <Text fw={800} className="truncate-cell">{displayDeviceName(device)}</Text>
                               <Stack className="device-list-state-badges" gap={4}>
-                                <Badge
-                                  className="device-known-badge"
-                                  color={device.known ? 'teal' : 'yellow'}
-                                  variant="light"
-                                >
-                                  {device.known ? 'Known' : 'New'}
-                                </Badge>
+                                <DeviceClassificationBadge device={device} />
                                 <GatewayBadge device={device} compact />
                               </Stack>
                             </Group>
@@ -7404,12 +7447,36 @@ function Dashboard({
                   <Stack className="device-mobile-list" gap={0}>
                     {filteredDevices.map((device) => (
                       <UnstyledButton
-                        className="device-mobile-row"
+                        component={bulkEditEnabled ? 'div' : 'button'}
+                        className={`device-mobile-row${bulkEditEnabled ? ' bulk-edit' : ''}${selectedDeviceIds.includes(device.id) ? ' selected' : ''}`}
                         key={device.id}
-                        onClick={() => openDevicePage(device)}
+                        role={bulkEditEnabled ? 'checkbox' : undefined}
+                        aria-checked={bulkEditEnabled ? selectedDeviceIds.includes(device.id) : undefined}
+                        tabIndex={bulkEditEnabled ? 0 : undefined}
+                        onClick={() => (
+                          bulkEditEnabled ? toggleBulkDevice(device) : openDevicePage(device)
+                        )}
+                        onKeyDown={(event) => {
+                          if (
+                            bulkEditEnabled
+                            && (event.key === 'Enter' || event.key === ' ')
+                          ) {
+                            event.preventDefault();
+                            toggleBulkDevice(device);
+                          }
+                        }}
                       >
                         <Group justify="space-between" align="flex-start" wrap="nowrap">
                           <Group gap="sm" align="flex-start" wrap="nowrap" className="device-mobile-main">
+                            {bulkEditEnabled && (
+                              <Checkbox
+                                checked={selectedDeviceIds.includes(device.id)}
+                                readOnly
+                                tabIndex={-1}
+                                aria-label={`Select ${displayDeviceName(device)}`}
+                                pointerEvents="none"
+                              />
+                            )}
                             <span className="device-mobile-icon">
                               <DeviceIconStack device={device} size={18} />
                             </span>
@@ -7421,13 +7488,7 @@ function Dashboard({
                           <Group className="device-mobile-badges" gap={6} justify="flex-end" wrap="wrap">
                             <RiskBadge device={device} compact />
                             <GatewayBadge device={device} compact />
-                            <Badge
-                              className="device-known-badge"
-                              color={device.known ? 'teal' : 'yellow'}
-                              variant="light"
-                            >
-                              {device.known ? 'Known' : 'New'}
-                            </Badge>
+                            <DeviceClassificationBadge device={device} />
                           </Group>
                         </Group>
                         <SimpleGrid className="device-mobile-details" cols={2} spacing="xs" mt="sm">

@@ -69,6 +69,16 @@ def notification_event_allowed(event, app_config=None):
         return True
     if preference == Device.NotificationPreference.NEVER:
         return False
+    if (
+        event.device_id
+        and event.device.is_visitor
+        and event.event_type
+        in {
+            NetworkEvent.EventType.DEVICE_ONLINE,
+            NetworkEvent.EventType.DEVICE_OFFLINE,
+        }
+    ):
+        return False
     if event.event_type == NetworkEvent.EventType.NEW_DEVICE:
         return app_config.notify_new_devices
     if event.event_type == NetworkEvent.EventType.DEVICE_ONLINE:
@@ -90,6 +100,16 @@ def notification_skip_reason(event):
         return "device_archived"
     if presence_notification_preference(event) == Device.NotificationPreference.NEVER:
         return "device_notification_disabled"
+    if (
+        event.device_id
+        and event.device.is_visitor
+        and event.event_type
+        in {
+            NetworkEvent.EventType.DEVICE_ONLINE,
+            NetworkEvent.EventType.DEVICE_OFFLINE,
+        }
+    ):
+        return "visitor_presence_default"
     return "event_type_not_enabled"
 
 

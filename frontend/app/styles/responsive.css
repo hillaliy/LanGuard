@@ -62,6 +62,10 @@
     font-size: 2rem;
   }
 
+  .dashboard-status-secondary {
+    font-size: 0.68rem;
+  }
+
   .dashboard-summary-grid {
     grid-template-columns: 1fr;
   }
@@ -557,6 +561,10 @@
 
   .dashboard-status-value {
     font-size: 1.55rem;
+  }
+
+  .dashboard-status-secondary {
+    font-size: 0.56rem;
   }
 
   .device-mobile-row {

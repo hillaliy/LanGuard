@@ -196,7 +196,7 @@ struct DevicesView: View {
     }
 
     private var knownPicker: some View {
-        Picker("Known", selection: $knownFilter) {
+        Picker("Classification", selection: $knownFilter) {
             ForEach(KnownFilter.allCases) { filter in
                 Text(filter.title).tag(filter)
             }
@@ -205,7 +205,7 @@ struct DevicesView: View {
     }
 
     private var compactKnownPicker: some View {
-        Picker("Known", selection: $knownFilter) {
+        Picker("Classification", selection: $knownFilter) {
             ForEach(KnownFilter.allCases) { filter in
                 Text(filter.title).tag(filter)
             }
@@ -373,9 +373,11 @@ struct DevicesView: View {
             case .all:
                 break
             case .known:
-                if !device.isKnown { return false }
+                if !device.isKnown || device.isVisitor { return false }
             case .new:
                 if device.isKnown { return false }
+            case .visitors:
+                if !device.isVisitor { return false }
             }
 
             guard !normalizedSearch.isEmpty else { return true }
@@ -471,6 +473,7 @@ private enum KnownFilter: String, CaseIterable, Identifiable {
     case all
     case known
     case new
+    case visitors
 
     var id: String { rawValue }
 
@@ -482,8 +485,20 @@ private enum KnownFilter: String, CaseIterable, Identifiable {
             "Known"
         case .new:
             "New"
+        case .visitors:
+            "Visitors"
         }
     }
+}
+
+private func deviceClassificationTitle(_ device: NetworkDevice) -> String {
+    if device.isVisitor { return "Visitor" }
+    return device.isKnown ? "Known" : "New"
+}
+
+private func deviceClassificationColor(_ device: NetworkDevice) -> Color {
+    if device.isVisitor { return .blue }
+    return device.isKnown ? .teal : .orange
 }
 
 private enum FirstSeenFilter: String, CaseIterable, Identifiable {
@@ -561,12 +576,12 @@ private struct DeviceCardRow: View {
                             .lineLimit(1)
                             .truncationMode(.tail)
 
-                        Text(device.isKnown ? "Known" : "New")
+                        Text(deviceClassificationTitle(device))
                             .font(.caption.weight(.bold))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background((device.isKnown ? Color.teal : Color.orange).opacity(0.18), in: Capsule())
-                            .foregroundStyle(device.isKnown ? .teal : .orange)
+                            .background(deviceClassificationColor(device).opacity(0.18), in: Capsule())
+                            .foregroundStyle(deviceClassificationColor(device))
                     }
 
                     Text(subtitle)
@@ -857,12 +872,12 @@ private struct CompactDeviceRow: View {
     }
 
     private var knownBadge: some View {
-        Text(device.isKnown ? "Known" : "New")
+        Text(deviceClassificationTitle(device))
             .font(.caption.weight(.bold))
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background((device.isKnown ? Color.teal : Color.orange).opacity(0.18), in: Capsule())
-            .foregroundStyle(device.isKnown ? .teal : .orange)
+            .background(deviceClassificationColor(device).opacity(0.18), in: Capsule())
+            .foregroundStyle(deviceClassificationColor(device))
             .lineLimit(1)
     }
 
@@ -944,6 +959,7 @@ struct DeviceDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var name: String
     @State private var isKnown: Bool
+    @State private var isVisitor: Bool
     @State private var role: DeviceRole?
     @State private var room: String?
     @State private var comments: String
@@ -967,6 +983,7 @@ struct DeviceDetailView: View {
         self.onDelete = onDelete
         _name = State(initialValue: device.name)
         _isKnown = State(initialValue: device.isKnown)
+        _isVisitor = State(initialValue: device.isVisitor)
         _role = State(initialValue: device.role)
         _room = State(initialValue: device.room)
         _comments = State(initialValue: device.comments)
@@ -989,6 +1006,17 @@ struct DeviceDetailView: View {
                 Section("Editable") {
                     TextField("Name", text: $name)
                     Toggle("Known device", isOn: $isKnown)
+                        .onChange(of: isKnown) { _, nextKnown in
+                            if !nextKnown {
+                                isVisitor = false
+                            }
+                        }
+                    Toggle("Visitor device", isOn: $isVisitor)
+                        .onChange(of: isVisitor) { _, nextVisitor in
+                            if nextVisitor {
+                                isKnown = true
+                            }
+                        }
                     Picker("Role", selection: $role) {
                         Text("Automatic (\(originalDevice.detectedRole.title))")
                             .tag(DeviceRole?.none)
@@ -1097,6 +1125,7 @@ struct DeviceDetailView: View {
                     var updatedDevice = originalDevice
                     updatedDevice.name = trimmedName
                     updatedDevice.isKnown = isKnown
+                    updatedDevice.isVisitor = isVisitor
                     updatedDevice.role = role
                     updatedDevice.room = room
                     updatedDevice.iconName = iconName

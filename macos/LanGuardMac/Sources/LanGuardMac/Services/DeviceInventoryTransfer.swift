@@ -50,6 +50,7 @@ struct DeviceInventoryItem: Codable {
     var role: String?
     var room: String?
     var known: Bool
+    var isVisitor: Bool?
     var isGateway: Bool
     var status: String?
     var risk: String?
@@ -73,6 +74,7 @@ struct DeviceInventoryItem: Codable {
         self.role = device.effectiveRole.rawValue
         self.room = device.room
         self.known = device.isKnown
+        self.isVisitor = device.isVisitor
         self.isGateway = device.isGateway
         self.status = device.status.rawValue
         self.risk = device.risk.rawValue
@@ -100,9 +102,10 @@ struct DeviceInventoryItem: Codable {
         let importedLastSeen = lastSeen ?? existing?.lastSeen ?? importedFirstSeen
         let existingFirstSeen = existing?.firstSeen ?? importedFirstSeen
         let deviceStatus = DeviceStatus(rawValue: status ?? "") ?? existing?.status ?? .unknown
+        let importedVisitor = isVisitor ?? existing?.isVisitor ?? false
         let deviceRisk = DeviceRisk(rawValue: risk ?? "") ?? existing?.risk ?? DeviceRiskScorer.risk(
             for: normalizedPorts,
-            isKnown: known,
+            isKnown: known || importedVisitor,
             role: normalizedRole ?? .device
         )
         let displayName = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -138,7 +141,8 @@ struct DeviceInventoryItem: Codable {
             risk: deviceRisk,
             role: importedRole,
             room: importedRoom,
-            isKnown: known,
+            isKnown: known || importedVisitor,
+            isVisitor: importedVisitor,
             isGateway: isGateway,
             openPorts: normalizedPorts,
             firstSeen: min(existingFirstSeen, importedFirstSeen),
@@ -187,6 +191,7 @@ struct DeviceInventoryItem: Codable {
         case role
         case room
         case known
+        case isVisitor = "is_visitor"
         case isGateway = "is_gateway"
         case status
         case risk

@@ -69,6 +69,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
     var role: DeviceRole?
     var room: String?
     var isKnown: Bool
+    var isVisitor: Bool
     var isGateway: Bool
     var openPorts: [Int]
     var missedScans: Int
@@ -94,6 +95,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         role: DeviceRole? = nil,
         room: String? = nil,
         isKnown: Bool = false,
+        isVisitor: Bool = false,
         isGateway: Bool = false,
         openPorts: [Int] = [],
         missedScans: Int = 0,
@@ -117,7 +119,8 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         self.risk = risk
         self.role = role
         self.room = room
-        self.isKnown = isKnown
+        self.isKnown = isKnown || isVisitor
+        self.isVisitor = isVisitor
         self.isGateway = isGateway
         self.openPorts = openPorts.sorted()
         self.missedScans = missedScans
@@ -144,6 +147,7 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         case role
         case room
         case isKnown
+        case isVisitor
         case isGateway
         case openPorts
         case missedScans
@@ -178,7 +182,8 @@ struct NetworkDevice: Codable, Identifiable, Hashable, Sendable {
         risk = try container.decodeIfPresent(DeviceRisk.self, forKey: .risk) ?? .low
         role = try container.decodeIfPresent(DeviceRole.self, forKey: .role)
         room = try container.decodeIfPresent(String.self, forKey: .room)
-        isKnown = try container.decodeIfPresent(Bool.self, forKey: .isKnown) ?? false
+        isVisitor = try container.decodeIfPresent(Bool.self, forKey: .isVisitor) ?? false
+        isKnown = (try container.decodeIfPresent(Bool.self, forKey: .isKnown) ?? false) || isVisitor
         isGateway = try container.decodeIfPresent(Bool.self, forKey: .isGateway) ?? false
         openPorts = try container.decodeIfPresent([Int].self, forKey: .openPorts) ?? []
         missedScans = try container.decodeIfPresent(Int.self, forKey: .missedScans) ?? 0
