@@ -2,13 +2,18 @@
 
 ## Unreleased
 
+
+## 1.17.0 - 2026-09-14
+
 - Added tablet device sorting and paginated device-list navigation with configurable 25, 50, 75, or 100 device page sizes.
-- Added visitor device classification with dedicated filtering, dashboard counts, bulk editing, and quiet-by-default presence notifications.
+- Added visitor device classification with dedicated filtering, dashboard counts, bulk editing, quiet-by-default presence notifications, and exclusion from Home Map.
 - Added an optional notification rule for new LanGuard releases with one alert per version.
 - Fixed the Today device filter failing when the backend stores naive UTC timestamps.
 - Added IP address change history to device timelines and the central event log.
 - Refactored Docker frontend styling around Mantine theme defaults, scoped modules, and focused layout styles while preserving the existing light, dark, desktop, tablet, and phone appearance.
 - Simplified the Docker Not Found page so the LanGuard logo cleanly replaces the zero in the 404 mark.
+- Added Discord and Telegram channel icons and refreshed the README dashboard preview and scheduler documentation.
+- Updated Django REST framework to 3.18.1, Mantine to 9.6.1, and React to 19.3.0.
 
 ## 1.16.0 - 2026-09-10
 
