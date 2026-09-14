@@ -69,6 +69,7 @@ import {
   IconDeviceTablet,
   IconDeviceTv,
   IconDeviceWatch,
+  IconDevices,
   IconDownload,
   IconEdit,
   IconGripVertical,
@@ -4905,12 +4906,20 @@ function SettingsPage({ onSaved }) {
               <Title order={3}>Integrations</Title>
               <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
             </Box>
-            <Badge variant="light">2 available</Badge>
+            <Badge variant="light">3 available</Badge>
           </Group>
         <Stack className="settings-subsection" gap="sm">
           <Group justify="space-between" align="flex-start">
             <Box>
               <Group gap="sm">
+                <Image
+                  src="/integrations/adguard-home.svg"
+                  alt=""
+                  aria-hidden="true"
+                  w={24}
+                  h={24}
+                  fit="contain"
+                />
                 <Text fw={700}>AdGuard Home</Text>
                 <Switch
                   label="Enabled"
@@ -5015,6 +5024,14 @@ function SettingsPage({ onSaved }) {
           <Group justify="space-between" align="flex-start">
             <Box>
               <Group gap="sm">
+                <Image
+                  src="/integrations/speedtest-tracker.svg"
+                  alt=""
+                  aria-hidden="true"
+                  w={24}
+                  h={24}
+                  fit="contain"
+                />
                 <Text fw={700}>Speedtest Tracker</Text>
                 <Switch
                   label="Enabled"
@@ -5065,8 +5082,22 @@ function SettingsPage({ onSaved }) {
         </Stack>
         <Stack className="settings-subsection" gap="sm">
           <Group justify="space-between">
-            <Group><Text fw={700}>HomeBox</Text><Switch label="Enabled" checked={homeboxEnabled}
-              onChange={(event) => setHomeboxEnabled(event.currentTarget.checked)} /></Group>
+            <Group>
+              <Image
+                src="/integrations/homebox.svg"
+                alt=""
+                aria-hidden="true"
+                w={24}
+                h={24}
+                fit="contain"
+              />
+              <Text fw={700}>HomeBox</Text>
+              <Switch
+                label="Enabled"
+                checked={homeboxEnabled}
+                onChange={(event) => setHomeboxEnabled(event.currentTarget.checked)}
+              />
+            </Group>
             <Badge color={homeboxConfigured && homeboxEnabled ? 'teal' : 'gray'} variant="light">
               {homeboxConfigured ? 'Configured' : 'Not configured'}
             </Badge>
@@ -5176,7 +5207,10 @@ function SettingsPage({ onSaved }) {
           </Box>
         <Group justify="space-between" align="flex-start" wrap="wrap">
           <Box>
-            <Text fw={700}>Device inventory</Text>
+            <Group gap="xs">
+              <IconDevices size={24} aria-hidden="true" />
+              <Text fw={700}>Device inventory</Text>
+            </Group>
             <Text size="sm" c="dimmed">
               Export or import known devices, names, icons, vendors, IPs, and open ports.
             </Text>
@@ -5209,7 +5243,17 @@ function SettingsPage({ onSaved }) {
 
         <Group justify="space-between" align="flex-start" wrap="wrap">
           <Box>
-            <Text fw={700}>NetAlertX migration</Text>
+            <Group gap="xs">
+              <Image
+                src="/integrations/netalertx.svg"
+                alt=""
+                aria-hidden="true"
+                w={24}
+                h={24}
+                fit="contain"
+              />
+              <Text fw={700}>NetAlertX migration</Text>
+            </Group>
             <Text size="sm" c="dimmed">
               Import devices from the <code>devices.csv</code> export created by NetAlertX.
             </Text>
@@ -5232,7 +5276,17 @@ function SettingsPage({ onSaved }) {
 
         <Group className="watchyourlan-migration-row" justify="space-between" align="flex-start" wrap="wrap">
           <Box className="watchyourlan-migration-description">
-            <Text fw={700}>WatchYourLAN migration</Text>
+            <Group gap="xs">
+              <Image
+                src="/integrations/watchyourlan.png"
+                alt=""
+                aria-hidden="true"
+                w={24}
+                h={24}
+                fit="contain"
+              />
+              <Text fw={700}>WatchYourLAN migration</Text>
+            </Group>
             <Text size="sm" c="dimmed">
               Import devices from the JSON returned by the WatchYourLAN <code>/api/all</code> endpoint.
             </Text>
@@ -7720,7 +7774,13 @@ function Dashboard({
           </Group>
         </Stack>
       </Modal>
-      <Modal opened={changelogOpened} onClose={closeChangelog} title={`What's new in v${APP_VERSION}`} centered>
+      <Modal
+        opened={changelogOpened}
+        onClose={closeChangelog}
+        title={`What's new in v${APP_VERSION}`}
+        centered
+        size="90rem"
+      >
         <Stack>
           {hasVersionUpdate && (
             <Alert color="blue" icon={<IconRefresh size={18} />}>
@@ -7734,11 +7794,11 @@ function Dashboard({
                 <Text fw={700}>Version {entry.version}</Text>
                 <Text size="sm" c="dimmed">{entry.date}</Text>
               </Group>
-              <Stack gap={6}>
+              <Stack gap={4}>
                 {entry.items.map((item) => (
                   <Group key={item} gap="xs" align="flex-start" wrap="nowrap">
                     <span className="changelog-bullet" />
-                    <Text size="sm">{item}</Text>
+                    <Text size="xs">{item}</Text>
                   </Group>
                 ))}
               </Stack>
