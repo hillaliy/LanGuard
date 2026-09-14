@@ -202,11 +202,12 @@ The scheduler container runs LanGuard's recurring background work:
 | Failed notification retry | Every 15 minutes | `NOTIFICATION_RETRY_INTERVAL` |
 | Activity cleanup | Every 24 hours | Activity retention in Settings |
 | AdGuard Home sync | Every 5 minutes when enabled | AdGuard Home settings |
+| LanGuard update check | At startup, then every 6 hours when enabled | Version check interval and new-version notification rule in Settings |
 
 The scheduler reloads the network ranges and scan interval before each cycle.
 Changes apply after the current wait or scan completes and do not require a
-container restart. Activity retention and AdGuard Home settings are also read
-from the database during their scheduled loops.
+container restart. Activity retention, AdGuard Home settings, and the version
+check interval are also read from the database during their scheduled loops.
 
 LanGuard can scan up to 16 named IPv4 CIDR ranges with up to 1,024 addresses per
 range in one scheduled run. Add each VLAN or subnet under
