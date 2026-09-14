@@ -59,6 +59,39 @@ class HomeBoxTests(TestCase):
         self.assertEqual(get.call_args.kwargs["headers"]["Authorization"], "Bearer secret-key")
 
     @patch("core.homebox.requests.get")
+    def test_search_adds_homebox_asset_id_prefix(self, get):
+        get.return_value = self.response({"items": []})
+
+        for query in ("123", "000-123"):
+            response = self.client.get(
+                "/api/v1/integrations/homebox/items/", {"q": query}
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(get.call_args.kwargs["params"]["q"], f"#{query}")
+
+    @patch("core.homebox.requests.get")
+    def test_search_preserves_homebox_asset_id_prefix(self, get):
+        get.return_value = self.response({"items": []})
+
+        response = self.client.get(
+            "/api/v1/integrations/homebox/items/", {"q": "#000-123"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(get.call_args.kwargs["params"]["q"], "#000-123")
+
+    @patch("core.homebox.requests.get")
+    def test_search_preserves_partial_description(self, get):
+        get.return_value = self.response({"items": []})
+
+        response = self.client.get(
+            "/api/v1/integrations/homebox/items/", {"q": "living room"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(get.call_args.kwargs["params"]["q"], "living room")
+
+    @patch("core.homebox.requests.get")
     def test_search_uses_name_when_asset_id_is_missing(self, get):
         get.return_value = self.response({"items": [{"id": ITEM_ID, "name": "Router"}]})
         response = self.client.get("/api/v1/integrations/homebox/items/")
