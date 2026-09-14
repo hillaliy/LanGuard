@@ -24,6 +24,7 @@ from .user_messages import external_service_error
 LOGGER = logging.getLogger(__name__)
 DISCORD_ALERT_COLOR = 0xE03131
 DISCORD_TEST_COLOR = 0x228BE6
+DISCORD_RECOVERY_COLOR = 0x12B886
 TEST_NOTIFICATION_MESSAGE = (
     "This is a test notification from LanGuard. Your notification channel is working."
 )
@@ -92,6 +93,8 @@ def notification_event_allowed(event, app_config=None):
         return app_config.notify_port_changes
     if event.event_type == NetworkEvent.EventType.VERSION_AVAILABLE:
         return app_config.notify_version_updates
+    if event.event_type == NetworkEvent.EventType.SPEEDTEST_HEALTH_CHANGED:
+        return app_config.notify_speedtest_changes
     return event.event_type in notification_event_types()
 
 
@@ -450,14 +453,20 @@ def format_discord_payload(event):
         if device.vendor:
             fields.append({"name": "Vendor", "value": device.vendor, "inline": False})
 
+    if event.event_type == NetworkEvent.EventType.VERSION_AVAILABLE:
+        color = DISCORD_TEST_COLOR
+    elif (
+        event.event_type == NetworkEvent.EventType.SPEEDTEST_HEALTH_CHANGED
+        and (event.metadata or {}).get("current_health") == "healthy"
+    ):
+        color = DISCORD_RECOVERY_COLOR
+    else:
+        color = DISCORD_ALERT_COLOR
+
     embed = {
         "title": f"LanGuard: {event.get_event_type_display()}",
         "description": event.message,
-        "color": (
-            DISCORD_TEST_COLOR
-            if event.event_type == NetworkEvent.EventType.VERSION_AVAILABLE
-            else DISCORD_ALERT_COLOR
-        ),
+        "color": color,
         "timestamp": utc_isoformat(event.created_at),
         "footer": {"text": "LanGuard"},
     }

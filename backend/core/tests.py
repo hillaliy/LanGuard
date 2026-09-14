@@ -859,6 +859,11 @@ class ScanCommandTests(TestCase):
             ["192.168.20.0/24", "192.168.30.0/24"]
         )
         thread_factory.assert_called()
+        thread_targets = {
+            call.kwargs["target"].__name__
+            for call in thread_factory.call_args_list
+        }
+        self.assertIn("speedtest_health_loop", thread_targets)
         signal_mock.assert_called()
 
     @patch("core.management.commands.scan_network.scan")
@@ -3386,6 +3391,7 @@ class ScanApiTests(TestCase):
                 "notify_device_offline": True,
                 "notify_port_changes": True,
                 "notify_version_updates": True,
+                "notify_speedtest_changes": True,
                 "notification_quiet_hours_enabled": True,
                 "notification_quiet_hours_start": "23:00",
                 "notification_quiet_hours_end": "06:30",
@@ -3419,6 +3425,7 @@ class ScanApiTests(TestCase):
         self.assertTrue(config.notify_device_offline)
         self.assertTrue(config.notify_port_changes)
         self.assertTrue(config.notify_version_updates)
+        self.assertTrue(config.notify_speedtest_changes)
         self.assertTrue(config.notification_quiet_hours_enabled)
         self.assertEqual(config.notification_quiet_hours_start, "23:00")
         self.assertEqual(config.notification_quiet_hours_end, "06:30")
@@ -3451,6 +3458,7 @@ class ScanApiTests(TestCase):
         self.assertTrue(response.data["data"]["notify_device_offline"])
         self.assertTrue(response.data["data"]["notify_port_changes"])
         self.assertTrue(response.data["data"]["notify_version_updates"])
+        self.assertTrue(response.data["data"]["notify_speedtest_changes"])
         self.assertTrue(response.data["data"]["notification_quiet_hours_enabled"])
         self.assertEqual(response.data["data"]["notification_quiet_hours_start"], "23:00")
         self.assertEqual(response.data["data"]["notification_quiet_hours_end"], "06:30")

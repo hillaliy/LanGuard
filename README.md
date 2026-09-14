@@ -203,6 +203,7 @@ The scheduler container runs LanGuard's recurring background work:
 | Activity cleanup | Every 24 hours | Activity retention in Settings |
 | AdGuard Home sync | Every 5 minutes when enabled | AdGuard Home settings |
 | LanGuard update check | At startup, then every 6 hours when enabled | Version check interval and new-version notification rule in Settings |
+| Speedtest health check | At startup, then every 5 minutes when enabled | Speedtest integration, thresholds, and health-change notification rule |
 
 The scheduler reloads the network ranges and scan interval before each cycle.
 Changes apply after the current wait or scan completes and do not require a
@@ -329,11 +330,15 @@ Speedtest Tracker.
 3. Enter the Speedtest Tracker URL and API token, then select **Test connection**.
 4. Save Settings. The latest result will appear on the dashboard.
 
-LanGuard stores only the connection settings. It does not copy test results or
-history into its database. The backend reads the latest result on dashboard
-requests and caches it in memory for five minutes, while a manual dashboard
-refresh requests fresh data immediately. The scheduler container is not used
-for this integration.
+LanGuard stores the connection settings and, when health-change notifications
+are enabled, the identifier and health state of the last processed result. It
+does not copy Speedtest history into its database. The backend reads the latest
+result on dashboard requests and caches it in memory for five minutes, while a
+manual dashboard refresh requests fresh data immediately. The scheduler checks
+the latest scored result every five minutes when the notification rule is
+enabled. Configure Speedtest Tracker thresholds first so its API returns a
+`healthy` value; unscored results and temporary connection failures do not send
+notifications.
 
 ### HomeBox
 

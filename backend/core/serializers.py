@@ -794,6 +794,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "notify_device_offline",
             "notify_port_changes",
             "notify_version_updates",
+            "notify_speedtest_changes",
             "notification_quiet_hours_enabled",
             "notification_quiet_hours_start",
             "notification_quiet_hours_end",
@@ -990,6 +991,17 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return attrs
 
     def update(self, instance, validated_data):
+        reset_speedtest_baseline = any(
+            (
+                field in validated_data
+                and validated_data[field] != getattr(instance, field)
+            )
+            for field in (
+                "speedtest_tracker_enabled",
+                "speedtest_tracker_url",
+                "notify_speedtest_changes",
+            )
+        ) or bool(validated_data.get("speedtest_tracker_api_token"))
         clear_webhook_secret = validated_data.pop("clear_webhook_secret", False)
         if clear_webhook_secret:
             validated_data["webhook_secret"] = ""
@@ -1005,7 +1017,14 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             validated_data.pop("speedtest_tracker_api_token", None)
         if not validated_data.get("homebox_api_token"):
             validated_data.pop("homebox_api_token", None)
-        return super().update(instance, validated_data)
+        instance = super().update(instance, validated_data)
+        if reset_speedtest_baseline:
+            instance.speedtest_last_result_id = ""
+            instance.speedtest_last_healthy = None
+            instance.save(
+                update_fields=["speedtest_last_result_id", "speedtest_last_healthy"]
+            )
+        return instance
 
     def validate_home_map_layout(self, value):
         validate_home_map_layout_value(value)

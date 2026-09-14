@@ -1,11 +1,18 @@
 import hashlib
+import logging
 from urllib.parse import urlparse
 
 import requests
 from django.core.cache import cache
+from django.db import transaction
+
+from .models import AppSettings, NetworkEvent
+from .notifications import notify_event
 
 
 CACHE_SECONDS = 5 * 60
+HEALTH_CHECK_INTERVAL_SECONDS = 5 * 60
+LOGGER = logging.getLogger(__name__)
 
 
 class SpeedtestTrackerError(RuntimeError):
@@ -132,3 +139,103 @@ def latest_speedtest_result(base_url, api_token, *, force_refresh=False):
     result = SpeedtestTrackerClient(normalized_url, token).latest_result()
     cache.set(cache_key, result, CACHE_SECONDS)
     return result, False
+
+
+def _metric(value, suffix):
+    if value is None:
+        return "-"
+    return f"{float(value):.2f}".rstrip("0").rstrip(".") + f" {suffix}"
+
+
+def check_speedtest_health_change():
+    config = AppSettings.load()
+    if not config.notify_speedtest_changes:
+        return {"status": "disabled"}
+    if not (
+        config.speedtest_tracker_enabled
+        and config.speedtest_tracker_url
+        and config.speedtest_tracker_api_token
+    ):
+        return {"status": "not_configured"}
+
+    source_url = config.speedtest_tracker_url
+    source_token = config.speedtest_tracker_api_token
+    try:
+        result, _ = latest_speedtest_result(
+            source_url,
+            source_token,
+            force_refresh=True,
+        )
+    except SpeedtestTrackerError as exc:
+        LOGGER.info("Speedtest health check could not read the latest result: %s", exc)
+        return {"status": "unavailable"}
+
+    result_id = str(result.get("id") or "").strip()
+    healthy = result.get("healthy")
+    if not result_id:
+        return {"status": "invalid_result"}
+    if not isinstance(healthy, bool):
+        return {"status": "unscored", "result_id": result_id}
+
+    event = None
+    with transaction.atomic():
+        current = AppSettings.objects.select_for_update().get(pk=config.pk)
+        if not (
+            current.notify_speedtest_changes
+            and current.speedtest_tracker_enabled
+            and current.speedtest_tracker_url == source_url
+            and current.speedtest_tracker_api_token == source_token
+        ):
+            return {"status": "configuration_changed"}
+
+        previous_result_id = current.speedtest_last_result_id
+        previous_healthy = current.speedtest_last_healthy
+        if previous_result_id == result_id and previous_healthy == healthy:
+            return {"status": "already_checked", "result_id": result_id}
+
+        current.speedtest_last_result_id = result_id
+        current.speedtest_last_healthy = healthy
+        current.save(
+            update_fields=["speedtest_last_result_id", "speedtest_last_healthy"]
+        )
+
+        if not previous_result_id or previous_healthy is None:
+            return {"status": "baseline", "result_id": result_id}
+        if previous_healthy == healthy:
+            return {"status": "unchanged", "result_id": result_id}
+
+        previous_label = "Healthy" if previous_healthy else "Degraded"
+        current_label = "Healthy" if healthy else "Degraded"
+        metrics = {
+            "download_mbps": result.get("download_mbps"),
+            "upload_mbps": result.get("upload_mbps"),
+            "ping_ms": result.get("ping_ms"),
+            "packet_loss_percent": result.get("packet_loss_percent"),
+        }
+        event = NetworkEvent.objects.create(
+            event_type=NetworkEvent.EventType.SPEEDTEST_HEALTH_CHANGED,
+            message=(
+                f"Speedtest changed from {previous_label} to {current_label}. "
+                f"Download: {_metric(metrics['download_mbps'], 'Mbps')}, "
+                f"upload: {_metric(metrics['upload_mbps'], 'Mbps')}, "
+                f"ping: {_metric(metrics['ping_ms'], 'ms')}, "
+                f"packet loss: {_metric(metrics['packet_loss_percent'], '%')}."
+            ),
+            metadata={
+                "result_id": result_id,
+                "previous_health": previous_label.lower(),
+                "current_health": current_label.lower(),
+                "tested_at": result.get("tested_at"),
+                "service_url": result.get("service_url") or source_url,
+                **metrics,
+            },
+        )
+
+    deliveries = notify_event(event)
+    return {
+        "status": "notified",
+        "result_id": result_id,
+        "health": "healthy" if healthy else "degraded",
+        "event_id": event.id,
+        "deliveries": len(deliveries),
+    }
