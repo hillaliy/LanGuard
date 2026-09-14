@@ -249,6 +249,10 @@ class NetworkEvent(models.Model):
         DEVICE_OFFLINE = "device_offline", "Device offline"
         IP_CHANGED = "ip_changed", "IP changed"
         VERSION_AVAILABLE = "version_available", "Version available"
+        SPEEDTEST_HEALTH_CHANGED = (
+            "speedtest_health_changed",
+            "Speedtest health changed",
+        )
         PORT_OPENED = "port_opened", "Port opened"
         PORT_CLOSED = "port_closed", "Port closed"
 
@@ -373,6 +377,7 @@ class AppSettings(models.Model):
     notify_device_offline = models.BooleanField(default=False)
     notify_port_changes = models.BooleanField(default=False)
     notify_version_updates = models.BooleanField(default=False)
+    notify_speedtest_changes = models.BooleanField(default=False)
     last_notified_version = models.CharField(max_length=64, blank=True, default="")
     notification_quiet_hours_enabled = models.BooleanField(default=False)
     notification_quiet_hours_start = models.CharField(max_length=5, default="22:00")
@@ -396,6 +401,8 @@ class AppSettings(models.Model):
     homebox_api_token = models.CharField(max_length=512, blank=True, default="")
     speedtest_tracker_url = models.URLField(max_length=2048, blank=True, default="")
     speedtest_tracker_api_token = models.CharField(max_length=512, blank=True, default="")
+    speedtest_last_result_id = models.CharField(max_length=64, blank=True, default="")
+    speedtest_last_healthy = models.BooleanField(blank=True, null=True)
     home_map_layout = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -451,6 +458,7 @@ class AppSettings(models.Model):
                 for event_type in ("port_opened", "port_closed")
             ),
             "notify_version_updates": False,
+            "notify_speedtest_changes": False,
             "last_notified_version": "",
             "notification_quiet_hours_enabled": False,
             "notification_quiet_hours_start": "22:00",
@@ -468,6 +476,8 @@ class AppSettings(models.Model):
             "speedtest_tracker_enabled": False,
             "speedtest_tracker_url": "",
             "speedtest_tracker_api_token": "",
+            "speedtest_last_result_id": "",
+            "speedtest_last_healthy": None,
             "home_map_layout": {},
         }
         config, _ = cls.objects.get_or_create(singleton_key=1, defaults=defaults)

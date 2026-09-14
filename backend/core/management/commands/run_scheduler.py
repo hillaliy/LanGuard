@@ -12,6 +12,10 @@ from core.notifications import retry_failed_notifications
 from core.scan import scan
 from core.adguard import sync_adguard_query_log
 from core.versioning import check_for_version_update
+from core.speedtest_tracker import (
+    HEALTH_CHECK_INTERVAL_SECONDS,
+    check_speedtest_health_change,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -159,6 +163,25 @@ class Command(BaseCommand):
             finally:
                 close_old_connections()
 
+        def run_speedtest_health_check():
+            close_old_connections()
+            try:
+                result = check_speedtest_health_change()
+                if result["status"] == "notified":
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            "Sent Speedtest health change notification: "
+                            f"{result['health']}"
+                        )
+                    )
+            except Exception:
+                LOGGER.exception("Scheduled Speedtest health check failed")
+                self.stderr.write(
+                    self.style.ERROR("Scheduled Speedtest health check failed")
+                )
+            finally:
+                close_old_connections()
+
         def retry_loop():
             while not stop_event.wait(retry_interval * 60):
                 run_notification_retry()
@@ -195,6 +218,12 @@ class Command(BaseCommand):
                 if stop_event.wait(interval_seconds):
                     break
 
+        def speedtest_health_loop():
+            while not stop_event.is_set():
+                run_speedtest_health_check()
+                if stop_event.wait(HEALTH_CHECK_INTERVAL_SECONDS):
+                    break
+
         def stop_scheduler(signum, frame):
             self.stdout.write("Stopping scheduler...")
             stop_event.set()
@@ -214,6 +243,11 @@ class Command(BaseCommand):
         adguard_sync_thread.start()
         version_update_thread = threading.Thread(target=version_update_loop, daemon=True)
         version_update_thread.start()
+        speedtest_health_thread = threading.Thread(
+            target=speedtest_health_loop,
+            daemon=True,
+        )
+        speedtest_health_thread.start()
 
         if ip_range_override or interval_override:
             scan_ranges, interval = load_scan_schedule(
@@ -245,6 +279,9 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS("LanGuard update checks follow the saved version interval")
+        )
+        self.stdout.write(
+            self.style.SUCCESS("Speedtest health checks run every 5 minutes")
         )
 
         while not stop_event.is_set():

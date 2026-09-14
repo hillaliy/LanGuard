@@ -106,6 +106,7 @@ def build_diagnostics_report():
                 "adguard", config.adguard_last_error
             ),
             "speedtest_tracker_enabled": config.speedtest_tracker_enabled,
+            "notify_speedtest_changes": config.notify_speedtest_changes,
             "speedtest_tracker_configured": bool(
                 config.speedtest_tracker_url
                 and config.speedtest_tracker_api_token
