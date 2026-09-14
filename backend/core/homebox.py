@@ -1,3 +1,4 @@
+import re
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -6,6 +7,13 @@ import requests
 
 class HomeBoxError(ValueError):
     pass
+
+
+def normalize_search_query(value):
+    query = str(value or "").strip()
+    if re.fullmatch(r"#?\d+(?:-\d+)*", query):
+        return query if query.startswith("#") else f"#{query}"
+    return query
 
 
 def normalize_url(value):
@@ -47,7 +55,10 @@ class HomeBoxClient:
             raise HomeBoxError("Unable to read a response from HomeBox.") from exc
 
     def search(self, query="", page=1):
-        payload = self.get("entities", {"q": query, "page": page, "pageSize": 25})
+        payload = self.get(
+            "entities",
+            {"q": normalize_search_query(query), "page": page, "pageSize": 25},
+        )
         items = payload.get("items")
         if not isinstance(items, list):
             raise HomeBoxError("HomeBox returned an unexpected item list.")

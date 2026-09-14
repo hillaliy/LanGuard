@@ -2624,7 +2624,7 @@ function HomeBoxItemPicker({ value, onChange }) {
     ? [{ value, label: value }, ...items] : items;
   return (
     <Stack gap="xs">
-      <Select label="HomeBox item" placeholder="Search HomeBox" searchable clearable
+      <Select label="HomeBox item" placeholder="Search by name, description, or asset ID" searchable clearable
         data={options} value={value || null} onChange={onChange}
         searchValue={query} onSearchChange={(next) => { setQuery(next); setPage(1); }}
         filter={({ options: available }) => available}
