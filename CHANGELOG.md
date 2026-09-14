@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added tablet device sorting and paginated device-list navigation with configurable 25, 50, 75, or 100 device page sizes.
 - Added visitor device classification with dedicated filtering, dashboard counts, bulk editing, and quiet-by-default presence notifications.
 - Added an optional notification rule for new LanGuard releases with one alert per version.
 - Fixed the Today device filter failing when the backend stores naive UTC timestamps.
