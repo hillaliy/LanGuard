@@ -52,7 +52,9 @@ import {
   IconArrowsSort,
   IconBell,
   IconBlind,
+  IconBrandDiscord,
   IconBrandGithub,
+  IconBrandTelegram,
   IconBulb,
   IconBulbFilled,
   IconCast,
@@ -675,7 +677,7 @@ function homeMapDeviceMatchesFilter(device, filter) {
 }
 
 function buildHomeMapRooms(devices, filter = 'all') {
-  return buildRoomSections(devices).map((section) => ({
+  return buildRoomSections(devices.filter((device) => !device.is_visitor)).map((section) => ({
     ...section,
     visibleDevices: section.devices.filter((device) => homeMapDeviceMatchesFilter(device, filter)),
     attentionCount: homeMapAttentionCount(section.devices),
@@ -4710,7 +4712,10 @@ function SettingsPage({ onSaved }) {
         <Stack className="settings-subsection" gap="sm">
           <Group justify="space-between">
             <Group gap="sm">
-              <Text fw={700}>Discord</Text>
+              <Group gap={6}>
+                <IconBrandDiscord size={18} />
+                <Text fw={700}>Discord</Text>
+              </Group>
               <Switch
                 label="Enabled"
                 checked={discordEnabled}
@@ -4760,7 +4765,10 @@ function SettingsPage({ onSaved }) {
         <Stack className="settings-subsection" gap="sm">
           <Group justify="space-between">
             <Group gap="sm">
-              <Text fw={700}>Telegram</Text>
+              <Group gap={6}>
+                <IconBrandTelegram size={18} />
+                <Text fw={700}>Telegram</Text>
+              </Group>
               <Switch
                 label="Enabled"
                 checked={telegramEnabled}
