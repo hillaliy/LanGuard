@@ -403,6 +403,32 @@ Event deliveries use this structure:
 }
 ```
 
+The test action sends a smaller payload with `kind: "test"`, a `message`, and
+delivery metadata. It does not include the `event` or `device` objects because it
+only verifies that the receiving endpoint is reachable.
+
+### Reading webhook data in Home Assistant
+
+LanGuard sends JSON with `Content-Type: application/json`, so Home Assistant
+exposes the payload as `trigger.json`, not `trigger.data`. For example:
+
+```yaml
+message: "{{ trigger.json.message }}"
+```
+
+For a real network event, fields such as the event type and device name are
+available as `trigger.json.event.type` and `trigger.json.device.name`. The test
+action has `trigger.json.kind == "test"` and its message is available as
+`trigger.json.message`.
+
+### Reading webhook data with adnanh/webhook
+
+`adnanh/webhook` receives and parses the JSON body but does not automatically
+print it in the process log or pass it to the configured command. Add an entry
+with `source: "entire-payload"` to `pass-arguments-to-command` to pass the parsed
+JSON object, or use `source: "raw-request-body"` when the command needs the exact
+request body.
+
 The webhook follows the same event rules and quiet hours as Discord and
 Telegram. You can independently enable new-device, online, offline, and port
 change events. A non-success HTTP response is recorded in notification history,
