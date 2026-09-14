@@ -2,6 +2,21 @@
   background: color-mix(in srgb, var(--muted-panel-bg) 72%, transparent);
 }
 
+.device-mobile-sort-toolbar {
+  display: none;
+  background: color-mix(in srgb, var(--muted-panel-bg) 72%, transparent);
+}
+
+.device-pagination {
+  background: color-mix(in srgb, var(--muted-panel-bg) 72%, transparent);
+  border-top: 1px solid var(--border-color);
+}
+
+.device-page-number {
+  align-self: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .devices-content-panel {
   container-type: inline-size;
 }
@@ -134,6 +149,10 @@
 
   .devices-content-panel .device-mobile-list {
     display: flex;
+  }
+
+  .devices-content-panel .device-mobile-sort-toolbar {
+    display: block;
   }
 
   .devices-content-panel .devices-panel-header {

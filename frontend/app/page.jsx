@@ -49,6 +49,7 @@ import {
   IconAlertCircle,
   IconAirConditioning,
   IconArrowLeft,
+  IconArrowRight,
   IconArrowsSort,
   IconBell,
   IconBlind,
@@ -6168,6 +6169,8 @@ function Dashboard({
   const [inventoryView, setInventoryView] = useState('table');
   const [mainView, setMainView] = useState(initialView);
   const [deviceOrdering, setDeviceOrdering] = useState('');
+  const [deviceLimit, setDeviceLimit] = useState(100);
+  const [deviceOffset, setDeviceOffset] = useState(0);
   const [eventType, setEventType] = useState('');
   const [devicePageId, setDevicePageId] = useState(
     initialDeviceId ? String(initialDeviceId) : ''
@@ -6208,9 +6211,12 @@ function Dashboard({
   );
   const someSelectableDevicesSelected = selectedDeviceIds.length > 0;
   const roomOptions = useMemo(() => buildRoomOptions(mapDevices), [mapDevices]);
-  const deviceLimit = 100;
-  const deviceOffset = 0;
-  const deviceEnd = Math.min(devices.length, devicePagination.count || devices.length);
+  const deviceCount = devicePagination.count || 0;
+  const deviceStart = deviceCount ? devicePagination.offset + 1 : 0;
+  const deviceEnd = Math.min(devicePagination.offset + devices.length, deviceCount);
+  const currentDevicePage = Math.floor(devicePagination.offset / deviceLimit) + 1;
+  const devicePageCount = Math.max(1, Math.ceil(deviceCount / deviceLimit));
+  const deviceRangeLabel = `Showing ${deviceStart}-${deviceEnd} of ${deviceCount} devices`;
   const selectedDeviceStatus =
     deviceStatusOptions.find((option) => option.value === deviceStatus) || null;
   const networkRangeOptions = useMemo(
@@ -6396,7 +6402,28 @@ function Dashboard({
       deviceOffset,
       deviceOrdering,
     };
-  }, [search, deviceStatus, networkRangeFilter, firstSeenPeriod, homeBoxLinkStatus, deviceOrdering]);
+  }, [
+    search,
+    deviceStatus,
+    networkRangeFilter,
+    firstSeenPeriod,
+    homeBoxLinkStatus,
+    deviceOrdering,
+    deviceLimit,
+    deviceOffset,
+  ]);
+
+  useEffect(() => {
+    setDeviceOffset(0);
+  }, [
+    search,
+    deviceStatus,
+    networkRangeFilter,
+    firstSeenPeriod,
+    homeBoxLinkStatus,
+    deviceOrdering,
+    deviceLimit,
+  ]);
 
   useEffect(() => {
     if (homeBoxStatusKnown && !showHomeBoxFilter) {
@@ -6822,7 +6849,16 @@ function Dashboard({
   useEffect(() => {
     const timer = window.setTimeout(() => loadData({ quiet: true }), 250);
     return () => window.clearTimeout(timer);
-  }, [search, deviceStatus, networkRangeFilter, firstSeenPeriod, homeBoxLinkStatus, deviceOrdering]);
+  }, [
+    search,
+    deviceStatus,
+    networkRangeFilter,
+    firstSeenPeriod,
+    homeBoxLinkStatus,
+    deviceOrdering,
+    deviceLimit,
+    deviceOffset,
+  ]);
 
   async function runScan() {
     setRefreshing(true);
@@ -7343,7 +7379,7 @@ function Dashboard({
                         ) : (
                           <>
                             <Text size="sm" c="dimmed">
-                              Showing {deviceEnd} of {devicePagination.count || deviceEnd} devices
+                              {deviceRangeLabel}
                             </Text>
                             {canEditDevices && (
                               <Button
@@ -7452,6 +7488,51 @@ function Dashboard({
                       </UnstyledButton>
                     ))}
                   </Stack>
+                  <Box className="device-mobile-sort-toolbar" p="md">
+                    <Group justify="space-between" align="center" wrap="wrap" gap="sm">
+                      <Group className="device-mobile-sort-buttons" gap="xs" wrap="wrap">
+                        <Button
+                          size="xs"
+                          variant={deviceOrdering === 'name' ? 'light' : 'subtle'}
+                          onClick={() => setDeviceOrdering(sortableOrdering('name', deviceOrdering))}
+                        >
+                          Name
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant={deviceOrdering === 'ip' ? 'light' : 'subtle'}
+                          onClick={() => setDeviceOrdering(sortableOrdering('ip', deviceOrdering))}
+                        >
+                          IP
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant={deviceOrdering === '-lastseen' ? 'light' : 'subtle'}
+                          onClick={() => setDeviceOrdering(sortableOrdering('lastseen', deviceOrdering))}
+                        >
+                          Last seen
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant={
+                            deviceOrdering === 'firstseen' || deviceOrdering === '-firstseen'
+                              ? 'light'
+                              : 'subtle'
+                          }
+                          onClick={() =>
+                            setDeviceOrdering(
+                              sortableOrderingDescendingFirst('firstseen', deviceOrdering)
+                            )
+                          }
+                        >
+                          First seen
+                        </Button>
+                      </Group>
+                      <Text size="sm" c="dimmed">
+                        {deviceRangeLabel}
+                      </Text>
+                    </Group>
+                  </Box>
                   <Stack className="device-mobile-list" gap={0}>
                     {filteredDevices.map((device) => (
                       <UnstyledButton
@@ -7534,6 +7615,44 @@ function Dashboard({
                       </UnstyledButton>
                     ))}
                   </Stack>
+                  <Box className="device-pagination" p="md">
+                    <Group justify="space-between" align="flex-end" wrap="wrap" gap="sm">
+                      <Select
+                        className="device-page-size"
+                        w={120}
+                        label="Per page"
+                        allowDeselect={false}
+                        data={['25', '50', '75', '100']}
+                        value={String(deviceLimit)}
+                        onChange={(value) => setDeviceLimit(Number(value || 100))}
+                      />
+                      <Text size="sm" fw={600} className="device-page-number">
+                        Page {currentDevicePage} of {devicePageCount}
+                      </Text>
+                      <Group gap="xs" wrap="nowrap">
+                        <Button
+                          size="xs"
+                          variant="default"
+                          leftSection={<IconArrowLeft size={16} />}
+                          disabled={
+                            devicePagination.previous_offset === null || loading || refreshing
+                          }
+                          onClick={() => setDeviceOffset(devicePagination.previous_offset)}
+                        >
+                          Previous
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="default"
+                          rightSection={<IconArrowRight size={16} />}
+                          disabled={devicePagination.next_offset === null || loading || refreshing}
+                          onClick={() => setDeviceOffset(devicePagination.next_offset)}
+                        >
+                          Next
+                        </Button>
+                      </Group>
+                    </Group>
+                  </Box>
                 </>
               )}
             </Stack>
