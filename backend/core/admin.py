@@ -4,6 +4,7 @@ from .models import (
     AppSettings,
     Device,
     DeviceDNSActivity,
+    DetailedPortScan,
     DevicePort,
     NetworkEvent,
     NotificationDelivery,
@@ -96,6 +97,22 @@ class ScanRunAdmin(admin.ModelAdmin):
     )
     list_filter = ("status",)
     readonly_fields = ("started_at", "finished_at")
+
+
+@admin.register(DetailedPortScan)
+class DetailedPortScanAdmin(admin.ModelAdmin):
+    list_display = (
+        "device",
+        "status",
+        "scanned_ports",
+        "total_ports",
+        "requested_by",
+        "created_at",
+        "finished_at",
+    )
+    list_filter = ("status",)
+    search_fields = ("device__name", "device__ip", "device__mac", "requested_by__username")
+    readonly_fields = ("created_at", "started_at", "finished_at")
 
 
 @admin.register(NetworkEvent)

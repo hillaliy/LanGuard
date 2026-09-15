@@ -16,6 +16,10 @@ from core.speedtest_tracker import (
     HEALTH_CHECK_INTERVAL_SECONDS,
     check_speedtest_health_change,
 )
+from core.detailed_port_scans import (
+    process_next_detailed_port_scan,
+    recover_interrupted_detailed_port_scans,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -224,6 +228,32 @@ class Command(BaseCommand):
                 if stop_event.wait(HEALTH_CHECK_INTERVAL_SECONDS):
                     break
 
+        def detailed_port_scan_loop():
+            close_old_connections()
+            try:
+                recovered = recover_interrupted_detailed_port_scans()
+                if recovered:
+                    LOGGER.warning("Marked %s interrupted detailed port scans as failed", recovered)
+            finally:
+                close_old_connections()
+            while not stop_event.is_set():
+                close_old_connections()
+                try:
+                    job = process_next_detailed_port_scan()
+                    if job:
+                        self.stdout.write(
+                            self.style.SUCCESS(
+                                f"Detailed port scan {job.id} finished with status {job.status}"
+                            )
+                        )
+                except Exception:
+                    LOGGER.exception("Detailed port scan worker failed")
+                    self.stderr.write(self.style.ERROR("Detailed port scan worker failed"))
+                finally:
+                    close_old_connections()
+                if stop_event.wait(1):
+                    break
+
         def stop_scheduler(signum, frame):
             self.stdout.write("Stopping scheduler...")
             stop_event.set()
@@ -248,6 +278,11 @@ class Command(BaseCommand):
             daemon=True,
         )
         speedtest_health_thread.start()
+        detailed_port_scan_thread = threading.Thread(
+            target=detailed_port_scan_loop,
+            daemon=True,
+        )
+        detailed_port_scan_thread.start()
 
         if ip_range_override or interval_override:
             scan_ranges, interval = load_scan_schedule(
@@ -282,6 +317,9 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS("Speedtest health checks run every 5 minutes")
+        )
+        self.stdout.write(
+            self.style.SUCCESS("Detailed device port scans run through the scheduler queue")
         )
 
         while not stop_event.is_set():

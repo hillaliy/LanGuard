@@ -15,6 +15,8 @@ from .views import (
     device_availability,
     bulk_update_devices,
     device_web_interface,
+    detailed_port_scan,
+    cancel_detailed_port_scan,
     wake_device,
     events,
     scan_now,
@@ -72,6 +74,12 @@ urlpatterns = [
     path("devices/bulk-update/", bulk_update_devices, name="bulk-update-devices"),
     path("device/web-interface/", device_web_interface, name="device-web-interface"),
     path("device/wake/", wake_device, name="wake-device"),
+    path("device/port-scan/", detailed_port_scan, name="detailed-port-scan"),
+    path(
+        "device/port-scan/cancel/",
+        cancel_detailed_port_scan,
+        name="cancel-detailed-port-scan",
+    ),
     path("device/dns-activity/", device_dns_activity, name="device-dns-activity"),
     path("dns-activity/", dns_activity, name="dns-activity"),
     path(

@@ -1417,7 +1417,7 @@ def create_event(event_type, device, message, scan_run=None, device_port=None, m
     return event
 
 
-def sync_device_ports(device, open_ports, scan_run=None):
+def sync_device_ports(device, open_ports, scan_run=None, scanned_ports=None):
     now = timezone.now()
     seen_ports = set()
     ports_opened = 0
@@ -1461,7 +1461,11 @@ def sync_device_ports(device, open_ports, scan_run=None):
                 },
             )
 
-    for device_port in device.ports.filter(open=True):
+    open_port_queryset = device.ports.filter(open=True)
+    if scanned_ports is not None:
+        open_port_queryset = open_port_queryset.filter(port__in=scanned_ports)
+
+    for device_port in open_port_queryset:
         key = (device_port.port, device_port.protocol)
         if key not in seen_ports:
             device_port.open = False

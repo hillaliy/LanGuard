@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed HomeBox device-link searches so asset IDs are matched reliably.
+- Added scheduled Speedtest health monitoring with notifications when configured download, upload, or ping thresholds are crossed.
+- Added branded icons to integration settings and migration tools, with source attribution for imported assets.
+- Added attention reasons to devices listed under Needs Attention.
+- Added regular devices that have remained offline for more than seven days to Needs Attention, while excluding visitor devices.
+- Added asynchronous per-device TCP port scans with custom ranges, progress reporting, cancellation, timeouts, and permission checks.
 
 ## 1.17.0 - 2026-09-14
 

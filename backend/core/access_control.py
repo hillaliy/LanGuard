@@ -55,3 +55,11 @@ class CanRunScans(permissions.BasePermission):
 
     def has_permission(self, request, view):
         return user_capabilities(request.user)["can_run_scans"]
+
+
+class CanEditDevicesOrRunScans(permissions.BasePermission):
+    message = "You do not have permission to scan devices."
+
+    def has_permission(self, request, view):
+        capabilities = user_capabilities(request.user)
+        return capabilities["can_edit_devices"] or capabilities["can_run_scans"]

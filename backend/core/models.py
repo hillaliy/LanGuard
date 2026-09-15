@@ -242,6 +242,59 @@ class ScanRun(models.Model):
         return f"Scan {self.ip_range} - {self.status}"
 
 
+class DetailedPortScan(models.Model):
+    class Status(models.TextChoices):
+        QUEUED = "queued", "Queued"
+        RUNNING = "running", "Running"
+        SUCCESS = "success", "Success"
+        FAILED = "failed", "Failed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    device = models.ForeignKey(
+        Device,
+        related_name="detailed_port_scans",
+        on_delete=models.CASCADE,
+    )
+    requested_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="detailed_port_scans",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+    )
+    ports = models.JSONField(default=list)
+    open_ports = models.JSONField(default=list, blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.QUEUED,
+    )
+    total_ports = models.PositiveIntegerField(default=0)
+    scanned_ports = models.PositiveIntegerField(default=0)
+    cancel_requested = models.BooleanField(default=False)
+    created_at = models.DateTimeField(default=timezone.now)
+    started_at = models.DateTimeField(blank=True, null=True)
+    finished_at = models.DateTimeField(blank=True, null=True)
+    error = models.CharField(max_length=255, blank=True, default="")
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"], name="core_detail_scan_queue_idx"),
+            models.Index(fields=["device", "-created_at"], name="core_detail_scan_device_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device"],
+                condition=models.Q(status__in=["queued", "running"]),
+                name="one_active_detailed_scan_per_device",
+            ),
+        ]
+
+    def __str__(self):
+        return f"Detailed port scan for {self.device.name} - {self.status}"
+
+
 class NetworkEvent(models.Model):
     class EventType(models.TextChoices):
         NEW_DEVICE = "new_device", "New device"

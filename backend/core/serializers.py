@@ -14,6 +14,7 @@ from .models import (
     AdGuardUnmatchedClient,
     AppSettings,
     Device,
+    DetailedPortScan,
     DeviceDNSActivity,
     DevicePort,
     NetworkEvent,
@@ -573,6 +574,46 @@ class ScanRunSerializer(serializers.ModelSerializer):
     class Meta:
         model = ScanRun
         fields = "__all__"
+
+
+class DetailedPortScanSerializer(serializers.ModelSerializer):
+    created_at = UTCDateTimeField(read_only=True)
+    started_at = UTCDateTimeField(read_only=True)
+    finished_at = UTCDateTimeField(read_only=True)
+    device_name = serializers.CharField(source="device.name", read_only=True)
+    device_ip = serializers.CharField(source="device.ip", read_only=True)
+    requested_by = serializers.CharField(
+        source="requested_by.username",
+        read_only=True,
+        allow_null=True,
+    )
+    progress_percent = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.IntegerField(min_value=0, max_value=100))
+    def get_progress_percent(self, obj):
+        if not obj.total_ports:
+            return 0
+        return min(100, round((obj.scanned_ports / obj.total_ports) * 100))
+
+    class Meta:
+        model = DetailedPortScan
+        fields = (
+            "id",
+            "device",
+            "device_name",
+            "device_ip",
+            "requested_by",
+            "open_ports",
+            "status",
+            "total_ports",
+            "scanned_ports",
+            "progress_percent",
+            "cancel_requested",
+            "created_at",
+            "started_at",
+            "finished_at",
+            "error",
+        )
 
 
 class DeviceBulkUpdateSerializer(serializers.Serializer):
