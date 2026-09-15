@@ -2313,7 +2313,13 @@ function DashboardEventRow({ event, timeZone, device, onSelectDevice }) {
 
 function DashboardAttentionRow({ device, onSelectDevice }) {
   const risk = deviceRisk(device);
-  const reason = !device.known ? 'Unknown device' : risk.label;
+  const attentionReasons = Array.isArray(device.attention_reasons)
+    ? device.attention_reasons.filter(Boolean)
+    : [];
+  const reason = attentionReasons.join(', ') || (!device.known ? 'Unknown device' : `${risk.label} risk`);
+  const offlineOverWeek = attentionReasons.includes('Offline for over 7 days');
+  const badgeLabel = offlineOverWeek && risk.level === 'low' ? 'Offline' : risk.label;
+  const badgeColor = offlineOverWeek && risk.level === 'low' ? 'orange' : risk.color;
 
   return (
     <UnstyledButton
@@ -2325,12 +2331,14 @@ function DashboardAttentionRow({ device, onSelectDevice }) {
       </span>
       <Box className="dashboard-insight-row-body">
         <Text fw={800} className="truncate-cell">{displayDeviceName(device)}</Text>
-        <Text size="sm" c="dimmed" className="truncate-cell">
-          {[reason, device.ip].filter(Boolean).join(' - ')}
-        </Text>
+        <Tooltip label={attentionReasons.join('\n')} multiline withArrow disabled={!attentionReasons.length}>
+          <Text size="sm" c="dimmed" className="truncate-cell">
+            {[reason, device.ip].filter(Boolean).join(' - ')}
+          </Text>
+        </Tooltip>
       </Box>
-      <Badge className="dashboard-insight-risk" color={risk.color} variant="light">
-        {risk.label}
+      <Badge className="dashboard-insight-risk" color={badgeColor} variant="light">
+        {badgeLabel}
       </Badge>
     </UnstyledButton>
   );

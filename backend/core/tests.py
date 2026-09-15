@@ -4531,6 +4531,67 @@ class ScanApiTests(TestCase):
         self.assertEqual(device["risk_level"], "low")
         self.assertEqual(device["risk_score"], 0)
         self.assertEqual(device["risk_reasons"], [])
+        self.assertEqual(device["attention_reasons"], [])
+
+    def test_device_endpoint_flags_regular_device_offline_for_over_week(self):
+        self.device.known = True
+        self.device.vendor = "Apple"
+        self.device.online = False
+        self.device.status = Device.Status.OFFLINE
+        self.device.lastseen = timezone.now() - timedelta(days=8)
+        self.device.save(
+            update_fields=["known", "vendor", "online", "status", "lastseen"]
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertEqual(device["risk_level"], "low")
+        self.assertEqual(device["attention_reasons"], ["Offline for over 7 days"])
+        self.assertTrue(device["needs_attention"])
+
+    def test_device_endpoint_does_not_flag_recently_offline_device(self):
+        self.device.known = True
+        self.device.vendor = "Apple"
+        self.device.online = False
+        self.device.status = Device.Status.OFFLINE
+        self.device.lastseen = timezone.now() - timedelta(days=6)
+        self.device.save(
+            update_fields=["known", "vendor", "online", "status", "lastseen"]
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertEqual(device["attention_reasons"], [])
+        self.assertFalse(device["needs_attention"])
+
+    def test_device_endpoint_does_not_flag_offline_visitor_after_week(self):
+        self.device.known = True
+        self.device.is_visitor = True
+        self.device.vendor = "Apple"
+        self.device.online = False
+        self.device.status = Device.Status.OFFLINE
+        self.device.lastseen = timezone.now() - timedelta(days=8)
+        self.device.save(
+            update_fields=[
+                "known",
+                "is_visitor",
+                "vendor",
+                "online",
+                "status",
+                "lastseen",
+            ]
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertEqual(device["attention_reasons"], [])
+        self.assertFalse(device["needs_attention"])
 
     def test_device_endpoint_flags_unknown_device_with_risky_ports(self):
         self.device.known = False
@@ -4594,6 +4655,9 @@ class ScanApiTests(TestCase):
         self.assertEqual(device["risk_level"], "medium")
         self.assertTrue(
             any("Risky open ports" in reason for reason in device["risk_reasons"])
+        )
+        self.assertTrue(
+            any("Risky open ports" in reason for reason in device["attention_reasons"])
         )
 
     def test_known_device_can_acknowledge_current_risk_and_save_comments(self):
@@ -4704,6 +4768,29 @@ class ScanApiTests(TestCase):
         DevicePort.objects.create(device=self.device, port=5900, protocol="tcp", open=True)
 
         device = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
+        self.assertFalse(device["attention_acknowledged"])
+        self.assertTrue(device["needs_attention"])
+
+    def test_long_offline_period_invalidates_attention_acknowledgement(self):
+        self.device.known = True
+        self.device.vendor = "Linux"
+        self.device.save(update_fields=["known", "vendor"])
+        DevicePort.objects.create(device=self.device, port=3389, protocol="tcp", open=True)
+        self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"acknowledge_attention": True},
+            format="json",
+        )
+
+        self.device.online = False
+        self.device.status = Device.Status.OFFLINE
+        self.device.lastseen = timezone.now() - timedelta(days=8)
+        self.device.save(update_fields=["online", "status", "lastseen"])
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+        self.assertIn("Offline for over 7 days", device["attention_reasons"])
         self.assertFalse(device["attention_acknowledged"])
         self.assertTrue(device["needs_attention"])
 
