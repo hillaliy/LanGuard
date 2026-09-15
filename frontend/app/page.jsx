@@ -24,6 +24,7 @@ import {
   Paper,
   PasswordInput,
   Popover,
+  Progress,
   Select,
   SegmentedControl,
   SimpleGrid,
@@ -87,6 +88,7 @@ import {
   IconPower,
   IconPrinter,
   IconPropeller,
+  IconRadar,
   IconQuestionMark,
   IconRefresh,
   IconArrowUpRight,
@@ -95,6 +97,7 @@ import {
   IconSearch,
   IconSend,
   IconServer,
+  IconPlayerStop,
   IconDeviceFloppy,
   IconSettings,
   IconShieldCheck,
@@ -2691,10 +2694,16 @@ function DeviceDetailsPage({
   const [loadingMoreDnsActivity, setLoadingMoreDnsActivity] = useState(false);
   const [saving, setSaving] = useState(false);
   const [waking, setWaking] = useState(false);
+  const [portScan, setPortScan] = useState(null);
+  const [portScanSpec, setPortScanSpec] = useState('1-1024');
+  const [portScanLoading, setPortScanLoading] = useState(false);
+  const [portScanError, setPortScanError] = useState('');
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState('');
   const [deleteConfirmOpened, deleteConfirm] = useDisclosure(false);
   const [archiveConfirmOpened, archiveConfirm] = useDisclosure(false);
+  const [portScanOpened, portScanModal] = useDisclosure(false);
+  const completedPortScanRef = useRef(null);
 
   function populateForm(nextDevice) {
     setIcon(nextDevice?.icon || '');
@@ -2810,6 +2819,56 @@ function DeviceDetailsPage({
       active = false;
     };
   }, [deviceId]);
+
+  useEffect(() => {
+    if (!portScanOpened) {
+      return undefined;
+    }
+    let active = true;
+
+    async function refreshPortScan() {
+      try {
+        const payload = await apiRequest('device/port-scan/', {
+          params: { device: deviceId },
+        });
+        if (!active) {
+          return;
+        }
+        const nextScan = payload.data || null;
+        setPortScan(nextScan);
+        setPortScanError('');
+        if (
+          nextScan?.status === 'success'
+          && completedPortScanRef.current !== nextScan.id
+        ) {
+          completedPortScanRef.current = nextScan.id;
+          const updatedDevice = await loadDevice({ quiet: true });
+          if (updatedDevice) {
+            await onSaved(updatedDevice);
+          }
+        }
+      } catch (err) {
+        if (active) {
+          setPortScanError(err.message);
+        }
+      }
+    }
+
+    setPortScanLoading(true);
+    refreshPortScan().finally(() => {
+      if (active) {
+        setPortScanLoading(false);
+      }
+    });
+    const scanIsActive = portScan?.status === 'queued' || portScan?.status === 'running';
+    const timer = scanIsActive ? window.setInterval(refreshPortScan, 1000) : null;
+    return () => {
+      active = false;
+      if (timer) {
+        window.clearInterval(timer);
+      }
+    };
+  }, [deviceId, portScan?.id, portScan?.status, portScanOpened]);
 
   useEffect(() => {
     setActiveDeviceTab('overview');
@@ -3007,6 +3066,45 @@ function DeviceDetailsPage({
     }
   }
 
+  async function startDetailedPortScan() {
+    setPortScanLoading(true);
+    setPortScanError('');
+    try {
+      const payload = await apiRequest('device/port-scan/', {
+        method: 'POST',
+        body: { device: device.id, ports: portScanSpec },
+      });
+      setPortScan(payload.data || null);
+      showServerNotification(payload);
+    } catch (err) {
+      setPortScanError(err.message);
+      showErrorNotification(err);
+    } finally {
+      setPortScanLoading(false);
+    }
+  }
+
+  async function cancelDetailedPortScan() {
+    if (!portScan) {
+      return;
+    }
+    setPortScanLoading(true);
+    setPortScanError('');
+    try {
+      const payload = await apiRequest('device/port-scan/cancel/', {
+        method: 'POST',
+        body: { id: portScan.id },
+      });
+      setPortScan(payload.data || portScan);
+      showServerNotification(payload);
+    } catch (err) {
+      setPortScanError(err.message);
+      showErrorNotification(err);
+    } finally {
+      setPortScanLoading(false);
+    }
+  }
+
   function cancelEditing() {
     populateForm(device);
     setError('');
@@ -3094,6 +3192,15 @@ function DeviceDetailsPage({
               </Group>
             ) : (
               <Group gap="xs">
+              {(canEditDevices || canRunScans) && !device.archived && (
+                <Button
+                  variant="light"
+                  leftSection={<IconRadar size={18} />}
+                  onClick={portScanModal.open}
+                >
+                  Detailed port scan
+                </Button>
+              )}
               {canRunScans && !device.archived && (
                 <Button
                   variant="light"
@@ -3642,6 +3749,102 @@ function DeviceDetailsPage({
             <Button variant="default" onClick={archiveConfirm.close} disabled={saving}>Cancel</Button>
             <Button leftSection={device?.archived ? <IconArchiveOff size={18} /> : <IconArchive size={18} />}
               onClick={changeArchiveState} loading={saving}>{device?.archived ? 'Restore' : 'Archive'}</Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal
+        opened={portScanOpened}
+        onClose={portScanModal.close}
+        title="Detailed port scan"
+        centered
+        size="lg"
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Scan up to 1,024 TCP ports on {device?.name}. Use commas to combine
+            individual ports and ranges.
+          </Text>
+          <TextInput
+            label="TCP ports"
+            description="Examples: 1-1024 or 22, 80, 443, 8000-8100"
+            value={portScanSpec}
+            onChange={(event) => setPortScanSpec(event.currentTarget.value)}
+            disabled={portScan?.status === 'queued' || portScan?.status === 'running'}
+            error={portScanError || null}
+          />
+
+          {portScan && (
+            <Paper withBorder p="md" radius="sm">
+              <Stack gap="sm">
+                <Group justify="space-between">
+                  <Group gap="xs">
+                    <Text fw={600}>Scan status</Text>
+                    <Badge
+                      color={
+                        portScan.status === 'success' ? 'green'
+                          : portScan.status === 'failed' ? 'red'
+                            : portScan.status === 'cancelled' ? 'gray'
+                              : 'blue'
+                      }
+                      variant="light"
+                    >
+                      {formatRoleLabel(portScan.status)}
+                    </Badge>
+                  </Group>
+                  <Text size="sm" c="dimmed">
+                    {portScan.scanned_ports} / {portScan.total_ports} ports
+                  </Text>
+                </Group>
+                <Progress
+                  value={portScan.progress_percent || 0}
+                  animated={portScan.status === 'running'}
+                />
+                <Box>
+                  <Text size="xs" c="dimmed">Open ports found</Text>
+                  <Group gap={6} mt={6}>
+                    {portScan.open_ports?.length ? (
+                      portScan.open_ports.map((port) => (
+                        <Badge key={`${port.protocol}-${port.port}`} variant="light">
+                          {port.protocol}/{port.port}{port.service ? ` ${port.service}` : ''}
+                        </Badge>
+                      ))
+                    ) : <Text size="sm">None yet</Text>}
+                  </Group>
+                </Box>
+                {portScan.error && (
+                  <Alert color="red" icon={<IconAlertCircle size={18} />}>
+                    {portScan.error}
+                  </Alert>
+                )}
+                {portScan.cancel_requested && portScan.status === 'running' && (
+                  <Text size="sm" c="dimmed">Stopping after the current port...</Text>
+                )}
+              </Stack>
+            </Paper>
+          )}
+
+          <Group justify="flex-end">
+            {(portScan?.status === 'queued' || portScan?.status === 'running') ? (
+              <Button
+                color="red"
+                variant="light"
+                leftSection={<IconPlayerStop size={18} />}
+                onClick={cancelDetailedPortScan}
+                loading={portScanLoading}
+                disabled={portScan.cancel_requested}
+              >
+                Cancel scan
+              </Button>
+            ) : (
+              <Button
+                leftSection={<IconRadar size={18} />}
+                onClick={startDetailedPortScan}
+                loading={portScanLoading}
+                disabled={!portScanSpec.trim()}
+              >
+                Start scan
+              </Button>
+            )}
           </Group>
         </Stack>
       </Modal>

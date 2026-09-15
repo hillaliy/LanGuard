@@ -12,6 +12,7 @@ from .models import (
     AppSettings,
     Device,
     DeviceDNSActivity,
+    DetailedPortScan,
     NetworkEvent,
     NotificationDelivery,
     ScanRun,
@@ -59,6 +60,10 @@ def build_diagnostics_report():
     scan_counts = {
         value: ScanRun.objects.filter(status=value).count()
         for value in ScanRun.Status.values
+    }
+    detailed_scan_counts = {
+        value: DetailedPortScan.objects.filter(status=value).count()
+        for value in DetailedPortScan.Status.values
     }
 
     return {
@@ -117,6 +122,7 @@ def build_diagnostics_report():
             "devices_online": Device.objects.filter(online=True).count(),
             "events": NetworkEvent.objects.count(),
             "scan_runs": scan_counts,
+            "detailed_port_scans": detailed_scan_counts,
             "notification_deliveries": delivery_counts,
             "dns_activity": DeviceDNSActivity.objects.count(),
             "dns_unmatched_clients": AdGuardUnmatchedClient.objects.count(),

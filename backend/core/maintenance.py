@@ -5,6 +5,7 @@ from django.utils import timezone
 from .datetime_utils import utc_isoformat
 from .models import (
     AdGuardUnmatchedClient,
+    DetailedPortScan,
     DeviceDNSActivity,
     NetworkEvent,
     NotificationDelivery,
@@ -55,6 +56,16 @@ def cleanup_activity(target, older_than_days=90, clean_all=False):
             queryset = queryset.filter(started_at__lt=cutoff)
         _, scan_run_details = queryset.delete()
         deleted["scan_runs"] = scan_run_details.get("core.ScanRun", 0)
+        detailed_queryset = DetailedPortScan.objects.exclude(
+            status__in=[
+                DetailedPortScan.Status.QUEUED,
+                DetailedPortScan.Status.RUNNING,
+            ]
+        )
+        if cutoff is not None:
+            detailed_queryset = detailed_queryset.filter(created_at__lt=cutoff)
+        _, detailed_scan_details = detailed_queryset.delete()
+        deleted["scan_runs"] += detailed_scan_details.get("core.DetailedPortScan", 0)
     elif target == "dns_activity":
         activity_queryset = DeviceDNSActivity.objects.all()
         unmatched_queryset = AdGuardUnmatchedClient.objects.all()

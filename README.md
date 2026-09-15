@@ -204,11 +204,14 @@ The scheduler container runs LanGuard's recurring background work:
 | AdGuard Home sync | Every 5 minutes when enabled | AdGuard Home settings |
 | LanGuard update check | At startup, then every 6 hours when enabled | Version check interval and new-version notification rule in Settings |
 | Speedtest health check | At startup, then every 5 minutes when enabled | Speedtest integration, thresholds, and health-change notification rule |
+| Detailed device port scan | On demand, one scan at a time | Device page and scan or device-edit permission |
 
 The scheduler reloads the network ranges and scan interval before each cycle.
 Changes apply after the current wait or scan completes and do not require a
 container restart. Activity retention, AdGuard Home settings, and the version
 check interval are also read from the database during their scheduled loops.
+Detailed device port scans are queued in the database and processed serially by
+the scheduler so large custom ranges do not block API requests or overlap.
 
 LanGuard can scan up to 16 named IPv4 CIDR ranges with up to 1,024 addresses per
 range in one scheduled run. Add each VLAN or subnet under
