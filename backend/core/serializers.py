@@ -1,8 +1,10 @@
 import hashlib
 import json
+from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -337,6 +339,29 @@ def device_risk(device):
     }
 
 
+OFFLINE_ATTENTION_AFTER = timedelta(days=7)
+OFFLINE_ATTENTION_REASON = "Offline for over 7 days"
+
+
+def device_is_offline_over_week(device, now=None):
+    return bool(
+        not device.archived
+        and not device.is_visitor
+        and device.status == Device.Status.OFFLINE
+        and device.lastseen < (now or timezone.now()) - OFFLINE_ATTENTION_AFTER
+    )
+
+
+def device_attention_reasons(device, risk_data=None):
+    current_risk = risk_data or device_risk(device)
+    reasons = []
+    if not device.known or current_risk["level"] in {"medium", "high"}:
+        reasons.extend(current_risk["reasons"])
+    if device_is_offline_over_week(device):
+        reasons.append(OFFLINE_ATTENTION_REASON)
+    return reasons
+
+
 def device_risk_signature(device, risk_data=None):
     current_risk = risk_data or device_risk(device)
     payload = json.dumps(
@@ -349,6 +374,7 @@ def device_risk_signature(device, risk_data=None):
                 .values_list("port", "protocol")
             ),
             "risk_level": current_risk["level"],
+            "offline_over_week": device_is_offline_over_week(device),
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -365,7 +391,7 @@ def device_attention_acknowledged(device, risk_data=None):
 
 def device_needs_attention(device, risk_data=None):
     current_risk = risk_data or device_risk(device)
-    requires_attention = not device.known or current_risk["level"] in {"medium", "high"}
+    requires_attention = bool(device_attention_reasons(device, current_risk))
     return requires_attention and not device_attention_acknowledged(device, current_risk)
 
 
@@ -415,6 +441,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     risk_level = serializers.SerializerMethodField()
     risk_score = serializers.SerializerMethodField()
     risk_reasons = serializers.SerializerMethodField()
+    attention_reasons = serializers.SerializerMethodField()
     attention_acknowledged = serializers.SerializerMethodField()
     needs_attention = serializers.SerializerMethodField()
     identity_confidence = serializers.SerializerMethodField()
@@ -488,6 +515,10 @@ class DeviceSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_risk_reasons(self, obj):
         return self.get_device_risk(obj)["reasons"]
+
+    @extend_schema_field(serializers.ListField(child=serializers.CharField()))
+    def get_attention_reasons(self, obj):
+        return device_attention_reasons(obj, self.get_device_risk(obj))
 
     @extend_schema_field(serializers.BooleanField)
     def get_attention_acknowledged(self, obj):
