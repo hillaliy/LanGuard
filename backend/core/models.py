@@ -89,6 +89,8 @@ class Device(models.Model):
         default=NotificationPreference.INHERIT,
     )
     attention_acknowledged_signature = models.CharField(max_length=64, blank=True, default="")
+    identity_conflict_reason = models.CharField(max_length=255, blank=True, default="")
+    identity_conflict_detected_at = models.DateTimeField(blank=True, null=True)
     role = models.CharField(max_length=32, blank=True, default="device")
     room = models.CharField(max_length=100, blank=True, default="")
     online = models.BooleanField(default=True)

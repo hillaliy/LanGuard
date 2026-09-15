@@ -70,6 +70,7 @@ from .scan import (
     mdns_service_hostnames_from_responses,
     mdns_service_types_from_response,
     mdns_multicast_responses,
+    mismatched_default_haa_hostname,
     manuf_vendor,
     normalize_scan_ports,
     preferred_vendor,
@@ -1007,6 +1008,109 @@ class PortEventTests(TestCase):
 class ScanStabilityTests(TestCase):
     def scan_element(self, ip, mac):
         return (None, SimpleNamespace(psrc=ip, hwsrc=mac))
+
+    def test_default_haa_hostname_must_match_observed_mac(self):
+        self.assertFalse(
+            mismatched_default_haa_hostname(
+                "HAA 826353",
+                "d8:f1:5b:82:63:53",
+            )
+        )
+        self.assertTrue(
+            mismatched_default_haa_hostname(
+                "HAA 826353",
+                "00:55:7b:b5:7d:f7",
+            )
+        )
+        self.assertFalse(
+            mismatched_default_haa_hostname(
+                "HAA living-room-switch",
+                "00:55:7b:b5:7d:f7",
+            )
+        )
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch(
+        "core.scan.get_hostname",
+        return_value=("HAA 826353", Device.IdentitySource.MDNS),
+    )
+    def test_mismatched_haa_hostname_is_not_assigned(self, _):
+        sync_discovered_device(
+            self.scan_element("192.168.1.3", "00:55:7b:b5:7d:f7"),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device = Device.objects.get(mac="00:55:7b:b5:7d:f7")
+        self.assertEqual(device.hostname, "")
+        self.assertEqual(device.hostname_source, "")
+        self.assertIn("HAA hostname HAA 826353 does not match", device.identity_conflict_reason)
+        self.assertIsNotNone(device.identity_conflict_detected_at)
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch(
+        "core.scan.get_hostname",
+        return_value=("HAA 826353", Device.IdentitySource.MDNS),
+    )
+    def test_recent_ip_mac_conflict_blocks_ip_identity_and_marks_both_devices(
+        self,
+        get_hostname,
+    ):
+        observed_at = timezone.now()
+        original = Device.objects.create(
+            name="Entry light",
+            hostname="HAA 826353",
+            hostname_source=Device.IdentitySource.MDNS,
+            ip="192.168.1.3",
+            mac="d8:f1:5b:82:63:53",
+            known=True,
+            lastseen=observed_at - timedelta(minutes=5),
+        )
+
+        sync_discovered_device(
+            self.scan_element("192.168.1.3", "00:55:7b:b5:7d:f7"),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_started_at=observed_at,
+            hostname_hints={
+                "192.168.1.3": ("HAA 826353", Device.IdentitySource.MDNS),
+            },
+        )
+
+        original.refresh_from_db()
+        duplicate = Device.objects.get(mac="00:55:7b:b5:7d:f7")
+        self.assertEqual(duplicate.hostname, "")
+        self.assertEqual(duplicate.hostname_source, "")
+        self.assertIn("192.168.1.3", duplicate.identity_conflict_reason)
+        self.assertIn(original.mac, duplicate.identity_conflict_reason)
+        self.assertEqual(
+            original.identity_conflict_reason,
+            duplicate.identity_conflict_reason,
+        )
+        self.assertEqual(original.identity_conflict_detected_at, observed_at)
+        get_hostname.assert_not_called()
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch(
+        "core.scan.get_hostname",
+        return_value=("Office printer", Device.IdentitySource.MDNS),
+    )
+    def test_stale_device_with_reused_ip_does_not_trigger_conflict(self, _):
+        observed_at = timezone.now()
+        Device.objects.create(
+            name="Old device",
+            ip="192.168.1.30",
+            mac="aa:bb:cc:dd:ee:01",
+            lastseen=observed_at - timedelta(hours=2),
+        )
+
+        sync_discovered_device(
+            self.scan_element("192.168.1.30", "aa:bb:cc:dd:ee:02"),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_started_at=observed_at,
+        )
+
+        device = Device.objects.get(mac="aa:bb:cc:dd:ee:02")
+        self.assertEqual(device.hostname, "Office printer")
+        self.assertEqual(device.identity_conflict_reason, "")
 
     @override_settings(PORT_SCAN_ENABLED=False)
     def test_existing_device_ip_change_creates_history_event(self):
@@ -4559,6 +4663,56 @@ class ScanApiTests(TestCase):
         self.device.lastseen = timezone.now() - timedelta(days=6)
         self.device.save(
             update_fields=["known", "vendor", "online", "status", "lastseen"]
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertEqual(device["attention_reasons"], [])
+        self.assertFalse(device["needs_attention"])
+
+    def test_device_endpoint_explains_recent_ip_mac_conflict(self):
+        self.device.known = True
+        self.device.vendor = "Apple"
+        self.device.identity_conflict_reason = (
+            "IP 192.168.1.20 was reported by multiple MAC addresses: "
+            "aa:bb:cc:dd:ee:ff, bb:bb:bb:bb:bb:bb"
+        )
+        self.device.identity_conflict_detected_at = timezone.now()
+        self.device.save(
+            update_fields=[
+                "known",
+                "vendor",
+                "identity_conflict_reason",
+                "identity_conflict_detected_at",
+            ]
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertEqual(
+            device["attention_reasons"],
+            [self.device.identity_conflict_reason],
+        )
+        self.assertTrue(device["needs_attention"])
+
+    def test_expired_ip_mac_conflict_does_not_need_attention(self):
+        self.device.known = True
+        self.device.vendor = "Apple"
+        self.device.identity_conflict_reason = (
+            "IP 192.168.1.20 was reported by multiple MAC addresses"
+        )
+        self.device.identity_conflict_detected_at = timezone.now() - timedelta(days=8)
+        self.device.save(
+            update_fields=[
+                "known",
+                "vendor",
+                "identity_conflict_reason",
+                "identity_conflict_detected_at",
+            ]
         )
 
         device = self.client.get(

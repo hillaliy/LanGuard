@@ -7,6 +7,7 @@ import socket
 import struct
 import time
 import warnings
+from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
@@ -31,6 +32,7 @@ MDNS_SERVICE_HOSTNAME_CACHE = {"expires_at": 0.0, "hostnames": {}}
 MDNS_SERVICE_TIMEOUT_SECONDS = 1.8
 MDNS_SERVICE_RETRY_COUNT = 3
 MDNS_SERVICE_RETRY_DELAY_SECONDS = 0.25
+IP_IDENTITY_CONFLICT_WINDOW = timedelta(hours=1)
 MDNS_SERVICE_TYPES = (
     "_hap._tcp.local",
     "_services._dns-sd._udp.local",
@@ -913,6 +915,22 @@ def clean_hostname(hostname, ip_address=""):
     return short_hostname.replace("-", " ").strip()
 
 
+def mismatched_default_haa_hostname(hostname, mac):
+    match = re.fullmatch(
+        r"HAA[ -]([0-9A-F]{6})(?:[ -](?:Setup|InstallerM|InstallerB))?",
+        (hostname or "").strip(),
+        re.IGNORECASE,
+    )
+    if not match:
+        return False
+    normalized_mac = re.sub(r"[^0-9A-F]", "", mac or "", flags=re.IGNORECASE)
+    return len(normalized_mac) != 12 or match.group(1).lower() != normalized_mac[-6:].lower()
+
+
+def validated_hostname(hostname, mac):
+    return "" if mismatched_default_haa_hostname(hostname, mac) else hostname
+
+
 def trim_vendor(vendor):
     return (vendor or "").strip()
 
@@ -1645,23 +1663,54 @@ def sync_discovered_device(
     scan_started_at = scan_started_at or timezone.now()
     ip = element[1].psrc
     mac = element[1].hwsrc.lower()
+    conflict_cutoff = scan_started_at - IP_IDENTITY_CONFLICT_WINDOW
+    conflicting_devices = list(
+        Device.objects.filter(ip=ip, archived=False)
+        .exclude(mac=mac)
+        .filter(lastseen__gte=conflict_cutoff)
+    )
+    conflict_reason = ""
+    if conflicting_devices:
+        conflict_macs = sorted({mac, *(device.mac for device in conflicting_devices)})
+        displayed_macs = ", ".join(conflict_macs[:4])
+        if len(conflict_macs) > 4:
+            displayed_macs = f"{displayed_macs} (+{len(conflict_macs) - 4} more)"
+        conflict_reason = (
+            f"IP {ip} was reported by multiple MAC addresses: {displayed_macs}"
+        )
+        Device.objects.filter(pk__in=[device.pk for device in conflicting_devices]).update(
+            identity_conflict_reason=conflict_reason,
+            identity_conflict_detected_at=scan_started_at,
+        )
     vendor = ManufDA.lookup(oui, mac) if oui else None
     manuf_name = manuf_vendor(mac)
     scapy_name = preferred_vendor(vendor[1] if vendor else "")
-    vendor_hint = (vendor_hints or {}).get(ip, "")
+    vendor_hint = "" if conflict_reason else (vendor_hints or {}).get(ip, "")
     hinted_name = vendor_hint[0] if isinstance(vendor_hint, tuple) else vendor_hint
     hinted_source = vendor_hint[1] if isinstance(vendor_hint, tuple) else ""
     vendor_name = manuf_name or scapy_name or preferred_vendor(hinted_name)
-    hostname_result = get_hostname(
-        ip=ip,
-        hostname_hints=hostname_hints,
-        include_source=True,
-        dns_server=gateway_ip,
+    hostname_result = (
+        ("", "")
+        if conflict_reason
+        else get_hostname(
+            ip=ip,
+            hostname_hints=hostname_hints,
+            include_source=True,
+            dns_server=gateway_ip,
+        )
     )
     if isinstance(hostname_result, tuple):
         hostname, hostname_source = hostname_result
     else:
         hostname, hostname_source = hostname_result, ""
+    observed_hostname = hostname
+    if mismatched_default_haa_hostname(observed_hostname, mac) and not conflict_reason:
+        conflict_reason = (
+            f"HAA hostname {observed_hostname} does not match MAC address {mac} at IP {ip}"
+        )
+    hostname = validated_hostname(hostname, mac)
+    if not hostname:
+        hostname_source = ""
     vendor_source = (
         Device.IdentitySource.MANUF
         if manuf_name or scapy_name
@@ -1687,19 +1736,25 @@ def sync_discovered_device(
             "status_reason",
             "last_status_check",
         ]
+        if conflict_reason:
+            device.identity_conflict_reason = conflict_reason
+            device.identity_conflict_detected_at = scan_started_at
+            update_fields.extend(["identity_conflict_reason", "identity_conflict_detected_at"])
         device.ip = ip
         device.archived = False
         device.online = True
         device.lastseen = scan_started_at
         device.missed_scans = 0
-        resolved_hostname = hostname[:255] if hostname else ""
-        if device.hostname != resolved_hostname:
-            device.hostname = resolved_hostname
-            update_fields.append("hostname")
-        resolved_hostname_source = hostname_source if resolved_hostname else ""
-        if device.hostname_source != resolved_hostname_source:
-            device.hostname_source = resolved_hostname_source
-            update_fields.append("hostname_source")
+        existing_hostname_is_invalid = mismatched_default_haa_hostname(device.hostname, mac)
+        if not conflict_reason or existing_hostname_is_invalid:
+            resolved_hostname = hostname[:255] if hostname else ""
+            if device.hostname != resolved_hostname:
+                device.hostname = resolved_hostname
+                update_fields.append("hostname")
+            resolved_hostname_source = hostname_source if resolved_hostname else ""
+            if device.hostname_source != resolved_hostname_source:
+                device.hostname_source = resolved_hostname_source
+                update_fields.append("hostname_source")
         resolved_vendor = preferred_vendor(
             observed_vendor=vendor_name,
         )
@@ -1771,6 +1826,8 @@ def sync_discovered_device(
             vendor_source=vendor_source if resolved_vendor else "",
             hostname=hostname[:255] if hostname else "",
             hostname_source=hostname_source if hostname else "",
+            identity_conflict_reason=conflict_reason,
+            identity_conflict_detected_at=scan_started_at if conflict_reason else None,
             role="gateway" if is_gateway else "device",
             known=is_gateway,
             is_gateway=is_gateway,

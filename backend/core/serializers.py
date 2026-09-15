@@ -342,6 +342,7 @@ def device_risk(device):
 
 OFFLINE_ATTENTION_AFTER = timedelta(days=7)
 OFFLINE_ATTENTION_REASON = "Offline for over 7 days"
+IDENTITY_CONFLICT_ATTENTION_AFTER = timedelta(days=7)
 
 
 def device_is_offline_over_week(device, now=None):
@@ -360,6 +361,13 @@ def device_attention_reasons(device, risk_data=None):
         reasons.extend(current_risk["reasons"])
     if device_is_offline_over_week(device):
         reasons.append(OFFLINE_ATTENTION_REASON)
+    if (
+        device.identity_conflict_reason
+        and device.identity_conflict_detected_at
+        and device.identity_conflict_detected_at
+        >= timezone.now() - IDENTITY_CONFLICT_ATTENTION_AFTER
+    ):
+        reasons.append(device.identity_conflict_reason)
     return reasons
 
 
@@ -376,6 +384,12 @@ def device_risk_signature(device, risk_data=None):
             ),
             "risk_level": current_risk["level"],
             "offline_over_week": device_is_offline_over_week(device),
+            "identity_conflict_reason": device.identity_conflict_reason,
+            "identity_conflict_detected_at": (
+                device.identity_conflict_detected_at.isoformat()
+                if device.identity_conflict_detected_at
+                else ""
+            ),
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -438,6 +452,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     lastseen = UTCDateTimeField(read_only=True)
     last_status_check = UTCDateTimeField(read_only=True)
     last_port_scan = UTCDateTimeField(read_only=True)
+    identity_conflict_detected_at = UTCDateTimeField(read_only=True)
     open_ports = serializers.SerializerMethodField()
     risk_level = serializers.SerializerMethodField()
     risk_score = serializers.SerializerMethodField()
@@ -462,7 +477,14 @@ class DeviceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Device
         fields = "__all__"
-        read_only_fields = ("hostname", "vendor", "hostname_source", "vendor_source")
+        read_only_fields = (
+            "hostname",
+            "vendor",
+            "hostname_source",
+            "vendor_source",
+            "identity_conflict_reason",
+            "identity_conflict_detected_at",
+        )
 
     def get_device_identity(self, obj):
         if not hasattr(obj, "_identity_data"):
