@@ -64,6 +64,7 @@ alerts when new devices appear.
 **Organize**
 
 - Assign names, icons, rooms, roles, and expected device behavior
+- Install LanGuard as a standalone web app on supported phones, tablets, and computers
 - Select multiple new devices and mark them as known in one action
 - Filter the device inventory by one or more configured network ranges
 - Arrange rooms and devices in the Docker Home Map view
@@ -77,6 +78,18 @@ alerts when new devices appear.
 - Show the latest Speedtest Tracker result on the Docker dashboard
 - Use Swagger, ReDoc, and the OpenAPI schema for integrations
 - Create the initial administrator directly from first-user setup
+
+## Install as a web app
+
+LanGuard includes a web app manifest and device icons, so it can open from the
+home screen in a standalone window. On iPhone or iPad, open LanGuard in Safari,
+use **Share**, and choose **Add to Home Screen**. On supported Android and
+desktop browsers, use the browser's **Install app** command.
+
+The installed web app connects to the same LanGuard server and requires network
+access to it; it does not cache device or dashboard data for offline use.
+Browser-promoted installation in Chromium requires LanGuard to be served over
+HTTPS, except when accessed through `localhost`.
 
 ## How scanning works
 
