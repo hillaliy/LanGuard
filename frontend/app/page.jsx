@@ -916,7 +916,7 @@ function HomeMap({ devices = [], onSelectDevice, canEditLayout }) {
   const [resetModalOpened, resetModal] = useDisclosure(false);
   const [layoutLoaded, setLayoutLoaded] = useState(false);
   const [layoutSaving, setLayoutSaving] = useState(false);
-  const deviceCount = devices.length;
+  const deviceCount = rooms.reduce((total, section) => total + section.devices.length, 0);
   const roomCount = assignedRooms.length;
   const normalizedLayout = useMemo(
     () => normalizeHomeMapLayout(layout, assignedRooms),
