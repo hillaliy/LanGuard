@@ -215,7 +215,7 @@ The scheduler container runs LanGuard's recurring background work:
 | Failed notification retry | Every 15 minutes | `NOTIFICATION_RETRY_INTERVAL` |
 | Activity cleanup | Every 24 hours | Activity retention in Settings |
 | AdGuard Home sync | Every 5 minutes when enabled | AdGuard Home settings |
-| LanGuard update check | At startup, then every 6 hours when enabled | Version check interval and new-version notification rule in Settings |
+| LanGuard update check | At startup, then every 6 hours when enabled | Update check interval and new-version notification rule in Settings > Notifications |
 | Speedtest health check | At startup, then every 5 minutes when enabled | Speedtest integration, thresholds, and health-change notification rule |
 | Detailed device port scan | On demand, one scan at a time | Device page and scan or device-edit permission |
 
