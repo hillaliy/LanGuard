@@ -297,11 +297,22 @@ def device_risk(device):
         score += 3
         reasons.append("New unknown device")
 
-    open_ports = list(
-        device.ports.filter(open=True)
-        .order_by("port", "protocol")
-        .values_list("port", "protocol")
-    )
+    prefetched_ports = getattr(device, "_prefetched_objects_cache", {}).get("ports")
+    if prefetched_ports is None:
+        open_ports = list(
+            device.ports.filter(open=True)
+            .order_by("port", "protocol")
+            .values_list("port", "protocol")
+        )
+    else:
+        open_ports = sorted(
+            (
+                (device_port.port, device_port.protocol)
+                for device_port in prefetched_ports
+                if device_port.open
+            ),
+            key=lambda item: (item[0], item[1]),
+        )
     risky_ports = [
         f"{protocol}/{port} ({RISKY_PORTS[port]})"
         for port, protocol in open_ports
@@ -646,15 +657,32 @@ class DeviceBulkUpdateSerializer(serializers.Serializer):
     )
     known = serializers.BooleanField(required=False)
     is_visitor = serializers.BooleanField(required=False)
+    acknowledge_attention = serializers.BooleanField(required=False)
 
     def validate_ids(self, value):
         return list(dict.fromkeys(value))
 
     def validate(self, attrs):
-        if "known" not in attrs and "is_visitor" not in attrs:
+        if not any(
+            field in attrs
+            for field in ("known", "is_visitor", "acknowledge_attention")
+        ):
             raise serializers.ValidationError(
-                "Provide known or is_visitor for the selected devices."
+                "Provide known, is_visitor, or acknowledge_attention for the selected devices."
             )
+        if "acknowledge_attention" in attrs:
+            if attrs["acknowledge_attention"] is not True:
+                raise serializers.ValidationError(
+                    {"acknowledge_attention": "This bulk action must be true."}
+                )
+            if "known" in attrs or "is_visitor" in attrs:
+                raise serializers.ValidationError(
+                    {
+                        "acknowledge_attention": (
+                            "Review attention separately from device classification."
+                        )
+                    }
+                )
         if attrs.get("known") is False and attrs.get("is_visitor") is True:
             raise serializers.ValidationError(
                 {"is_visitor": "Visitor devices must be known devices."}

@@ -60,6 +60,7 @@ import {
   IconBulb,
   IconBulbFilled,
   IconCast,
+  IconCheck,
   IconChevronDown,
   IconClock,
   IconDeviceCctv,
@@ -213,6 +214,7 @@ const eventTypeOptions = [
 const deviceStatusOptions = [
   { value: 'online', label: 'Online' },
   { value: 'offline', label: 'Offline' },
+  { value: 'attention', label: 'Needs attention' },
   { value: 'new', label: 'New devices' },
   { value: 'visitors', label: 'Visitors' },
   { value: 'archived', label: 'Archived' },
@@ -6737,9 +6739,13 @@ function Dashboard({
         search: currentTableState.search,
         status:
           currentTableState.deviceStatus
-            && !['new', 'visitors', 'archived'].includes(currentTableState.deviceStatus)
+            && !['attention', 'new', 'visitors', 'archived'].includes(
+              currentTableState.deviceStatus
+            )
             ? currentTableState.deviceStatus
             : undefined,
+        needs_attention:
+          currentTableState.deviceStatus === 'attention' ? 'true' : undefined,
         known: currentTableState.deviceStatus === 'new' ? 'false' : undefined,
         is_visitor: currentTableState.deviceStatus === 'visitors' ? 'true' : undefined,
         archived: currentTableState.deviceStatus === 'archived' ? 'true' : undefined,
@@ -7195,11 +7201,17 @@ function Dashboard({
     try {
       const payload = await apiRequest('devices/bulk-update/', {
         method: 'POST',
-        body: {
-          ids: selectedDeviceIds,
-          known: true,
-          is_visitor: classification === 'visitor',
-        },
+        body:
+          classification === 'attention'
+            ? {
+                ids: selectedDeviceIds,
+                acknowledge_attention: true,
+              }
+            : {
+                ids: selectedDeviceIds,
+                known: true,
+                is_visitor: classification === 'visitor',
+              },
       });
       closeBulkEdit();
       await loadData({ quiet: true });
@@ -7666,6 +7678,16 @@ function Dashboard({
                               onClick={() => updateSelectedDevices('visitor')}
                             >
                               Mark as visitor
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="light"
+                              leftSection={<IconCheck size={16} />}
+                              disabled={!selectedDeviceIds.length}
+                              loading={bulkUpdatingDevices}
+                              onClick={() => updateSelectedDevices('attention')}
+                            >
+                              Mark attention as reviewed
                             </Button>
                           </>
                         ) : (

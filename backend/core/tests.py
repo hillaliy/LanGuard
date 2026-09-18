@@ -3111,6 +3111,64 @@ class ScanApiTests(TestCase):
         self.assertTrue(self.device.known)
         self.assertFalse(self.device.is_visitor)
 
+    def test_bulk_update_reviews_known_devices_and_skips_unknown_devices(self):
+        self.device.known = True
+        self.device.vendor = "Linux"
+        self.device.save(update_fields=["known", "vendor"])
+        DevicePort.objects.create(device=self.device, port=3389, protocol="tcp", open=True)
+        unknown_device = Device.objects.create(
+            name="Unknown phone",
+            ip="192.168.1.21",
+            mac="bb:bb:bb:bb:bb:bb",
+            known=False,
+        )
+
+        response = self.client.post(
+            "/api/v1/devices/bulk-update/",
+            {
+                "ids": [self.device.id, unknown_device.id],
+                "acknowledge_attention": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.device.refresh_from_db()
+        unknown_device.refresh_from_db()
+        self.assertTrue(self.device.attention_acknowledged_signature)
+        self.assertEqual(unknown_device.attention_acknowledged_signature, "")
+        self.assertEqual(response.data["data"]["reviewed_count"], 1)
+        self.assertEqual(response.data["data"]["skipped_unknown_count"], 1)
+        self.assertIn("mark them as known first", response.data["notification"]["message"])
+        reviewed = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+        unknown = self.client.get(
+            "/api/v1/device/", {"id": unknown_device.id}
+        ).data["data"]
+        self.assertFalse(reviewed["needs_attention"])
+        self.assertTrue(unknown["needs_attention"])
+
+    def test_bulk_attention_review_is_invalidated_by_port_change(self):
+        self.device.known = True
+        self.device.vendor = "Linux"
+        self.device.save(update_fields=["known", "vendor"])
+        DevicePort.objects.create(device=self.device, port=3389, protocol="tcp", open=True)
+        response = self.client.post(
+            "/api/v1/devices/bulk-update/",
+            {"ids": [self.device.id], "acknowledge_attention": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        DevicePort.objects.create(device=self.device, port=5900, protocol="tcp", open=True)
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+        self.assertFalse(device["attention_acknowledged"])
+        self.assertTrue(device["needs_attention"])
+
     def test_device_visitor_classification_enforces_known_invariant(self):
         response = self.client.put(
             f"/api/v1/device/?id={self.device.id}",
@@ -3163,6 +3221,14 @@ class ScanApiTests(TestCase):
         response = regular_client.post(
             "/api/v1/devices/bulk-update/",
             {"ids": [self.device.id], "known": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+        response = regular_client.post(
+            "/api/v1/devices/bulk-update/",
+            {"ids": [self.device.id], "acknowledge_attention": True},
             format="json",
         )
 
@@ -4655,6 +4721,110 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("status", response.data)
+
+    def test_device_endpoint_filters_needs_attention_before_pagination(self):
+        now = timezone.now()
+        self.device.known = True
+        self.device.vendor = "Laptop vendor"
+        self.device.save(update_fields=["known", "vendor"])
+        unknown_device = Device.objects.create(
+            name="Unknown device",
+            ip="192.168.1.31",
+            mac="bb:bb:bb:bb:bb:31",
+        )
+        risky_device = Device.objects.create(
+            name="Risky device",
+            ip="192.168.1.32",
+            mac="bb:bb:bb:bb:bb:32",
+            known=True,
+            vendor="Linux",
+        )
+        DevicePort.objects.create(
+            device=risky_device,
+            port=3389,
+            protocol="tcp",
+            open=True,
+        )
+        offline_device = Device.objects.create(
+            name="Long offline device",
+            ip="192.168.1.33",
+            mac="bb:bb:bb:bb:bb:33",
+            known=True,
+            vendor="Example vendor",
+            online=False,
+            status=Device.Status.OFFLINE,
+            lastseen=now - timedelta(days=8),
+        )
+        conflict_device = Device.objects.create(
+            name="Identity conflict device",
+            ip="192.168.1.34",
+            mac="bb:bb:bb:bb:bb:34",
+            known=True,
+            vendor="Example vendor",
+            identity_conflict_reason=(
+                "IP 192.168.1.34 was reported by multiple MAC addresses"
+            ),
+            identity_conflict_detected_at=now,
+        )
+        reviewed_device = Device.objects.create(
+            name="Reviewed device",
+            ip="192.168.1.35",
+            mac="bb:bb:bb:bb:bb:35",
+            known=True,
+            vendor="Linux",
+        )
+        DevicePort.objects.create(
+            device=reviewed_device,
+            port=5900,
+            protocol="tcp",
+            open=True,
+        )
+        review_response = self.client.put(
+            f"/api/v1/device/?id={reviewed_device.id}",
+            {"acknowledge_attention": True},
+            format="json",
+        )
+        self.assertEqual(review_response.status_code, 202)
+
+        first_page = self.client.get(
+            "/api/v1/device/",
+            {
+                "needs_attention": "true",
+                "ordering": "name",
+                "limit": 2,
+                "offset": 0,
+            },
+        )
+        second_page = self.client.get(
+            "/api/v1/device/",
+            {
+                "needs_attention": "true",
+                "ordering": "name",
+                "limit": 2,
+                "offset": 2,
+            },
+        )
+
+        self.assertEqual(first_page.status_code, 200)
+        self.assertEqual(second_page.status_code, 200)
+        self.assertEqual(first_page.data["pagination"]["count"], 4)
+        self.assertEqual(first_page.data["pagination"]["next_offset"], 2)
+        self.assertIsNone(second_page.data["pagination"]["next_offset"])
+        returned_ids = {
+            device["id"]
+            for device in first_page.data["data"] + second_page.data["data"]
+        }
+        self.assertEqual(
+            returned_ids,
+            {
+                unknown_device.id,
+                risky_device.id,
+                offline_device.id,
+                conflict_device.id,
+            },
+        )
+        self.assertNotIn(reviewed_device.id, returned_ids)
+        self.assertNotIn(self.device.id, returned_ids)
 
     def test_device_endpoint_counters_include_current_open_ports(self):
         DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
