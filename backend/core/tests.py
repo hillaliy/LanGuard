@@ -4890,6 +4890,21 @@ class ScanApiTests(TestCase):
         self.assertEqual(device["risk_level"], "low")
         self.assertNotIn("Many open ports", device["risk_reasons"])
 
+    def test_device_endpoint_labels_port_8080_as_web_api_service(self):
+        self.device.known = True
+        self.device.vendor = "Matter"
+        self.device.save(update_fields=["known", "vendor"])
+        DevicePort.objects.create(device=self.device, port=8080, protocol="tcp", open=True)
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertIn(
+            "Risky open ports: tcp/8080 (Web/API service)",
+            device["risk_reasons"],
+        )
+
     def test_device_endpoint_still_flags_known_server_with_dangerous_remote_port(self):
         self.device.known = True
         self.device.role = "server"

@@ -211,7 +211,7 @@ RISKY_PORTS = {
     445: "SMB",
     3389: "Remote Desktop",
     5900: "VNC",
-    8080: "Admin web",
+    8080: "Web/API service",
 }
 HIGH_RISK_PORTS = {23, 445, 3389, 5900}
 ROLE_EXPECTED_PORTS = {
