@@ -58,6 +58,7 @@ from .serializers import (
     UserManagementSerializer,
     UserSerializer,
     device_attention_acknowledged,
+    device_needs_attention,
     device_risk,
     device_risk_signature,
 )
@@ -1897,6 +1898,7 @@ def device(request):
             first_seen = request.query_params.get("first_seen")
             network_ranges = request.query_params.get("network_ranges")
             homebox_linked = parse_bool_param(request.query_params, "homebox_linked")
+            needs_attention = parse_bool_param(request.query_params, "needs_attention")
 
             if device_status:
                 if device_status not in Device.Status.values:
@@ -1934,6 +1936,16 @@ def device(request):
             if homebox_linked is not None:
                 devices = devices.filter(homebox_item_id__isnull=not homebox_linked)
             devices = filter_devices_by_network_ranges(devices, network_ranges)
+            if needs_attention is not None:
+                attention_device_ids = [
+                    item.id
+                    for item in devices
+                    if device_needs_attention(item)
+                ]
+                if needs_attention:
+                    devices = devices.filter(id__in=attention_device_ids)
+                else:
+                    devices = devices.exclude(id__in=attention_device_ids)
 
             payload = paginated_device_payload(request, devices)
             return Response(
@@ -2025,11 +2037,53 @@ def bulk_update_devices(request):
     device_ids = serializer.validated_data["ids"]
     known = serializer.validated_data.get("known")
     is_visitor = serializer.validated_data.get("is_visitor")
-    devices = Device.objects.filter(id__in=device_ids)
+    acknowledge_attention = serializer.validated_data.get("acknowledge_attention")
+    devices = Device.objects.prefetch_related("ports").filter(id__in=device_ids)
     found_ids = set(devices.values_list("id", flat=True))
     if len(found_ids) != len(device_ids):
         raise ValidationError(
             {"ids": "One or more selected devices no longer exist. Refresh and try again."}
+        )
+
+    if acknowledge_attention:
+        known_devices = [device for device in devices if device.known]
+        skipped_unknown_count = len(device_ids) - len(known_devices)
+        updated_devices = []
+        for device_item in known_devices:
+            signature = device_risk_signature(device_item)
+            if device_item.attention_acknowledged_signature != signature:
+                device_item.attention_acknowledged_signature = signature
+                updated_devices.append(device_item)
+        if updated_devices:
+            Device.objects.bulk_update(
+                updated_devices,
+                ["attention_acknowledged_signature"],
+            )
+        reviewed_count = len(known_devices)
+        if reviewed_count:
+            message = (
+                f"{reviewed_count} selected device"
+                f"{'s' if reviewed_count != 1 else ''} marked as reviewed."
+            )
+        else:
+            message = "No devices were marked as reviewed."
+        if skipped_unknown_count:
+            message += (
+                f" {skipped_unknown_count} unknown device"
+                f"{'s were' if skipped_unknown_count != 1 else ' was'} skipped; "
+                "mark them as known first."
+            )
+        return success_response(
+            {
+                "ids": device_ids,
+                "acknowledge_attention": True,
+                "reviewed_count": reviewed_count,
+                "skipped_unknown_count": skipped_unknown_count,
+                "updated_count": len(updated_devices),
+            },
+            "Attention reviewed",
+            message,
+            status="OK",
         )
 
     if is_visitor is True:
