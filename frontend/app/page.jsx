@@ -4235,6 +4235,7 @@ function SettingsPage({ onSaved }) {
   const [notifyDeviceOffline, setNotifyDeviceOffline] = useState(false);
   const [notifyPortChanges, setNotifyPortChanges] = useState(false);
   const [notifyVersionUpdates, setNotifyVersionUpdates] = useState(false);
+  const [versionCheckIntervalHours, setVersionCheckIntervalHours] = useState(6);
   const [notifySpeedtestChanges, setNotifySpeedtestChanges] = useState(false);
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
   const [quietHoursStart, setQuietHoursStart] = useState('22:00');
@@ -4316,6 +4317,9 @@ function SettingsPage({ onSaved }) {
       setNotifyDeviceOffline(Boolean(data.notify_device_offline));
       setNotifyPortChanges(Boolean(data.notify_port_changes));
       setNotifyVersionUpdates(Boolean(data.notify_version_updates));
+      setVersionCheckIntervalHours(
+        Math.max(1, Math.round(Number(data.version_check_interval || 21600) / 3600))
+      );
       setNotifySpeedtestChanges(Boolean(data.notify_speedtest_changes));
       setQuietHoursEnabled(Boolean(data.notification_quiet_hours_enabled));
       setQuietHoursStart(data.notification_quiet_hours_start || '22:00');
@@ -4361,6 +4365,7 @@ function SettingsPage({ onSaved }) {
         notify_device_offline: notifyDeviceOffline,
         notify_port_changes: notifyPortChanges,
         notify_version_updates: notifyVersionUpdates,
+        version_check_interval: versionCheckIntervalHours * 3600,
         notify_speedtest_changes: notifySpeedtestChanges,
         notification_quiet_hours_enabled: quietHoursEnabled,
         notification_quiet_hours_start: quietHoursStart,
@@ -4889,6 +4894,19 @@ function SettingsPage({ onSaved }) {
               onChange={(event) => setNotifySpeedtestChanges(event.currentTarget.checked)}
             />
           </SimpleGrid>
+          <NumberInput
+            label="Update check interval"
+            description="How often LanGuard checks for a new release."
+            value={versionCheckIntervalHours}
+            onChange={(value) => setVersionCheckIntervalHours(Number(value) || 6)}
+            min={1}
+            max={168}
+            step={1}
+            suffix=" hr"
+            allowDecimal={false}
+            required
+            maw={320}
+          />
           <SimpleGrid cols={{ base: 1, sm: 3 }}>
             <Switch
               label="Quiet hours"
