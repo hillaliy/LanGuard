@@ -40,7 +40,7 @@ from .notifications import (
     send_telegram_test,
     send_webhook_test,
 )
-from .serializers import device_identity
+from .serializers import device_attention_reasons, device_identity
 from .views import parse_inventory_datetime
 from .versioning import check_for_version_update, is_newer_version
 from .scan import (
@@ -1009,6 +1009,21 @@ class ScanStabilityTests(TestCase):
     def scan_element(self, ip, mac):
         return (None, SimpleNamespace(psrc=ip, hwsrc=mac))
 
+    def create_ip_mac_conflict(self, observed_at):
+        original = Device.objects.create(
+            name="Entry light",
+            ip="192.168.1.3",
+            mac="d8:f1:5b:82:63:53",
+            known=True,
+            lastseen=observed_at - timedelta(minutes=5),
+        )
+        sync_discovered_device(
+            self.scan_element("192.168.1.3", "00:55:7b:b5:7d:f7"),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_started_at=observed_at,
+        )
+        return original, Device.objects.get(mac="00:55:7b:b5:7d:f7")
+
     def test_default_haa_hostname_must_match_observed_mac(self):
         self.assertFalse(
             mismatched_default_haa_hostname(
@@ -1087,6 +1102,86 @@ class ScanStabilityTests(TestCase):
         )
         self.assertEqual(original.identity_conflict_detected_at, observed_at)
         get_hostname.assert_not_called()
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname", return_value=("", ""))
+    def test_ip_mac_conflict_remains_while_recent_conflict_is_still_detected(self, _):
+        observed_at = timezone.now()
+        original, duplicate = self.create_ip_mac_conflict(observed_at)
+        conflict_reason = duplicate.identity_conflict_reason
+
+        sync_discovered_device(
+            self.scan_element(duplicate.ip, duplicate.mac),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_started_at=observed_at + timedelta(minutes=30),
+        )
+
+        original.refresh_from_db()
+        duplicate.refresh_from_db()
+        self.assertEqual(original.identity_conflict_reason, conflict_reason)
+        self.assertEqual(duplicate.identity_conflict_reason, conflict_reason)
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname", return_value=("", ""))
+    def test_resolved_ip_mac_conflict_is_cleared_for_all_affected_devices(self, _):
+        observed_at = timezone.now()
+        original, duplicate = self.create_ip_mac_conflict(observed_at)
+
+        sync_discovered_device(
+            self.scan_element(duplicate.ip, duplicate.mac),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_started_at=observed_at + timedelta(hours=2),
+        )
+
+        original.refresh_from_db()
+        duplicate.refresh_from_db()
+        self.assertEqual(original.identity_conflict_reason, "")
+        self.assertIsNone(original.identity_conflict_detected_at)
+        self.assertEqual(duplicate.identity_conflict_reason, "")
+        self.assertIsNone(duplicate.identity_conflict_detected_at)
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname", return_value=("", ""))
+    def test_resolved_ip_mac_conflict_returns_when_detected_again(self, _):
+        observed_at = timezone.now()
+        original, duplicate = self.create_ip_mac_conflict(observed_at)
+        resolved_at = observed_at + timedelta(hours=2)
+        sync_discovered_device(
+            self.scan_element(duplicate.ip, duplicate.mac),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_started_at=resolved_at,
+        )
+
+        sync_discovered_device(
+            self.scan_element(original.ip, original.mac),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_started_at=resolved_at + timedelta(minutes=5),
+        )
+
+        original.refresh_from_db()
+        duplicate.refresh_from_db()
+        self.assertIn("was reported by multiple MAC addresses", original.identity_conflict_reason)
+        self.assertEqual(original.identity_conflict_reason, duplicate.identity_conflict_reason)
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname", return_value=("", ""))
+    def test_resolving_ip_mac_conflict_keeps_other_attention_reasons(self, _):
+        observed_at = timezone.now()
+        _, duplicate = self.create_ip_mac_conflict(observed_at)
+        duplicate.known = True
+        duplicate.save(update_fields=["known"])
+        DevicePort.objects.create(device=duplicate, port=3389, protocol="tcp", open=True)
+
+        sync_discovered_device(
+            self.scan_element(duplicate.ip, duplicate.mac),
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_started_at=observed_at + timedelta(hours=2),
+        )
+
+        duplicate.refresh_from_db()
+        reasons = device_attention_reasons(duplicate)
+        self.assertFalse(any("multiple MAC addresses" in reason for reason in reasons))
+        self.assertTrue(any("Remote Desktop" in reason for reason in reasons))
 
     @override_settings(PORT_SCAN_ENABLED=False)
     @patch(

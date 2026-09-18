@@ -33,6 +33,7 @@ MDNS_SERVICE_TIMEOUT_SECONDS = 1.8
 MDNS_SERVICE_RETRY_COUNT = 3
 MDNS_SERVICE_RETRY_DELAY_SECONDS = 0.25
 IP_IDENTITY_CONFLICT_WINDOW = timedelta(hours=1)
+IP_IDENTITY_CONFLICT_MARKER = " was reported by multiple MAC addresses: "
 MDNS_SERVICE_TYPES = (
     "_hap._tcp.local",
     "_services._dns-sd._udp.local",
@@ -1725,6 +1726,7 @@ def sync_discovered_device(
         device = Device.objects.get(mac=mac)
         was_online = device.online
         previous_ip = device.ip
+        resolved_conflict_reason = ""
         update_fields = [
             "archived",
             "ip",
@@ -1739,6 +1741,14 @@ def sync_discovered_device(
         if conflict_reason:
             device.identity_conflict_reason = conflict_reason
             device.identity_conflict_detected_at = scan_started_at
+            update_fields.extend(["identity_conflict_reason", "identity_conflict_detected_at"])
+        elif (
+            device.identity_conflict_reason.startswith("IP ")
+            and IP_IDENTITY_CONFLICT_MARKER in device.identity_conflict_reason
+        ):
+            resolved_conflict_reason = device.identity_conflict_reason
+            device.identity_conflict_reason = ""
+            device.identity_conflict_detected_at = None
             update_fields.extend(["identity_conflict_reason", "identity_conflict_detected_at"])
         device.ip = ip
         device.archived = False
@@ -1787,6 +1797,14 @@ def sync_discovered_device(
             device.icon = "router"
             update_fields.extend(["is_gateway", "known", "name", "icon"])
         device.save(update_fields=update_fields)
+
+        if resolved_conflict_reason:
+            Device.objects.filter(
+                identity_conflict_reason=resolved_conflict_reason,
+            ).exclude(pk=device.pk).update(
+                identity_conflict_reason="",
+                identity_conflict_detected_at=None,
+            )
 
         if previous_ip != ip:
             create_event(
