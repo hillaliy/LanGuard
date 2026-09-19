@@ -2194,6 +2194,12 @@ def detailed_port_scan(request):
     if device_id < 1:
         raise ValidationError({"device": "A valid device ID is required."})
     device = get_object_or_404(Device, pk=device_id, archived=False)
+    if device.status != Device.Status.ONLINE:
+        return error_response(
+            "Device is not online",
+            "Detailed port scans are only available while the device is online.",
+            response_status=status.HTTP_409_CONFLICT,
+        )
     try:
         ports = parse_port_specification(request.data.get("ports"))
     except ValueError as exc:
