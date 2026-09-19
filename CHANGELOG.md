@@ -8,6 +8,7 @@
 - Added marked device-icon shortcuts that open configured device web interfaces directly from desktop and mobile inventory lists.
 - Automatically clear resolved IP and MAC identity-conflict warnings after later scans consistently identify the devices correctly.
 - Prevent detailed port scans from starting for offline devices or replacing saved port inventory when a device goes offline during a scan.
+- Preserve user-selected device icons across scheduled discovery, gateway detection, and port-enrichment scans.
 - Renamed the generic TCP port 8080 risk label from Admin web to Web/API service.
 
 ## 1.18.0 - 2026-09-16
