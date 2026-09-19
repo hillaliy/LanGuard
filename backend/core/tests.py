@@ -1820,6 +1820,110 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.hostname, "")
         self.assertEqual(device.name, "Bedroom AC")
 
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname", return_value="office-laptop")
+    def test_existing_device_preserves_user_selected_desktop_icon(self, _):
+        device = Device.objects.create(
+            name="Basement Desktop",
+            ip="192.168.1.47",
+            mac="08:62:66:50:bf:e2",
+            icon="desktop",
+            known=True,
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device.refresh_from_db()
+        self.assertEqual(device.icon, "desktop")
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname", return_value="office-laptop")
+    def test_known_device_preserves_user_selected_unknown_icon(self, _):
+        device = Device.objects.create(
+            name="Office computer",
+            ip="192.168.1.48",
+            mac="08:62:66:50:bf:e3",
+            icon="unknown",
+            known=True,
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device.refresh_from_db()
+        self.assertEqual(device.icon, "unknown")
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname", return_value="office-laptop")
+    def test_unknown_device_icon_continues_to_follow_identity_detection(self, _):
+        device = Device.objects.create(
+            name="Unreviewed device",
+            ip="192.168.1.49",
+            mac="08:62:66:50:bf:e4",
+            icon="desktop",
+            known=False,
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device.refresh_from_db()
+        self.assertEqual(device.icon, "laptop")
+
+    @override_settings(PORT_SCAN_ENABLED=True, PORT_SCAN_INTERVAL=30)
+    @patch("core.scan.scan_open_ports")
+    def test_existing_device_port_enrichment_preserves_selected_icon(self, scan_open_ports):
+        scan_open_ports.return_value = [{"port": 554, "protocol": "tcp", "service": "rtsp"}]
+        device = Device.objects.create(
+            name="Basement Desktop",
+            ip="192.168.1.47",
+            mac="08:62:66:50:bf:e2",
+            icon="desktop",
+            known=True,
+            last_port_scan=timezone.now() - timedelta(minutes=31),
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device.refresh_from_db()
+        self.assertEqual(device.icon, "desktop")
+
+    @override_settings(PORT_SCAN_ENABLED=True, PORT_SCAN_INTERVAL=30)
+    @patch("core.scan.scan_open_ports")
+    def test_unknown_device_icon_continues_to_follow_port_detection(self, scan_open_ports):
+        scan_open_ports.return_value = [{"port": 554, "protocol": "tcp", "service": "rtsp"}]
+        device = Device.objects.create(
+            name="Unreviewed device",
+            ip="192.168.1.50",
+            mac="08:62:66:50:bf:e5",
+            icon="desktop",
+            known=False,
+            last_port_scan=timezone.now() - timedelta(minutes=31),
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+        )
+
+        device.refresh_from_db()
+        self.assertEqual(device.icon, "security-camera")
+
     @patch("builtins.open")
     def test_default_gateway_from_proc_route(self, open_mock):
         open_mock.return_value.__enter__.return_value = iter(
@@ -1875,6 +1979,28 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.role, "meshRouter")
         self.assertEqual(device.hostname, "Deco X60")
         self.assertEqual(device.vendor, "TP-Link Systems Inc.")
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_hostname", return_value="gateway.local")
+    def test_existing_gateway_preserves_user_selected_icon(self, _):
+        device = Device.objects.create(
+            name="Main gateway",
+            ip="192.168.0.1",
+            mac="3c:6a:d2:f4:07:7d",
+            icon="server",
+            known=True,
+        )
+
+        sync_discovered_device(
+            self.scan_element(device.ip, device.mac),
+            oui=None,
+            scan_run=ScanRun.objects.create(ip_range="192.168.0.0/24"),
+            gateway_ip=device.ip,
+        )
+
+        device.refresh_from_db()
+        self.assertTrue(device.is_gateway)
+        self.assertEqual(device.icon, "server")
 
     def test_clear_stale_gateways_keeps_current_gateway_only(self):
         current = Device.objects.create(

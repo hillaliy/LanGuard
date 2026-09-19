@@ -24,7 +24,6 @@ from .user_messages import scan_error_message
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_DEVICE_NAME = "Device"
-DEFAULT_DEVICE_ICONS = {"", "plus", "unknown", "device", "desktop"}
 SSDP_CACHE_TTL_SECONDS = 10
 SSDP_METADATA_CACHE = {"expires_at": 0.0, "metadata": {}}
 MDNS_SERVICE_CACHE_TTL_SECONDS = 10
@@ -996,10 +995,6 @@ def is_default_device_name(name):
     )
 
 
-def is_default_device_icon(icon):
-    return (icon or "").strip().lower() in DEFAULT_DEVICE_ICONS
-
-
 def guess_device_rule(hostname="", vendor="", open_ports=None):
     text = guess_text(hostname, vendor_display_name(vendor), vendor)
     ports = open_port_numbers(open_ports)
@@ -1725,6 +1720,7 @@ def sync_discovered_device(
     try:
         device = Device.objects.get(mac=mac)
         was_online = device.online
+        was_known = device.known
         previous_ip = device.ip
         resolved_conflict_reason = ""
         update_fields = [
@@ -1781,21 +1777,27 @@ def sync_discovered_device(
             status_source,
             now=scan_started_at,
         )
-        if is_default_device_name(device.name) or is_default_device_icon(device.icon):
-            identity = guess_device_identity(hostname, resolved_vendor, mac)
-            if is_default_device_name(device.name):
-                device.name = identity["name"]
-                update_fields.append("name")
-            if is_default_device_icon(device.icon):
-                device.icon = identity["icon"]
+        if is_default_device_name(device.name):
+            device.name = guess_device_name(hostname, resolved_vendor, mac)
+            update_fields.append("name")
+        if not was_known:
+            inferred_icon = guess_device_icon(
+                hostname=hostname,
+                vendor=resolved_vendor,
+                open_ports=device.ports.filter(open=True).values_list("port", flat=True),
+            )
+            if device.icon != inferred_icon:
+                device.icon = inferred_icon
                 update_fields.append("icon")
         if is_gateway:
             device.is_gateway = True
             device.known = True
             if is_default_device_name(device.name):
                 device.name = "Gateway"
-            device.icon = "router"
-            update_fields.extend(["is_gateway", "known", "name", "icon"])
+            if not was_known:
+                device.icon = "router"
+                update_fields.append("icon")
+            update_fields.extend(["is_gateway", "known", "name"])
         device.save(update_fields=update_fields)
 
         if resolved_conflict_reason:
@@ -1879,13 +1881,15 @@ def sync_discovered_device(
 
     if should_scan_ports(device, now=scan_started_at):
         open_ports = scan_open_ports(ip)
-        if is_default_device_icon(device.icon):
-            device.icon = guess_device_icon(
+        if not device.known:
+            inferred_icon = guess_device_icon(
                 hostname=device.name,
                 vendor=device.vendor,
                 open_ports=open_ports,
             )
-            device.save(update_fields=["icon"])
+            if device.icon != inferred_icon:
+                device.icon = inferred_icon
+                device.save(update_fields=["icon"])
         port_stats = sync_device_ports(device, open_ports, scan_run=scan_run)
         ports_opened += port_stats["ports_opened"]
         ports_closed += port_stats["ports_closed"]
