@@ -79,6 +79,31 @@
   width: 44px;
 }
 
+.device-interface-icon {
+  cursor: pointer;
+  position: relative;
+}
+
+.device-interface-icon:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+.device-interface-marker {
+  align-items: center;
+  background: var(--brand);
+  border: 2px solid var(--panel-bg);
+  border-radius: 50%;
+  color: white;
+  display: inline-flex;
+  height: 17px;
+  justify-content: center;
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  width: 17px;
+}
+
 .device-icon-stack {
   align-items: center;
   display: inline-flex;
