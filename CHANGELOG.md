@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.19.0 - 2026-09-19
+
 - Added ntfy notification delivery with configurable server, topic, priority, connection testing, delivery history, retries, and a branded settings icon.
 - Added a configurable LanGuard update-check interval to notification settings.
 - Added a Needs Attention device filter and a bulk action for marking selected attention findings as reviewed.
