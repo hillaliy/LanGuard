@@ -85,6 +85,21 @@ class DetailedPortScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 409)
 
+    def test_rejects_detailed_scan_for_offline_device(self):
+        self.device.online = False
+        self.device.status = Device.Status.OFFLINE
+        self.device.save(update_fields=["online", "status"])
+
+        response = self.client.post(
+            "/api/v1/device/port-scan/",
+            {"device": self.device.id, "ports": "22, 80"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["notification"]["title"], "Device is not online")
+        self.assertFalse(DetailedPortScan.objects.filter(device=self.device).exists())
+
     def test_user_needs_edit_or_scan_permission(self):
         UserAccess.objects.create(
             user=self.user,
@@ -167,6 +182,66 @@ class DetailedPortScanApiTests(TestCase):
         self.assertTrue(DevicePort.objects.get(device=self.device, port=22).open)
         self.device.refresh_from_db()
         self.assertIsNotNone(self.device.last_port_scan)
+
+    @patch("core.detailed_port_scans.scan_open_ports")
+    def test_worker_fails_queued_scan_when_device_goes_offline(self, scan_ports):
+        existing_port = DevicePort.objects.create(device=self.device, port=80, open=True)
+        DetailedPortScan.objects.create(
+            device=self.device,
+            requested_by=self.user,
+            ports=[22],
+            total_ports=1,
+        )
+        self.device.online = False
+        self.device.status = Device.Status.OFFLINE
+        self.device.save(update_fields=["online", "status"])
+
+        result = process_next_detailed_port_scan()
+
+        result.refresh_from_db()
+        existing_port.refresh_from_db()
+        self.device.refresh_from_db()
+        self.assertEqual(result.status, DetailedPortScan.Status.FAILED)
+        self.assertIn("no longer online", result.error)
+        self.assertEqual(result.scanned_ports, 0)
+        self.assertTrue(existing_port.open)
+        self.assertIsNone(self.device.last_port_scan)
+        scan_ports.assert_not_called()
+
+    @patch("core.detailed_port_scans.sync_device_ports")
+    @patch("core.detailed_port_scans.scan_open_ports")
+    def test_worker_does_not_update_ports_if_device_drops_during_scan(
+        self,
+        scan_ports,
+        sync_ports,
+    ):
+        existing_port = DevicePort.objects.create(device=self.device, port=80, open=True)
+        DetailedPortScan.objects.create(
+            device=self.device,
+            requested_by=self.user,
+            ports=[22],
+            total_ports=1,
+        )
+
+        def take_device_offline(_ip, ports, timeout):
+            del timeout
+            self.device.online = False
+            self.device.status = Device.Status.OFFLINE
+            self.device.save(update_fields=["online", "status"])
+            return [{"port": ports[0], "protocol": "tcp", "service": "ssh"}]
+
+        scan_ports.side_effect = take_device_offline
+
+        result = process_next_detailed_port_scan()
+
+        result.refresh_from_db()
+        existing_port.refresh_from_db()
+        self.device.refresh_from_db()
+        self.assertEqual(result.status, DetailedPortScan.Status.FAILED)
+        self.assertIn("no longer online", result.error)
+        self.assertTrue(existing_port.open)
+        self.assertIsNone(self.device.last_port_scan)
+        sync_ports.assert_not_called()
 
     @override_settings(DETAILED_PORT_SCAN_MAX_SECONDS=0)
     def test_worker_records_timeout(self):

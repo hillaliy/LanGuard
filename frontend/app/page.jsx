@@ -3194,7 +3194,7 @@ function DeviceDetailsPage({
               </Group>
             ) : (
               <Group gap="xs">
-              {(canEditDevices || canRunScans) && !device.archived && (
+              {(canEditDevices || canRunScans) && !device.archived && device.status === 'online' && (
                 <Button
                   variant="light"
                   leftSection={<IconRadar size={18} />}

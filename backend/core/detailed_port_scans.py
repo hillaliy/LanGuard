@@ -5,11 +5,14 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from .models import DetailedPortScan
+from .models import DetailedPortScan, Device
 from .scan import scan_open_ports, sync_device_ports
 
 
 LOGGER = logging.getLogger(__name__)
+OFFLINE_DEVICE_ERROR = (
+    "The device is no longer online. Its saved port inventory was not updated."
+)
 
 
 def parse_port_specification(value, max_ports=None):
@@ -95,7 +98,23 @@ def finish_cancelled_scan(job):
     return job
 
 
+def fail_offline_scan(job):
+    job.status = DetailedPortScan.Status.FAILED
+    job.finished_at = timezone.now()
+    job.error = OFFLINE_DEVICE_ERROR
+    job.save(update_fields=["status", "finished_at", "error"])
+    return job
+
+
+def scan_device_is_online(job):
+    job.device.refresh_from_db(fields=["status"])
+    return job.device.status == Device.Status.ONLINE
+
+
 def run_detailed_port_scan(job):
+    if not scan_device_is_online(job):
+        return fail_offline_scan(job)
+
     deadline = time.monotonic() + settings.DETAILED_PORT_SCAN_MAX_SECONDS
     open_ports = []
 
@@ -124,6 +143,8 @@ def run_detailed_port_scan(job):
         job.refresh_from_db(fields=["cancel_requested"])
         if job.cancel_requested:
             return finish_cancelled_scan(job)
+        if not scan_device_is_online(job):
+            return fail_offline_scan(job)
 
         stats = sync_device_ports(
             job.device,
