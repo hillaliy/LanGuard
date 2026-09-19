@@ -96,6 +96,8 @@ def build_diagnostics_report():
             "discord_configured": bool(config.discord_webhook),
             "telegram_enabled": config.telegram_enabled,
             "telegram_configured": bool(config.telegram_token and config.telegram_user_id),
+            "ntfy_enabled": config.ntfy_enabled,
+            "ntfy_configured": bool(config.ntfy_server_url and config.ntfy_topic),
             "webhook_enabled": config.webhook_enabled,
             "webhook_configured": bool(config.webhook_url),
             "webhook_signature_configured": bool(config.webhook_secret),

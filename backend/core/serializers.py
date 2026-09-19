@@ -729,6 +729,7 @@ class NotificationTestSerializer(serializers.Serializer):
         choices=(
             NotificationDelivery.Channel.DISCORD,
             NotificationDelivery.Channel.TELEGRAM,
+            NotificationDelivery.Channel.NTFY,
             NotificationDelivery.Channel.WEBHOOK,
         )
     )
@@ -755,6 +756,21 @@ class NotificationTestSerializer(serializers.Serializer):
         allow_blank=True,
         max_length=64,
     )
+    ntfy_server_url = serializers.URLField(
+        required=False,
+        allow_blank=True,
+        max_length=2048,
+    )
+    ntfy_topic = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=255,
+    )
+    ntfy_priority = serializers.ChoiceField(
+        required=False,
+        choices=(1, 2, 3, 4, 5),
+        default=3,
+    )
 
     def validate(self, attrs):
         channel = attrs["channel"]
@@ -776,6 +792,15 @@ class NotificationTestSerializer(serializers.Serializer):
                             "Enter both a Telegram bot token and user ID."
                         )
                     }
+                )
+        elif channel == NotificationDelivery.Channel.NTFY:
+            if not attrs.get("ntfy_server_url", "").strip():
+                raise serializers.ValidationError(
+                    {"ntfy_server_url": "Enter an ntfy server URL."}
+                )
+            if not attrs.get("ntfy_topic", "").strip():
+                raise serializers.ValidationError(
+                    {"ntfy_topic": "Enter an ntfy topic."}
                 )
         elif channel == NotificationDelivery.Channel.WEBHOOK:
             if not attrs.get("webhook_url", "").strip():
@@ -826,6 +851,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     scan_max_hosts = serializers.SerializerMethodField()
     discord_configured = serializers.SerializerMethodField()
     telegram_configured = serializers.SerializerMethodField()
+    ntfy_configured = serializers.SerializerMethodField()
     webhook_configured = serializers.SerializerMethodField()
     webhook_signature_configured = serializers.SerializerMethodField()
     adguard_configured = serializers.SerializerMethodField()
@@ -905,6 +931,11 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "telegram_token",
             "telegram_user_id",
             "telegram_configured",
+            "ntfy_enabled",
+            "ntfy_server_url",
+            "ntfy_topic",
+            "ntfy_priority",
+            "ntfy_configured",
             "webhook_enabled",
             "webhook_url",
             "webhook_secret",
@@ -944,6 +975,8 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         )
         extra_kwargs = {
             "telegram_user_id": {"required": False, "allow_blank": True},
+            "ntfy_server_url": {"required": False, "allow_blank": True},
+            "ntfy_topic": {"required": False, "allow_blank": True},
             "webhook_url": {"required": False, "allow_blank": True},
             "adguard_url": {"required": False, "allow_blank": True},
             "adguard_username": {"required": False, "allow_blank": True},
@@ -964,6 +997,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.BooleanField)
     def get_telegram_configured(self, obj):
         return bool(obj.telegram_token and obj.telegram_user_id)
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_ntfy_configured(self, obj):
+        return bool(obj.ntfy_server_url and obj.ntfy_topic)
 
     @extend_schema_field(serializers.BooleanField)
     def get_webhook_configured(self, obj):
@@ -1067,6 +1104,28 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         if webhook_enabled and not webhook_url:
             raise serializers.ValidationError(
                 {"webhook_url": "Configure the webhook URL before enabling delivery."}
+            )
+
+        ntfy_enabled = attrs.get(
+            "ntfy_enabled",
+            self.instance.ntfy_enabled if self.instance else False,
+        )
+        ntfy_server_url = attrs.get(
+            "ntfy_server_url",
+            self.instance.ntfy_server_url if self.instance else "",
+        )
+        ntfy_topic = attrs.get(
+            "ntfy_topic",
+            self.instance.ntfy_topic if self.instance else "",
+        )
+        if ntfy_enabled and (not ntfy_server_url or not ntfy_topic):
+            raise serializers.ValidationError(
+                {
+                    "ntfy": (
+                        "Configure the ntfy server URL and topic before enabling "
+                        "delivery."
+                    )
+                }
             )
 
         enabled = attrs.get(
