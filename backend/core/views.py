@@ -86,7 +86,12 @@ from .scan import (
     scan,
     validate_ip_ranges,
 )
-from .notifications import send_discord_test, send_telegram_test, send_webhook_test
+from .notifications import (
+    send_discord_test,
+    send_ntfy_test,
+    send_telegram_test,
+    send_webhook_test,
+)
 from .adguard import AdGuardError, sync_adguard_query_log, test_adguard_connection
 from .speedtest_tracker import SpeedtestTrackerError, latest_speedtest_result
 from .diagnostics import build_diagnostics_report
@@ -1487,7 +1492,13 @@ def test_notification_channel(request):
                 data.get("telegram_token", "").strip() or saved_token,
                 data["telegram_user_id"].strip(),
             )
-        else:
+        elif channel == NotificationDelivery.Channel.NTFY:
+            send_ntfy_test(
+                data["ntfy_server_url"].strip(),
+                data["ntfy_topic"].strip(),
+                data["ntfy_priority"],
+            )
+        elif channel == NotificationDelivery.Channel.WEBHOOK:
             saved_secret = AppSettings.load().webhook_secret
             send_webhook_test(
                 data["webhook_url"].strip(),

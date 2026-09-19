@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Added ntfy notification delivery with configurable server, topic, priority, connection testing, delivery history, retries, and a branded settings icon.
+- Added a configurable LanGuard update-check interval to notification settings.
+- Added a Needs Attention device filter and a bulk action for marking selected attention findings as reviewed.
+- Added marked device-icon shortcuts that open configured device web interfaces directly from desktop and mobile inventory lists.
+- Automatically clear resolved IP and MAC identity-conflict warnings after later scans consistently identify the devices correctly.
+- Prevent detailed port scans from starting for offline devices or replacing saved port inventory when a device goes offline during a scan.
+- Renamed the generic TCP port 8080 risk label from Admin web to Web/API service.
+
 ## 1.18.0 - 2026-09-16
 
 - Fixed HomeBox device-link searches so asset IDs are matched reliably.

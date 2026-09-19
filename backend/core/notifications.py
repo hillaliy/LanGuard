@@ -41,6 +41,12 @@ def configured_channels(app_config=None):
         and app_config.telegram_user_id
     ):
         channels.append(NotificationDelivery.Channel.TELEGRAM)
+    if (
+        app_config.ntfy_enabled
+        and app_config.ntfy_server_url
+        and app_config.ntfy_topic
+    ):
+        channels.append(NotificationDelivery.Channel.NTFY)
     if app_config.webhook_enabled and app_config.webhook_url:
         channels.append(NotificationDelivery.Channel.WEBHOOK)
     return channels
@@ -235,6 +241,8 @@ def send_delivery(delivery, app_config=None):
             send_discord(delivery.event, app_config)
         elif delivery.channel == NotificationDelivery.Channel.TELEGRAM:
             send_telegram(delivery.event, app_config)
+        elif delivery.channel == NotificationDelivery.Channel.NTFY:
+            send_ntfy(delivery.event, app_config)
         elif delivery.channel == NotificationDelivery.Channel.WEBHOOK:
             send_webhook(delivery, app_config)
         else:
@@ -277,6 +285,37 @@ def send_telegram(event, app_config):
             "text": format_event_message(event),
             "disable_web_page_preview": True,
         },
+        timeout=settings.NOTIFICATION_TIMEOUT,
+    )
+    response.raise_for_status()
+
+
+def ntfy_payload(event, topic, priority):
+    device = event.device
+    message_lines = [event.message]
+    if device:
+        message_lines.extend(
+            [
+                f"Device: {device.name}",
+                f"IP: {device.ip}",
+                f"MAC: {device.mac}",
+            ]
+        )
+        if device.vendor:
+            message_lines.append(f"Vendor: {device.vendor}")
+    return {
+        "topic": topic,
+        "title": f"LanGuard: {event.get_event_type_display()}",
+        "message": "\n".join(message_lines),
+        "priority": priority,
+        "tags": ["shield"],
+    }
+
+
+def send_ntfy(event, app_config):
+    response = requests.post(
+        app_config.ntfy_server_url,
+        json=ntfy_payload(event, app_config.ntfy_topic, app_config.ntfy_priority),
         timeout=settings.NOTIFICATION_TIMEOUT,
     )
     response.raise_for_status()
@@ -334,6 +373,21 @@ def send_telegram_test(token, user_id):
             "chat_id": user_id,
             "text": f"LanGuard: Test notification\n{TEST_NOTIFICATION_MESSAGE}",
             "disable_web_page_preview": True,
+        },
+        timeout=settings.NOTIFICATION_TIMEOUT,
+    )
+    response.raise_for_status()
+
+
+def send_ntfy_test(server_url, topic, priority=3):
+    response = requests.post(
+        server_url,
+        json={
+            "topic": topic,
+            "title": "LanGuard: Test notification",
+            "message": TEST_NOTIFICATION_MESSAGE,
+            "priority": priority,
+            "tags": ["white_check_mark"],
         },
         timeout=settings.NOTIFICATION_TIMEOUT,
     )

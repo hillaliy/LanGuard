@@ -354,6 +354,7 @@ class NotificationDelivery(models.Model):
     class Channel(models.TextChoices):
         DISCORD = "discord", "Discord"
         TELEGRAM = "telegram", "Telegram"
+        NTFY = "ntfy", "ntfy"
         WEBHOOK = "webhook", "Webhook"
 
     class Status(models.TextChoices):
@@ -424,6 +425,19 @@ class AppSettings(models.Model):
     telegram_enabled = models.BooleanField(default=True)
     telegram_token = models.CharField(max_length=255, blank=True, default="")
     telegram_user_id = models.CharField(max_length=64, blank=True, default="")
+    ntfy_enabled = models.BooleanField(default=False)
+    ntfy_server_url = models.URLField(max_length=2048, blank=True, default="")
+    ntfy_topic = models.CharField(max_length=255, blank=True, default="")
+    ntfy_priority = models.PositiveSmallIntegerField(
+        choices=(
+            (1, "Min"),
+            (2, "Low"),
+            (3, "Default"),
+            (4, "High"),
+            (5, "Max"),
+        ),
+        default=3,
+    )
     webhook_enabled = models.BooleanField(default=False)
     webhook_url = models.URLField(max_length=2048, blank=True, default="")
     webhook_secret = models.CharField(max_length=255, blank=True, default="")
@@ -502,6 +516,10 @@ class AppSettings(models.Model):
             "telegram_enabled": settings.NOTIFICATIONS_ENABLED,
             "telegram_token": settings.TELEGRAM_TOKEN or "",
             "telegram_user_id": settings.TELEGRAM_USERID or "",
+            "ntfy_enabled": False,
+            "ntfy_server_url": "",
+            "ntfy_topic": "",
+            "ntfy_priority": 3,
             "webhook_enabled": False,
             "webhook_url": "",
             "webhook_secret": "",

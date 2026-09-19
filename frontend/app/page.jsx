@@ -4231,14 +4231,19 @@ function SettingsPage({ onSaved }) {
   const [timeZone, setTimeZone] = useState('UTC');
   const [discordEnabled, setDiscordEnabled] = useState(true);
   const [telegramEnabled, setTelegramEnabled] = useState(true);
+  const [ntfyEnabled, setNtfyEnabled] = useState(false);
   const [webhookEnabled, setWebhookEnabled] = useState(false);
   const [discordConfigured, setDiscordConfigured] = useState(false);
   const [telegramConfigured, setTelegramConfigured] = useState(false);
+  const [ntfyConfigured, setNtfyConfigured] = useState(false);
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   const [webhookSignatureConfigured, setWebhookSignatureConfigured] = useState(false);
   const [discordWebhook, setDiscordWebhook] = useState('');
   const [telegramToken, setTelegramToken] = useState('');
   const [telegramUserId, setTelegramUserId] = useState('');
+  const [ntfyServerUrl, setNtfyServerUrl] = useState('');
+  const [ntfyTopic, setNtfyTopic] = useState('');
+  const [ntfyPriority, setNtfyPriority] = useState('3');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [webhookSecret, setWebhookSecret] = useState('');
   const [clearWebhookSecret, setClearWebhookSecret] = useState(false);
@@ -4314,14 +4319,19 @@ function SettingsPage({ onSaved }) {
       setTimeZone(data.time_zone || 'UTC');
       setDiscordEnabled(Boolean(data.discord_enabled));
       setTelegramEnabled(Boolean(data.telegram_enabled));
+      setNtfyEnabled(Boolean(data.ntfy_enabled));
       setWebhookEnabled(Boolean(data.webhook_enabled));
       setDiscordConfigured(Boolean(data.discord_configured));
       setTelegramConfigured(Boolean(data.telegram_configured));
+      setNtfyConfigured(Boolean(data.ntfy_configured));
       setWebhookConfigured(Boolean(data.webhook_configured));
       setWebhookSignatureConfigured(Boolean(data.webhook_signature_configured));
       setDiscordWebhook('');
       setTelegramToken('');
       setTelegramUserId(data.telegram_user_id || '');
+      setNtfyServerUrl(data.ntfy_server_url || '');
+      setNtfyTopic(data.ntfy_topic || '');
+      setNtfyPriority(String(data.ntfy_priority || 3));
       setWebhookUrl(data.webhook_url || '');
       setWebhookSecret('');
       setClearWebhookSecret(false);
@@ -4389,6 +4399,10 @@ function SettingsPage({ onSaved }) {
         time_zone: timeZone,
         discord_enabled: discordEnabled,
         telegram_enabled: telegramEnabled,
+        ntfy_enabled: ntfyEnabled,
+        ntfy_server_url: ntfyServerUrl.trim(),
+        ntfy_topic: ntfyTopic.trim(),
+        ntfy_priority: Number(ntfyPriority),
         webhook_enabled: webhookEnabled,
         notify_new_devices: notifyNewDevices,
         notify_device_online: notifyDeviceOnline,
@@ -4492,6 +4506,13 @@ function SettingsPage({ onSaved }) {
         if (telegramToken.trim()) {
           body.telegram_token = telegramToken.trim();
         }
+      } else if (channel === 'ntfy') {
+        body = {
+          channel,
+          ntfy_server_url: ntfyServerUrl.trim(),
+          ntfy_topic: ntfyTopic.trim(),
+          ntfy_priority: Number(ntfyPriority),
+        };
       } else {
         body = {
           channel,
@@ -5025,6 +5046,71 @@ function SettingsPage({ onSaved }) {
                   Boolean(testingChannel && testingChannel !== 'discord')
                 }
                 onClick={() => testNotificationChannel('discord')}
+              >
+                <IconSend size={18} />
+              </ActionIcon>
+            </Tooltip>
+          </Group>
+        </Stack>
+
+        <Stack className="settings-subsection" gap="sm">
+          <Group justify="space-between">
+            <Group gap="sm">
+              <Group gap={6}>
+                <Image src="/integrations/ntfy.svg" alt="" w={18} h={18} />
+                <Text fw={700}>ntfy</Text>
+              </Group>
+              <Switch
+                label="Enabled"
+                checked={ntfyEnabled}
+                onChange={(event) => setNtfyEnabled(event.currentTarget.checked)}
+              />
+            </Group>
+            <Badge color={ntfyConfigured && ntfyEnabled ? 'teal' : 'gray'} variant="light">
+              {ntfyConfigured ? 'Configured' : 'Not configured'}
+            </Badge>
+          </Group>
+          <Group align="flex-end" wrap="wrap">
+            <TextInput
+              style={{ flex: '1 1 320px' }}
+              label="ntfy server URL"
+              description="Use ntfy.sh or the root URL of your self-hosted ntfy server."
+              placeholder="https://ntfy.sh"
+              value={ntfyServerUrl}
+              onChange={(event) => setNtfyServerUrl(event.currentTarget.value)}
+            />
+            <TextInput
+              style={{ flex: '1 1 220px' }}
+              label="Topic"
+              placeholder="languard-alerts"
+              value={ntfyTopic}
+              onChange={(event) => setNtfyTopic(event.currentTarget.value)}
+            />
+            <Select
+              style={{ flex: '0 1 180px' }}
+              label="Priority"
+              value={ntfyPriority}
+              onChange={(value) => setNtfyPriority(value || '3')}
+              data={[
+                { value: '1', label: 'Min' },
+                { value: '2', label: 'Low' },
+                { value: '3', label: 'Default' },
+                { value: '4', label: 'High' },
+                { value: '5', label: 'Max' },
+              ]}
+            />
+            <Tooltip label="Send test notification">
+              <ActionIcon
+                size={36}
+                variant="light"
+                aria-label="Send ntfy test notification"
+                loading={testingChannel === 'ntfy'}
+                disabled={
+                  !ntfyServerUrl.trim() ||
+                  !ntfyTopic.trim() ||
+                  Boolean(testingChannel && testingChannel !== 'ntfy')
+                }
+                onClick={() => testNotificationChannel('ntfy')}
               >
                 <IconSend size={18} />
               </ActionIcon>

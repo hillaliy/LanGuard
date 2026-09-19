@@ -29,7 +29,7 @@
 </p>
 
 LanGuard finds devices, tracks online and offline state, scans common ports,
-keeps network history, and can send Discord, Telegram, or automation webhook
+keeps network history, and can send Discord, Telegram, ntfy, or automation webhook
 alerts when new devices appear.
 
 ## Preview
@@ -73,7 +73,7 @@ alerts when new devices appear.
 
 **Notify and integrate**
 
-- Send Discord, Telegram, or generic webhook alerts for new devices and important changes
+- Send Discord, Telegram, ntfy, or generic webhook alerts for new devices and important changes
 - Sync per-device DNS destinations and blocked-query totals from AdGuard Home
 - Show the latest Speedtest Tracker result on the Docker dashboard
 - Use Swagger, ReDoc, and the OpenAPI schema for integrations

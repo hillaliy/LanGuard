@@ -1,6 +1,6 @@
 # Integration icon attribution
 
-The AdGuard Home, Speedtest Tracker, HomeBox, NetAlertX, and WatchYourLAN icons
+The AdGuard Home, Speedtest Tracker, HomeBox, NetAlertX, ntfy, and WatchYourLAN icons
 in this directory come from the
 [selfh.st/icons](https://github.com/selfhst/icons) collection and are used under
 the [Creative Commons Attribution 4.0 International

@@ -37,6 +37,7 @@ from .notifications import (
     quiet_hours_active,
     retry_failed_notifications,
     send_discord_test,
+    send_ntfy_test,
     send_telegram_test,
     send_webhook_test,
 )
@@ -2220,6 +2221,53 @@ class NotificationTests(TestCase):
 
     @override_settings(NOTIFICATION_TIMEOUT=1)
     @patch("core.notifications.requests.post")
+    def test_ntfy_test_uses_configured_topic_and_priority(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+
+        send_ntfy_test("https://ntfy.example", "languard", 4)
+
+        post.assert_called_once()
+        self.assertEqual(post.call_args.args[0], "https://ntfy.example")
+        self.assertEqual(
+            post.call_args.kwargs["json"],
+            {
+                "topic": "languard",
+                "title": "LanGuard: Test notification",
+                "message": (
+                    "This is a test notification from LanGuard. "
+                    "Your notification channel is working."
+                ),
+                "priority": 4,
+                "tags": ["white_check_mark"],
+            },
+        )
+
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
+    def test_ntfy_notification_delivery_is_recorded(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        AppSettings.objects.create(
+            ntfy_enabled=True,
+            ntfy_server_url="https://ntfy.example",
+            ntfy_topic="languard",
+            ntfy_priority=4,
+        )
+
+        deliveries = notify_event(self.event)
+
+        self.assertEqual(len(deliveries), 1)
+        delivery = NotificationDelivery.objects.get(event=self.event)
+        self.assertEqual(delivery.channel, NotificationDelivery.Channel.NTFY)
+        self.assertEqual(delivery.status, NotificationDelivery.Status.SENT)
+        self.assertEqual(post.call_args.args[0], "https://ntfy.example")
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["topic"], "languard")
+        self.assertEqual(payload["title"], "LanGuard: New device")
+        self.assertEqual(payload["priority"], 4)
+        self.assertIn("Device: Camera", payload["message"])
+
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
     def test_webhook_test_uses_structured_payload(self, post):
         post.return_value = Mock(raise_for_status=Mock())
 
@@ -3511,6 +3559,36 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         send_test.assert_called_once_with("saved-bot-token", "123456")
 
+    @patch("core.views.send_ntfy_test")
+    def test_notification_test_endpoint_sends_ntfy(self, send_test):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "ntfy",
+                "ntfy_server_url": "https://ntfy.example",
+                "ntfy_topic": "languard",
+                "ntfy_priority": 5,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["channel"], "ntfy")
+        send_test.assert_called_once_with("https://ntfy.example", "languard", 5)
+
+    def test_notification_test_endpoint_rejects_incomplete_ntfy_settings(self):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "ntfy",
+                "ntfy_server_url": "https://ntfy.example",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("ntfy_topic", response.data)
+
     @patch("core.views.send_webhook_test")
     def test_notification_test_endpoint_sends_webhook(self, send_test):
         config = AppSettings.load()
@@ -3650,6 +3728,7 @@ class ScanApiTests(TestCase):
                 "version_check_interval": 3600,
                 "discord_enabled": False,
                 "telegram_enabled": True,
+                "ntfy_enabled": True,
                 "webhook_enabled": True,
                 "notify_new_devices": True,
                 "notify_device_online": True,
@@ -3665,6 +3744,9 @@ class ScanApiTests(TestCase):
                 "discord_webhook": "https://discord.example/webhook",
                 "telegram_token": "token",
                 "telegram_user_id": "123",
+                "ntfy_server_url": "https://ntfy.example",
+                "ntfy_topic": "languard",
+                "ntfy_priority": 4,
                 "webhook_url": "https://automation.example/webhook/languard",
                 "webhook_secret": "shared-secret",
                 "home_map_layout": {
@@ -3684,6 +3766,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(config.version_check_interval, 3600)
         self.assertFalse(config.discord_enabled)
         self.assertTrue(config.telegram_enabled)
+        self.assertTrue(config.ntfy_enabled)
         self.assertTrue(config.webhook_enabled)
         self.assertTrue(config.notify_new_devices)
         self.assertTrue(config.notify_device_online)
@@ -3703,6 +3786,9 @@ class ScanApiTests(TestCase):
         self.assertEqual(config.discord_webhook, "https://discord.example/webhook")
         self.assertEqual(config.telegram_token, "token")
         self.assertEqual(config.telegram_user_id, "123")
+        self.assertEqual(config.ntfy_server_url, "https://ntfy.example")
+        self.assertEqual(config.ntfy_topic, "languard")
+        self.assertEqual(config.ntfy_priority, 4)
         self.assertEqual(
             config.webhook_url,
             "https://automation.example/webhook/languard",
@@ -3713,6 +3799,8 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["data"]["telegram_user_id"], "123")
         self.assertFalse(response.data["data"]["discord_enabled"])
         self.assertTrue(response.data["data"]["telegram_enabled"])
+        self.assertTrue(response.data["data"]["ntfy_enabled"])
+        self.assertTrue(response.data["data"]["ntfy_configured"])
         self.assertTrue(response.data["data"]["webhook_enabled"])
         self.assertTrue(response.data["data"]["webhook_configured"])
         self.assertTrue(response.data["data"]["webhook_signature_configured"])
