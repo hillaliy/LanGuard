@@ -5347,6 +5347,54 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 202)
         self.device.refresh_from_db()
         self.assertEqual(self.device.external_url, "https://192.168.1.10:8443")
+        self.assertFalse(self.device.external_url_follow_device_ip)
+
+    def test_device_external_link_can_follow_current_ipv4(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {
+                "external_url": "http://192.168.1.10:8080/admin?tab=status#network",
+                "external_url_follow_device_ip": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        device = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
+        self.assertEqual(
+            device["effective_external_url"],
+            "http://192.168.1.20:8080/admin?tab=status#network",
+        )
+
+        self.device.ip = "192.168.1.35"
+        self.device.save(update_fields=["ip"])
+        device = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
+        self.assertEqual(
+            device["effective_external_url"],
+            "http://192.168.1.35:8080/admin?tab=status#network",
+        )
+
+    def test_fixed_external_link_does_not_follow_device_ip(self):
+        self.device.external_url = "https://device.example.test/admin"
+        self.device.save(update_fields=["external_url"])
+
+        device = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
+
+        self.assertFalse(device["external_url_follow_device_ip"])
+        self.assertEqual(device["effective_external_url"], "https://device.example.test/admin")
+
+    def test_device_rejects_follow_ip_for_hostname_link(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {
+                "external_url": "https://device.example.test/admin",
+                "external_url_follow_device_ip": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("external_url_follow_device_ip", response.data["info"])
 
     def test_device_can_save_presence_notification_preferences(self):
         response = self.client.put(
@@ -5383,6 +5431,16 @@ class ScanApiTests(TestCase):
         response = self.client.put(
             f"/api/v1/device/?id={self.device.id}",
             {"external_url": "javascript:alert(1)"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("external_url", response.data["info"])
+
+    def test_device_rejects_external_link_with_embedded_credentials(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {"external_url": "https://admin:secret@192.168.1.20/"},
             format="json",
         )
 
@@ -5516,6 +5574,7 @@ class ScanApiTests(TestCase):
         self.device.is_visitor = True
         self.device.comments = "Demo note"
         self.device.external_url = "https://192.168.1.10"
+        self.device.external_url_follow_device_ip = True
         self.device.online_notification_preference = Device.NotificationPreference.ALWAYS
         self.device.offline_notification_preference = Device.NotificationPreference.NEVER
         self.device.save(
@@ -5524,6 +5583,7 @@ class ScanApiTests(TestCase):
                 "is_visitor",
                 "comments",
                 "external_url",
+                "external_url_follow_device_ip",
                 "online_notification_preference",
                 "offline_notification_preference",
             ]
@@ -5545,6 +5605,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(exported_device["open_ports"], [80])
         self.assertEqual(exported_device["comments"], "Demo note")
         self.assertEqual(exported_device["external_url"], "https://192.168.1.10")
+        self.assertTrue(exported_device["external_url_follow_device_ip"])
         self.assertEqual(exported_device["online_notification_preference"], "always")
         self.assertEqual(exported_device["offline_notification_preference"], "never")
         self.assertTrue(exported_device["is_visitor"])
@@ -5893,6 +5954,7 @@ class ScanApiTests(TestCase):
                         "known": True,
                         "comments": "Remote Desktop is expected.",
                         "external_url": "http://192.168.1.20:8080",
+                        "external_url_follow_device_ip": True,
                         "attention_acknowledged": True,
                         "open_ports": [3389],
                     }
@@ -5905,6 +5967,7 @@ class ScanApiTests(TestCase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.comments, "Remote Desktop is expected.")
         self.assertEqual(self.device.external_url, "http://192.168.1.20:8080")
+        self.assertTrue(self.device.external_url_follow_device_ip)
         imported = self.client.get("/api/v1/device/", {"id": self.device.id}).data["data"]
         self.assertTrue(imported["attention_acknowledged"])
         self.assertFalse(imported["needs_attention"])

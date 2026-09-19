@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added optional dynamic External links that follow a device's current IPv4 address while preserving the configured scheme, port, path, query, and fragment.
+
 ## 1.19.0 - 2026-09-19
 
 - Added ntfy notification delivery with configurable server, topic, priority, connection testing, delivery history, retries, and a branded settings icon.

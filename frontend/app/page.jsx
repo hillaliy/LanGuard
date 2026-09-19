@@ -147,14 +147,54 @@ function validExternalUrl(value) {
   }
   try {
     const url = new URL(candidate);
-    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname);
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:')
+      && Boolean(url.hostname)
+      && !url.username
+      && !url.password
+    );
   } catch {
     return false;
   }
 }
 
+function externalUrlUsesIPv4(value) {
+  if (!validExternalUrl(value)) {
+    return false;
+  }
+  const parts = new URL(String(value).trim()).hostname.split('.');
+  return parts.length === 4 && parts.every((part) => {
+    if (!/^\d{1,3}$/.test(part)) {
+      return false;
+    }
+    const number = Number(part);
+    return number >= 0 && number <= 255;
+  });
+}
+
+function resolveExternalUrl(value, deviceIp, followDeviceIp) {
+  const candidate = String(value || '').trim();
+  if (!followDeviceIp || !externalUrlUsesIPv4(candidate)) {
+    return candidate;
+  }
+  try {
+    const url = new URL(candidate);
+    const authorityStart = candidate.indexOf('//') + 2;
+    const authorityEndMatch = candidate.slice(authorityStart).search(/[/?#]/);
+    const authorityEnd = authorityEndMatch === -1
+      ? candidate.length
+      : authorityStart + authorityEndMatch;
+    const port = url.port ? `:${url.port}` : '';
+    return `${candidate.slice(0, authorityStart)}${deviceIp}${port}${candidate.slice(authorityEnd)}`;
+  } catch {
+    return candidate;
+  }
+}
+
 function DeviceListIcon({ device, className, size, interfaceEnabled = true }) {
-  const externalUrl = String(device?.external_url || '').trim();
+  const externalUrl = String(
+    device?.effective_external_url || device?.external_url || ''
+  ).trim();
   const icon = <DeviceIconStack device={device} size={size} />;
   if (!interfaceEnabled || !externalUrl || !validExternalUrl(externalUrl)) {
     return <span className={className}>{icon}</span>;
@@ -2706,6 +2746,7 @@ function DeviceDetailsPage({
   const [offlineNotificationPreference, setOfflineNotificationPreference] = useState('inherit');
   const [comments, setComments] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
+  const [externalUrlFollowDeviceIp, setExternalUrlFollowDeviceIp] = useState(false);
   const [homeboxItemId, setHomeboxItemId] = useState(null);
   const [detectedWebUrl, setDetectedWebUrl] = useState('');
   const [detectingWebUrl, setDetectingWebUrl] = useState(false);
@@ -2747,12 +2788,17 @@ function DeviceDetailsPage({
     setOfflineNotificationPreference(nextDevice?.offline_notification_preference || 'inherit');
     setComments(nextDevice?.comments || '');
     setExternalUrl(nextDevice?.external_url || '');
+    setExternalUrlFollowDeviceIp(Boolean(nextDevice?.external_url_follow_device_ip));
     setHomeboxItemId(nextDevice?.homebox_item_id || null);
     setAttentionAcknowledged(Boolean(nextDevice?.attention_acknowledged));
   }
 
   function startEditing() {
     setActiveDeviceTab('overview');
+    if (!externalUrl.trim() && detectedWebUrl) {
+      setExternalUrl(detectedWebUrl);
+      setExternalUrlFollowDeviceIp(true);
+    }
     setEditing(true);
   }
 
@@ -3028,6 +3074,13 @@ function DeviceDetailsPage({
       setSaving(false);
       return;
     }
+    if (externalUrlFollowDeviceIp && !externalUrlUsesIPv4(externalUrl)) {
+      const message = 'Follow device IP requires an External link with an IPv4 address.';
+      setError(message);
+      showErrorNotification('Could not save device', message);
+      setSaving(false);
+      return;
+    }
     try {
       const payload = await apiRequest(`device/?id=${device.id}`, {
         method: 'PUT',
@@ -3043,6 +3096,7 @@ function DeviceDetailsPage({
           offline_notification_preference: offlineNotificationPreference,
           comments,
           external_url: externalUrl.trim(),
+          external_url_follow_device_ip: externalUrlFollowDeviceIp,
           homebox_item_id: homeboxItemId,
           acknowledge_attention: known && attentionAcknowledged,
         },
@@ -3174,7 +3228,12 @@ function DeviceDetailsPage({
   }
 
   const currentStatus = device ? deviceStatus(device) : null;
-  const activeUrl = externalUrl.trim() || detectedWebUrl;
+  const externalUrlCandidate = externalUrl.trim() || detectedWebUrl;
+  const activeUrl = resolveExternalUrl(
+    externalUrlCandidate,
+    device?.ip || '',
+    externalUrl.trim() ? externalUrlFollowDeviceIp : Boolean(detectedWebUrl)
+  );
 
   return (
     <Paper className="device-detail-page" radius="md">
@@ -3301,13 +3360,46 @@ function DeviceDetailsPage({
                         onChange={(value) => setRole(value || 'device')}
                       />
                     </Box>
-                    <TextInput
-                      label="External link"
-                      placeholder="https://192.168.0.20"
-                      value={externalUrl}
-                      error={!validExternalUrl(externalUrl) ? 'Enter a valid HTTP or HTTPS URL.' : null}
-                      onChange={(event) => setExternalUrl(event.currentTarget.value)}
-                    />
+                    <Stack gap="xs">
+                      <TextInput
+                        label="External link"
+                        placeholder="https://192.168.0.20"
+                        value={externalUrl}
+                        error={!validExternalUrl(externalUrl) ? 'Enter a valid HTTP or HTTPS URL without embedded credentials.' : null}
+                        onChange={(event) => {
+                          const nextExternalUrl = event.currentTarget.value;
+                          setExternalUrl(nextExternalUrl);
+                          if (!nextExternalUrl.trim()) {
+                            setExternalUrlFollowDeviceIp(false);
+                          }
+                        }}
+                      />
+                      {detectedWebUrl && !externalUrl.trim() && (
+                        <Button
+                          variant="subtle"
+                          size="compact-sm"
+                          w="fit-content"
+                          onClick={() => {
+                            setExternalUrl(detectedWebUrl);
+                            setExternalUrlFollowDeviceIp(true);
+                          }}
+                        >
+                          Use detected web interface
+                        </Button>
+                      )}
+                      <Switch
+                        label="Follow device IP"
+                        description="Replace only the link hostname when this device's IPv4 address changes."
+                        checked={externalUrlFollowDeviceIp}
+                        disabled={!externalUrlUsesIPv4(externalUrl)}
+                        onChange={(event) => setExternalUrlFollowDeviceIp(event.currentTarget.checked)}
+                      />
+                      {externalUrlFollowDeviceIp && activeUrl && (
+                        <Text size="xs" c="dimmed" className="wrap-text">
+                          Opens: {activeUrl}
+                        </Text>
+                      )}
+                    </Stack>
                     {device.homebox_available ? (
                       <HomeBoxItemPicker value={homeboxItemId} onChange={setHomeboxItemId} />
                     ) : homeboxItemId && (
