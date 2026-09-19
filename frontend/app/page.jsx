@@ -153,6 +153,34 @@ function validExternalUrl(value) {
   }
 }
 
+function DeviceListIcon({ device, className, size, interfaceEnabled = true }) {
+  const externalUrl = String(device?.external_url || '').trim();
+  const icon = <DeviceIconStack device={device} size={size} />;
+  if (!interfaceEnabled || !externalUrl || !validExternalUrl(externalUrl)) {
+    return <span className={className}>{icon}</span>;
+  }
+
+  return (
+    <Tooltip label="Open device interface">
+      <UnstyledButton
+        component="a"
+        className={`${className} device-interface-icon`}
+        href={externalUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Open ${displayDeviceName(device)} interface in a new tab`}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        {icon}
+        <span className="device-interface-marker" aria-hidden="true">
+          <IconExternalLink size={10} stroke={2.5} />
+        </span>
+      </UnstyledButton>
+    </Tooltip>
+  );
+}
+
 function normalizeMacText(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -7714,22 +7742,28 @@ function Dashboard({
                   <Stack ref={deviceListRef} className="device-list" gap={0}>
                     {filteredDevices.map((device) => (
                       <UnstyledButton
-                        component={bulkEditEnabled ? 'div' : 'button'}
+                        component="div"
                         className={`device-list-row${bulkEditEnabled ? ' bulk-edit' : ''}${selectedDeviceIds.includes(device.id) ? ' selected' : ''}`}
                         key={device.id}
-                        role={bulkEditEnabled ? 'checkbox' : undefined}
+                        role={bulkEditEnabled ? 'checkbox' : 'button'}
+                        aria-label={
+                          bulkEditEnabled
+                            ? `Select ${displayDeviceName(device)}`
+                            : `Open ${displayDeviceName(device)} details`
+                        }
                         aria-checked={bulkEditEnabled ? selectedDeviceIds.includes(device.id) : undefined}
-                        tabIndex={bulkEditEnabled ? 0 : undefined}
+                        tabIndex={0}
                         onClick={() => (
                           bulkEditEnabled ? toggleBulkDevice(device) : openDevicePage(device)
                         )}
                         onKeyDown={(event) => {
-                          if (
-                            bulkEditEnabled
-                            && (event.key === 'Enter' || event.key === ' ')
-                          ) {
+                          if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
-                            toggleBulkDevice(device);
+                            if (bulkEditEnabled) {
+                              toggleBulkDevice(device);
+                            } else {
+                              openDevicePage(device);
+                            }
                           }
                         }}
                       >
@@ -7743,9 +7777,12 @@ function Dashboard({
                           />
                         )}
                         <Group className="device-list-primary" gap="md" align="center" wrap="nowrap">
-                          <span className="device-list-icon">
-                            <DeviceIconStack device={device} size={21} />
-                          </span>
+                          <DeviceListIcon
+                            device={device}
+                            className="device-list-icon"
+                            size={21}
+                            interfaceEnabled={!bulkEditEnabled}
+                          />
                           <Box className="device-list-title">
                             <Group gap="xs" wrap="nowrap">
                               <Text fw={800} className="truncate-cell">{displayDeviceName(device)}</Text>
@@ -7850,22 +7887,28 @@ function Dashboard({
                   <Stack className="device-mobile-list" gap={0}>
                     {filteredDevices.map((device) => (
                       <UnstyledButton
-                        component={bulkEditEnabled ? 'div' : 'button'}
+                        component="div"
                         className={`device-mobile-row${bulkEditEnabled ? ' bulk-edit' : ''}${selectedDeviceIds.includes(device.id) ? ' selected' : ''}`}
                         key={device.id}
-                        role={bulkEditEnabled ? 'checkbox' : undefined}
+                        role={bulkEditEnabled ? 'checkbox' : 'button'}
+                        aria-label={
+                          bulkEditEnabled
+                            ? `Select ${displayDeviceName(device)}`
+                            : `Open ${displayDeviceName(device)} details`
+                        }
                         aria-checked={bulkEditEnabled ? selectedDeviceIds.includes(device.id) : undefined}
-                        tabIndex={bulkEditEnabled ? 0 : undefined}
+                        tabIndex={0}
                         onClick={() => (
                           bulkEditEnabled ? toggleBulkDevice(device) : openDevicePage(device)
                         )}
                         onKeyDown={(event) => {
-                          if (
-                            bulkEditEnabled
-                            && (event.key === 'Enter' || event.key === ' ')
-                          ) {
+                          if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
-                            toggleBulkDevice(device);
+                            if (bulkEditEnabled) {
+                              toggleBulkDevice(device);
+                            } else {
+                              openDevicePage(device);
+                            }
                           }
                         }}
                       >
@@ -7880,9 +7923,12 @@ function Dashboard({
                                 pointerEvents="none"
                               />
                             )}
-                            <span className="device-mobile-icon">
-                              <DeviceIconStack device={device} size={18} />
-                            </span>
+                            <DeviceListIcon
+                              device={device}
+                              className="device-mobile-icon"
+                              size={18}
+                              interfaceEnabled={!bulkEditEnabled}
+                            />
                             <Box className="device-mobile-title">
                               <Text fw={700} className="truncate-cell">{displayDeviceName(device)}</Text>
                               <DeviceStatusInline device={device} muted />
