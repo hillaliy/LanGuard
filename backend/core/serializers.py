@@ -1,6 +1,8 @@
 import hashlib
+import ipaddress
 import json
 from datetime import timedelta
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -424,6 +426,7 @@ def device_needs_attention(device, risk_data=None):
 class DeviceSerializer(serializers.ModelSerializer):
     homebox_link = serializers.SerializerMethodField()
     homebox_available = serializers.SerializerMethodField()
+    effective_external_url = serializers.CharField(read_only=True)
 
     def homebox_config(self):
         if "homebox_config" not in self.context:
@@ -522,10 +525,15 @@ class DeviceSerializer(serializers.ModelSerializer):
         value = (value or "").strip()
         if not value:
             return ""
-        from urllib.parse import urlparse
 
         parsed = urlparse(value)
-        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+        ):
             raise serializers.ValidationError("Enter a valid HTTP or HTTPS URL.")
         return value
 
@@ -563,6 +571,7 @@ class DeviceSerializer(serializers.ModelSerializer):
         return device_needs_attention(obj, self.get_device_risk(obj))
 
     def validate(self, attrs):
+        attrs = super().validate(attrs)
         requested_known = attrs.get("known")
         requested_visitor = attrs.get("is_visitor")
         if requested_known is False and requested_visitor is True:
@@ -579,6 +588,30 @@ class DeviceSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"acknowledge_attention": "Only known devices can be acknowledged."}
             )
+
+        external_url = attrs.get(
+            "external_url",
+            self.instance.external_url if self.instance else "",
+        )
+        follow_device_ip = attrs.get(
+            "external_url_follow_device_ip",
+            self.instance.external_url_follow_device_ip if self.instance else False,
+        )
+        if not external_url:
+            attrs["external_url_follow_device_ip"] = False
+        elif follow_device_ip:
+            try:
+                hostname = urlparse(external_url).hostname
+                if ipaddress.ip_address(hostname).version != 4:
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise serializers.ValidationError(
+                    {
+                        "external_url_follow_device_ip": (
+                            "Follow device IP requires an External link with an IPv4 hostname."
+                        )
+                    }
+                )
         return attrs
 
     def update(self, instance, validated_data):

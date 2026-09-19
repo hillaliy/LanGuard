@@ -479,6 +479,7 @@ def inventory_device_payload(device):
         "room": getattr(device, "room", ""),
         "comments": device.comments,
         "external_url": device.external_url,
+        "external_url_follow_device_ip": device.external_url_follow_device_ip,
         "homebox_item_id": str(device.homebox_item_id) if device.homebox_item_id else None,
         "archived": device.archived,
         "online_notification_preference": device.online_notification_preference,
@@ -837,8 +838,30 @@ def import_inventory_devices(payload):
         external_url = str(item.get("external_url") or item.get("externalUrl") or "").strip()
         if external_url:
             parsed_external_url = urlparse(external_url)
-            if parsed_external_url.scheme not in {"http", "https"} or not parsed_external_url.netloc:
+            if (
+                parsed_external_url.scheme not in {"http", "https"}
+                or not parsed_external_url.netloc
+                or not parsed_external_url.hostname
+                or parsed_external_url.username is not None
+                or parsed_external_url.password is not None
+            ):
                 external_url = ""
+        external_url_follow_device_ip_present = (
+            "external_url_follow_device_ip" in item
+            or "externalUrlFollowDeviceIp" in item
+        )
+        external_url_follow_device_ip = parse_inventory_bool(
+            item.get(
+                "external_url_follow_device_ip",
+                item.get("externalUrlFollowDeviceIp", False),
+            )
+        )
+        if external_url_follow_device_ip:
+            try:
+                if ipaddress.ip_address(urlparse(external_url).hostname).version != 4:
+                    external_url_follow_device_ip = False
+            except (TypeError, ValueError):
+                external_url_follow_device_ip = False
         valid_notification_preferences = set(Device.NotificationPreference.values)
         online_notification_preference_present = (
             "online_notification_preference" in item
@@ -931,6 +954,8 @@ def import_inventory_devices(payload):
             defaults["comments"] = comments
         if external_url_present:
             defaults["external_url"] = external_url[:2048]
+        if external_url_follow_device_ip_present:
+            defaults["external_url_follow_device_ip"] = external_url_follow_device_ip
         if homebox_present:
             defaults["homebox_item_id"] = homebox_item_id
         if isinstance(item.get("archived"), bool):
@@ -964,6 +989,11 @@ def import_inventory_devices(payload):
                     *(['room'] if room is not None else []),
                     *(["comments"] if comments_present else []),
                     *(["external_url"] if external_url_present else []),
+                    *(
+                        ["external_url_follow_device_ip"]
+                        if external_url_follow_device_ip_present
+                        else []
+                    ),
                     *(["homebox_item_id"] if homebox_present else []),
                     *(["archived"] if "archived" in defaults else []),
                     "known",

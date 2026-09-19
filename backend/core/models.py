@@ -1,3 +1,6 @@
+import ipaddress
+from urllib.parse import urlsplit, urlunsplit
+
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
@@ -76,6 +79,7 @@ class Device(models.Model):
     )
     comments = models.TextField(blank=True, default="")
     external_url = models.URLField(max_length=2048, blank=True, default="")
+    external_url_follow_device_ip = models.BooleanField(default=False)
     homebox_item_id = models.UUIDField(null=True, blank=True)
     archived = models.BooleanField(default=False, db_index=True)
     online_notification_preference = models.CharField(
@@ -125,6 +129,23 @@ class Device(models.Model):
 
     def __str__(self):
         return f"Device: {self.name} - IP:{self.ip}"
+
+    @property
+    def effective_external_url(self):
+        if not self.external_url or not self.external_url_follow_device_ip:
+            return self.external_url
+
+        try:
+            current_ip = ipaddress.ip_address(self.ip)
+            parsed = urlsplit(self.external_url)
+            if current_ip.version != 4 or not parsed.hostname:
+                return self.external_url
+            port = f":{parsed.port}" if parsed.port is not None else ""
+            return urlunsplit(
+                (parsed.scheme, f"{current_ip}{port}", parsed.path, parsed.query, parsed.fragment)
+            )
+        except (TypeError, ValueError):
+            return self.external_url
 
 
 class DevicePort(models.Model):
