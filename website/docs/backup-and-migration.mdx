@@ -1,0 +1,62 @@
+---
+title: Backup and Migration
+description: Protect the LanGuard database, move inventory, and import from WatchYourLAN or NetAlertX.
+slug: /backup-and-migration
+---
+
+# Backup and Migration
+
+Choose the method that matches your goal: protect the whole installation with a volume backup, or move compatible device records with inventory export and import.
+
+## Back up the Docker installation
+
+All persistent Docker data is stored in the `languard_database` named volume. Stop the stack before taking a filesystem-level copy so SQLite is not changing during the backup.
+
+```bash
+docker compose stop
+docker run --rm \
+  -v languard_languard_database:/source:ro \
+  -v "$PWD":/backup \
+  alpine sh -c 'cd /source && tar czf /backup/languard-database.tgz .'
+docker compose start
+```
+
+The actual volume name can include the Compose project prefix. Confirm it with `docker volume ls` before running the command.
+
+To restore, stop the stack, extract the archive into an empty replacement volume, then recreate all three services at the same LanGuard version before updating.
+
+## Inventory export and import
+
+Administrators can open **Settings > Data & migration** to export or import the LanGuard device inventory. The export carries compatible device identity, profile, ports, and state fields between LanGuard installations.
+
+An inventory file is not a full backup. It does not replace the database volume when you need users, history, notifications, settings, and Home Map layout.
+
+## Migrate from WatchYourLAN
+
+Download the JSON returned by WatchYourLAN's `/api/all` endpoint from a machine that can reach it:
+
+```bash
+curl http://WATCHYOURLAN_IP:8840/api/all -o watchyourlan-devices.json
+```
+
+Then open **Settings > Data & migration**, choose **Import from WatchYourLAN**, and select the file.
+
+LanGuard matches devices by MAC address and imports compatible names, DNS hostnames, IP and MAC addresses, vendors, known and online state, and last-seen values. Invalid records are skipped.
+
+Rooms, roles, icons, comments, port history, identity confidence, Home Map layout, and scan history are not available through that endpoint and are not imported.
+
+## Migrate from NetAlertX
+
+In NetAlertX, open **Maintenance** and download the official `devices.csv` backup. In LanGuard, open **Settings > Data & migration**, choose **Import from NetAlertX**, and select the CSV.
+
+LanGuard imports compatible names, hostnames, addresses, vendors, comments, locations as rooms, recognized types as roles, known state, current status, and first/last-seen timestamps. NetAlertX's synthetic Internet device and invalid records are skipped.
+
+NetAlertX settings, credentials, workflows, notification and presence history, custom properties, embedded icons, topology, and scan history are intentionally excluded.
+
+## After a migration
+
+1. Run a fresh LanGuard scan.
+2. Review duplicate or unknown entries before deleting anything.
+3. Check rooms, roles, and visitor classifications.
+4. Reconfigure integrations and notification credentials on the destination.
+5. Keep the source backup until normal scheduled scans and notifications have completed successfully.

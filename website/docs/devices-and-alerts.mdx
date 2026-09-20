@@ -1,0 +1,67 @@
+---
+title: Devices and Alerts
+description: Work with device state, visitors, attention findings, history, controls, and archive behavior.
+slug: /devices-and-alerts
+---
+
+# Devices and Alerts
+
+The Devices page is the authoritative inventory. The dashboard summarizes it, while each device page combines identity, network state, profile, history, and available actions.
+
+## Device classifications
+
+| Classification | Purpose | Dashboard behavior |
+| --- | --- | --- |
+| **Unknown** | Newly discovered equipment that has not been reviewed | Counted in Unknown and Needs Attention |
+| **Known** | Reviewed, regular equipment | Counted in regular Devices and Online totals |
+| **Visitor** | Recognized equipment that appears only occasionally | Shown as a small visitor count under Devices, and under Online only while present |
+| **Archived** | Retired or intentionally removed equipment | Excluded from active inventory, Home Map, counters, and notifications |
+
+Visitor devices are excluded from the Home Map. They are not included in the main regular-device number, so an absent visitor does not permanently inflate the household or office total.
+
+## Needs Attention
+
+A device can appear under **Needs Attention** for one or more reasons. The list shows the reason directly, which can include:
+
+- The device is still unknown.
+- A risky TCP port is open.
+- An IP address was reported by conflicting MAC addresses.
+- A regular device has remained offline for more than seven days.
+- Another current risk rule has raised the device's attention state.
+
+Visitor devices are excluded from the long-offline rule. Resolved IP/MAC identity conflicts clear automatically after later scans consistently identify the devices. You can mark selected findings as reviewed when they are understood but still valid.
+
+## Device details
+
+The overview contains:
+
+- Vendor, hostname, MAC address, and identity confidence.
+- Current IP, ports, last port scan, missed scans, and status source.
+- Room, role, first seen, last seen, notification overrides, notes, and access settings.
+- Availability history for Day, Week, Month, and Year.
+- Timeline events including online/offline transitions and IP changes.
+- DNS activity when AdGuard Home is configured.
+
+## Device actions
+
+Depending on permissions and device state, the page may offer:
+
+- **Edit device** to change classification, name, icon, room, role, notes, and access settings.
+- **Wake device** to send Wake-on-LAN to supported equipment.
+- **Detailed port scan** to queue a custom TCP scan for an online device.
+- **Archive device** to remove retired equipment while retaining history.
+- **Restore device** for an archived item.
+
+Archiving is not a scan exclusion. If archived equipment is still active, discovery can restore it automatically.
+
+## External links
+
+A device can have an External link to its local management interface. Enable **Follow device IP** when the service should keep the configured scheme, port, path, query, and fragment but replace the host with the device's current IPv4 address after DHCP changes.
+
+Example: `http://192.168.1.20:8080/admin` becomes `http://192.168.1.54:8080/admin` when that device's current IP changes. Keep the option off for links whose hostname or address must remain fixed.
+
+In device lists, a marked device icon can open the configured interface directly. Selecting the rest of the row still opens the LanGuard device page.
+
+## Home Map
+
+The Home Map groups regular devices into rooms and supports All, Online, and Offline views. Editing the layout requires the corresponding user permission. Visitors and archived devices are excluded from both the map and its displayed device count.

@@ -1,0 +1,63 @@
+---
+sidebar_position: 3
+title: Configuration
+description: Configure network ranges, scan behavior, regional settings, users, and retention.
+slug: /configuration
+---
+
+# Configuration
+
+Most Docker settings are stored in the shared database and are read by both the backend and scheduler. Environment variables are reserved for deployment-level settings such as ports, storage, and trusted hosts.
+
+## Scanning
+
+Open **Settings > Scanning** to configure:
+
+- Up to 16 named private IPv4 CIDR ranges.
+- A maximum of 1,024 addresses per range.
+- The delay after each completed scheduled scan.
+- Discovery methods and recurring ports available in the current release.
+
+The scheduler waits for the configured interval **after** a scan completes. A scan that finishes at 20:14 with a five-minute interval schedules the next run for about 20:19.
+
+Settings are reloaded before each scheduler cycle. A change applies after the current scan or wait finishes and does not require a container restart.
+
+## Multiple networks and VLANs
+
+LanGuard combines all configured ranges into one scan run and matches devices by MAC address. ARP does not cross routers, so the Docker host needs direct Layer 2 access to every range, usually through tagged VLAN interfaces configured on the host.
+
+Routing to a subnet can make IP services reachable, but it does not provide the ARP visibility required for reliable MAC discovery. LanGuard does not bypass firewall rules or VLAN isolation.
+
+## Regional settings
+
+Set the display timezone and date preferences from Settings. Stored timestamps remain suitable for comparisons while the interface formats them for the selected timezone.
+
+## Users and permissions
+
+The first registered account becomes an administrator. Administrators can create or manage additional accounts and control whether each user may:
+
+- Edit device metadata.
+- Change the Home Map layout.
+- Start manual scans.
+
+Backend permission checks enforce these controls; hiding a button in the interface is not the only protection.
+
+## Activity retention
+
+The retention period controls scheduled cleanup of retained operational activity. Cleanup runs every 24 hours. Manual maintenance actions can remove individual activity categories or reset all retained activity when required.
+
+Device archiving is different from cleanup: an archived device leaves active views and counters but keeps its history. See [Devices and Alerts](./devices-and-alerts).
+
+## Deployment environment
+
+| Variable | Purpose | Typical value |
+| --- | --- | --- |
+| `SECRET_KEY` | Signs server-side security data | A long random value shared by backend and scheduler |
+| `ALLOWED_HOSTS` | Hosts accepted by Django | Server IP, local hostname, and `127.0.0.1` |
+| `BACKEND_LISTEN_PORT` | Backend listen port and health-check target | `8000` |
+| `BACKEND_UPSTREAM` | Frontend proxy target | `127.0.0.1:8000` |
+| `FRONTEND_LISTEN_ADDRESS` | Web interface listen address | `:8080` |
+| `DB_PATH` | SQLite database path inside the container | `/data/db.sqlite3` |
+| `STATIC_ROOT` | Collected backend static files | `/static` |
+
+You normally do not need `CORS_ALLOWED_ORIGINS`: the frontend serves the application and proxies API requests on the same origin.

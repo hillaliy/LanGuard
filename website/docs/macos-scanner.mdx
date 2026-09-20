@@ -1,0 +1,44 @@
+---
+title: macOS Scanner
+description: Install, build, and understand the native LanGuard scanner for macOS.
+slug: /macos-scanner
+---
+
+# macOS Scanner
+
+The native macOS edition is a standalone SwiftUI application for one Mac. It discovers devices, stores inventory locally, runs automatic scans, and delivers native notifications without requiring the Docker stack.
+
+## Current scope
+
+- Local network discovery and device inventory.
+- Names, vendors, addresses, state, first and last seen times, and common ports.
+- Automatic scan scheduling.
+- Native macOS notifications.
+- Local persistence, backup, and restore behavior provided by the application.
+
+The native app and Docker edition do not share a database or automatically synchronize device state.
+
+## Permissions
+
+macOS can prompt for local network access the first time the app scans. Allow access for complete results. Host firewall rules, VLAN isolation, and wireless client isolation still limit which devices are visible.
+
+## Build from source
+
+The Xcode project and build scripts are under `macos/LanGuardMac` in the repository. For development:
+
+```bash
+cd macos/LanGuardMac
+swift test
+```
+
+Build the release app with the repository script from the project root:
+
+```bash
+./Scripts/build_app.sh
+```
+
+Release packaging and signing requirements can change. Use the scripts from the same tag as the source you are building, and consult that release's notes.
+
+## Choose Docker instead when
+
+Use the Docker edition for a continuously running shared server, browser and installable web-app access, multi-user permissions, Home Map, integrations, centralized notification channels, or scheduled work that must continue while your Mac is asleep.

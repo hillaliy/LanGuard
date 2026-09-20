@@ -1,0 +1,112 @@
+---
+sidebar_position: 2
+title: Installation
+description: Deploy LanGuard with Docker Compose or Portainer and verify the three-service stack.
+slug: /installation
+---
+
+# Installation
+
+The Docker edition runs as three coordinated services: the backend API, the scheduler/scanner, and the frontend. All three images should always use the same LanGuard release.
+
+## Requirements
+
+- A Linux host with Docker Engine and Docker Compose, or Portainer.
+- Direct network access from the host to the IPv4 networks you want to scan.
+- Permission to run the backend and scanner with host networking and privileged access.
+- Ports `8080` for the web interface and `8000` for the backend, unless you configure alternatives.
+
+> **Host networking is intentional:** ARP discovery requires Layer 2 access to the LAN. Docker bridge networking hides that view and may expose only the Docker host or gateway. Review the Compose file before deployment and use a dedicated, trusted host.
+
+## Docker Compose
+
+Download the repository's current [`docker-compose.yaml`](https://github.com/hillaliy/LanGuard/blob/main/docker-compose.yaml), then change `SECRET_KEY` and `ALLOWED_HOSTS` before starting the stack.
+
+Generate a random secret:
+
+```bash
+openssl rand -base64 48
+```
+
+Set the hosts from which you will open LanGuard. Keep `127.0.0.1` because the backend health check uses it:
+
+```yaml
+environment:
+  SECRET_KEY: replace-with-the-generated-secret
+  ALLOWED_HOSTS: 192.168.1.10,languard.local,127.0.0.1
+```
+
+Start the stack:
+
+```bash
+docker compose up -d
+```
+
+Open `http://<docker-host-ip>:8080`. Create the first account; there is no default username or password.
+
+## Portainer
+
+1. Open **Stacks** and create a stack named `languard`.
+2. Paste the contents of the current `docker-compose.yaml`.
+3. Replace `SECRET_KEY` in both the `backend` and `scanner` services with the same generated value.
+4. Set `ALLOWED_HOSTS` in both services to the addresses used to reach LanGuard.
+5. Deploy the stack and wait for the backend health check to pass.
+
+Portainer creates the named `languard_database` and `languard_static` volumes automatically.
+
+## Verify the services
+
+```bash
+docker compose ps
+docker compose logs --tail=100 backend
+docker compose logs --tail=100 scanner
+docker compose logs --tail=100 frontend
+```
+
+The backend should become healthy, the scanner should start its scheduler and run an initial scan, and the frontend should listen on port `8080`.
+
+## Change the ports
+
+### Frontend
+
+Change `FRONTEND_LISTEN_ADDRESS` in the frontend service:
+
+```yaml
+FRONTEND_LISTEN_ADDRESS: :8090
+```
+
+### Backend
+
+If port `8000` is occupied, set `BACKEND_LISTEN_PORT` as a Portainer stack variable or in the backend service. The frontend upstream must use the same value:
+
+```yaml
+backend:
+  environment:
+    BACKEND_LISTEN_PORT: 8010
+
+frontend:
+  environment:
+    BACKEND_UPSTREAM: 127.0.0.1:8010
+```
+
+The backend health check reads `BACKEND_LISTEN_PORT` automatically.
+
+## Update LanGuard
+
+Pull and recreate all three services together:
+
+```bash
+docker compose pull
+docker compose up -d --force-recreate
+```
+
+Do not delete `languard_database` unless you intentionally want to reset the installation. Review the [release notes](./release-notes) for deployment changes before updating across several versions.
+
+## Install the web app
+
+LanGuard includes a web app manifest so the Docker interface can open in a standalone window:
+
+- **iPhone or iPad:** open LanGuard in Safari, select **Share**, then **Add to Home Screen**.
+- **Android or desktop Chromium:** use the browser's **Install app** action.
+
+The installed app still connects to the LanGuard server and does not cache inventory or dashboard data for offline use. Chromium normally requires HTTPS, except on `localhost`.
