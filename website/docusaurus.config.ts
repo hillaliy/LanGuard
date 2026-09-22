@@ -2,19 +2,6 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
-const docusaurusNavbarItem = {
-  type: 'html',
-  value: [
-    '<a class="navbar-docusaurus-link" href="https://docusaurus.io"',
-    ' target="_blank" rel="noopener noreferrer"',
-    ' aria-label="Docusaurus website" title="Docusaurus">',
-    '<img src="/LanGuard/img/docusaurus.svg" alt="" width="24" height="24" />',
-    '</a>',
-  ].join(''),
-  position: 'right',
-  className: 'navbar-docusaurus-item',
-} as const;
-
 const config: Config = {
   title: 'LanGuard Documentation',
   tagline: 'Discover, understand, and protect the devices on your network.',
@@ -83,7 +70,6 @@ const config: Config = {
         {to: '/docs/integrations', label: 'Integrations', position: 'left'},
         {to: '/docs/release-notes', label: 'Release notes', position: 'left'},
         {href: 'https://github.com/hillaliy/LanGuard', label: 'GitHub', position: 'right'},
-        ...(process.env.NODE_ENV === 'production' ? [docusaurusNavbarItem] : []),
       ],
     },
     footer: {

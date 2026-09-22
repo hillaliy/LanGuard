@@ -7491,6 +7491,27 @@ function Dashboard({
                       <IconBrandGithub size={17} />
                     </ActionIcon>
                   </Tooltip>
+                  {process.env.NODE_ENV === 'production' && (
+                    <Tooltip label="Documentation">
+                      <ActionIcon
+                        component="a"
+                        href="https://hillaliy.github.io/LanGuard/"
+                        target="_blank"
+                        rel="noreferrer"
+                        variant="light"
+                        color="gray"
+                        size="sm"
+                        aria-label="LanGuard documentation"
+                      >
+                        <Image
+                          src="/brands/docusaurus.svg"
+                          alt=""
+                          w={17}
+                          h={17}
+                        />
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
                 </Group>
                 <Text size="xs" c="dimmed">
                   Signed in as {userDisplayName(user)}
