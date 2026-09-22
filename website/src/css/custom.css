@@ -39,6 +39,21 @@ html { scroll-behavior: smooth; }
 .navbar__logo { height: 36px; }
 .navbar__title { font-size: 1.05rem; }
 .navbar__item { font-size: 0.92rem; font-weight: 650; }
+.navbar-docusaurus-item {
+  align-items: center;
+  display: flex;
+  margin-left: -4px;
+  padding: 0;
+}
+.navbar-docusaurus-link {
+  align-items: center;
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  padding: 6px;
+  width: 36px;
+}
+.navbar-docusaurus-link img { display: block; }
 .button { border-radius: 6px; letter-spacing: 0; }
 
 .theme-doc-markdown h1:first-child {
