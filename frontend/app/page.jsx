@@ -6820,9 +6820,20 @@ function Dashboard({
     if (!device?.id) {
       return;
     }
+    const returnScrollY = window.scrollY;
+    const returnDeviceListScrollTop = deviceListRef.current?.scrollTop || 0;
     storeDashboardNavigationState();
     storeCurrentHistoryState();
-    window.history.pushState({ languardDevicePage: true }, '', `/devices/${device.id}`);
+    window.history.pushState(
+      {
+        languardDevicePage: true,
+        languardReturnView: mainView,
+        languardReturnScrollY: returnScrollY,
+        languardReturnDeviceListScrollTop: returnDeviceListScrollTop,
+      },
+      '',
+      `/devices/${device.id}`
+    );
     setDevicePageId(String(device.id));
     window.setTimeout(() => window.scrollTo({ top: 0 }), 0);
   }
@@ -6854,6 +6865,39 @@ function Dashboard({
       window.history.replaceState({ languardMainView: mainView }, '', targetPath);
       setDevicePageId('');
     }
+  }
+
+  async function returnAfterDeviceDeleted() {
+    await loadData({ quiet: true });
+
+    const historyState = window.history.state || {};
+    const openedFromApplication = Boolean(historyState.languardDevicePage);
+    const returnView = openedFromApplication
+      ? historyState.languardReturnView || mainView
+      : 'devices';
+    const returnScrollY = openedFromApplication
+      ? Math.max(Number(historyState.languardReturnScrollY) || 0, 0)
+      : 0;
+    const returnDeviceListScrollTop = openedFromApplication
+      ? Math.max(Number(historyState.languardReturnDeviceListScrollTop) || 0, 0)
+      : 0;
+
+    storeDashboardNavigationState({
+      mainView: returnView,
+      scrollY: returnScrollY,
+      deviceListScrollTop: returnDeviceListScrollTop,
+    });
+    window.history.replaceState(
+      {
+        languardMainView: returnView,
+        scrollY: returnScrollY,
+        deviceListScrollTop: returnDeviceListScrollTop,
+      },
+      '',
+      mainViewPath(returnView)
+    );
+    setDevicePageId('');
+    setMainView(returnView);
   }
 
   useEffect(() => {
@@ -7637,17 +7681,7 @@ function Dashboard({
               deviceId={devicePageId}
               onBack={returnFromDevicePage}
               onSaved={async () => loadData({ quiet: true })}
-              onDeleted={async () => {
-                await loadData({ quiet: true });
-                storeDashboardNavigationState({ mainView: 'devices', scrollY: 0 });
-                window.history.replaceState(
-                  { languardMainView: 'devices' },
-                  '',
-                  mainViewPath('devices')
-                );
-                setDevicePageId('');
-                setMainView('devices');
-              }}
+              onDeleted={returnAfterDeviceDeleted}
               timeZone={displayTimeZone}
               roomOptions={roomOptions}
               dnsActivityEnabled={showDnsActivity}

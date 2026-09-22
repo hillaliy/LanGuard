@@ -66,7 +66,6 @@ from .scan import (
     MDNS_SERVICE_HOSTNAME_CACHE,
     mdns_query_responses,
     mdns_reverse_hostname,
-    mdns_service_hostname_from_response,
     mdns_service_hostnames_from_response,
     mdns_service_hostnames_from_responses,
     mdns_service_types_from_response,
@@ -335,28 +334,6 @@ class HostnameResolutionTests(SimpleTestCase):
             {"192.168.1.42": "HAA 123456"},
         )
 
-    def test_mdns_service_hostname_extracts_hap_ptr_instance(self):
-        packet = (
-            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
-            + dns_encode_name("_hap._tcp.local")
-            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
-            + len(dns_encode_name("HAA-123456._hap._tcp.local")).to_bytes(2, "big")
-            + dns_encode_name("HAA-123456._hap._tcp.local")
-        )
-
-        self.assertEqual(mdns_service_hostname_from_response(packet), "HAA 123456")
-
-    def test_mdns_service_hostname_extracts_generic_dns_sd_instance(self):
-        packet = (
-            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
-            + dns_encode_name("_printer._tcp.local")
-            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
-            + len(dns_encode_name("Office-Printer._printer._tcp.local")).to_bytes(2, "big")
-            + dns_encode_name("Office-Printer._printer._tcp.local")
-        )
-
-        self.assertEqual(mdns_service_hostname_from_response(packet), "Office Printer")
-
     def test_mdns_service_types_extracts_advertised_service(self):
         packet = (
             b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
@@ -392,27 +369,31 @@ class HostnameResolutionTests(SimpleTestCase):
         )
 
     @patch("core.scan.mdns_query_responses")
-    def test_mdns_service_hostname_uses_source_ip_for_ptr_only_response(self, mdns_responses):
+    def test_mdns_service_hostname_does_not_trust_ptr_response_source_ip(self, mdns_responses):
         packet = (
             b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
-            + dns_encode_name("_hap._tcp.local")
+            + dns_encode_name("_printer._tcp.local")
             + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
-            + len(dns_encode_name("HAA-123456._hap._tcp.local")).to_bytes(2, "big")
-            + dns_encode_name("HAA-123456._hap._tcp.local")
+            + len(dns_encode_name("Bedroom-Printer._printer._tcp.local")).to_bytes(2, "big")
+            + dns_encode_name("Bedroom-Printer._printer._tcp.local")
         )
         mdns_responses.side_effect = [[(packet, "192.168.1.42")], [], []]
 
-        self.assertEqual(mdns_service_hostname("192.168.1.42"), "HAA 123456")
+        self.assertEqual(mdns_service_hostname("192.168.1.42"), "")
 
     @patch("core.scan.time.sleep")
     @patch("core.scan.mdns_query_responses")
     def test_mdns_service_hostname_retries_and_caches_service_map(self, mdns_responses, sleep):
         packet = (
-            b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
-            + dns_encode_name("_hap._tcp.local")
-            + b"\x00\x0c\x00\x01\x00\x00\x00\x78"
-            + len(dns_encode_name("HAA-ABCDEF._hap._tcp.local")).to_bytes(2, "big")
+            b"\x00\x00\x84\x00\x00\x00\x00\x02\x00\x00\x00\x00"
             + dns_encode_name("HAA-ABCDEF._hap._tcp.local")
+            + b"\x00\x21\x00\x01\x00\x00\x00\x78"
+            + (6 + len(dns_encode_name("HAA-ABCDEF.local"))).to_bytes(2, "big")
+            + b"\x00\x00\x00\x00\x00\x50"
+            + dns_encode_name("HAA-ABCDEF.local")
+            + dns_encode_name("HAA-ABCDEF.local")
+            + b"\x00\x01\x00\x01\x00\x00\x00\x78\x00\x04"
+            + bytes([192, 168, 1, 55])
         )
         mdns_responses.side_effect = [[], [(packet, "192.168.1.55")], []]
 
@@ -1050,7 +1031,7 @@ class ScanStabilityTests(TestCase):
         "core.scan.get_hostname",
         return_value=("HAA 826353", Device.IdentitySource.MDNS),
     )
-    def test_mismatched_haa_hostname_is_not_assigned(self, _):
+    def test_mismatched_haa_hostname_is_silently_ignored(self, _):
         sync_discovered_device(
             self.scan_element("192.168.1.3", "00:55:7b:b5:7d:f7"),
             scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
@@ -1059,8 +1040,8 @@ class ScanStabilityTests(TestCase):
         device = Device.objects.get(mac="00:55:7b:b5:7d:f7")
         self.assertEqual(device.hostname, "")
         self.assertEqual(device.hostname_source, "")
-        self.assertIn("HAA hostname HAA 826353 does not match", device.identity_conflict_reason)
-        self.assertIsNotNone(device.identity_conflict_detected_at)
+        self.assertEqual(device.identity_conflict_reason, "")
+        self.assertIsNone(device.identity_conflict_detected_at)
 
     @override_settings(PORT_SCAN_ENABLED=False)
     @patch(
