@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Return to the originating dashboard view after deleting a device instead of always redirecting to the Devices page.
+- Require explicit mDNS address records before assigning service names to devices, and silently ignore default HAA hostnames whose encoded MAC suffix does not match the discovered device.
 - Added optional dynamic External links that follow a device's current IPv4 address while preserving the configured scheme, port, path, query, and fragment.
 
 ## 1.19.0 - 2026-09-19

@@ -545,12 +545,10 @@ def mdns_service_hostname_map():
         if attempt + 1 < MDNS_SERVICE_RETRY_COUNT:
             time.sleep(MDNS_SERVICE_RETRY_DELAY_SECONDS)
 
+    # The UDP sender may be a cache or proxy for another device's service.
+    # Trust names only when an address record links them to an IP; service
+    # instance names additionally require an SRV target linked to that address.
     hostnames_by_ip.update(mdns_service_hostnames_from_responses(responses))
-    for response, source_ip in responses:
-        if source_ip not in hostnames_by_ip:
-            hostname = mdns_service_hostname_from_response(response)
-            if hostname:
-                hostnames_by_ip[source_ip] = hostname
     MDNS_SERVICE_HOSTNAME_CACHE["expires_at"] = time.monotonic() + MDNS_SERVICE_CACHE_TTL_SECONDS
     MDNS_SERVICE_HOSTNAME_CACHE["hostnames"] = dict(hostnames_by_ip)
     return hostnames_by_ip
@@ -593,20 +591,6 @@ def mdns_service_types_from_response(response):
         if re.fullmatch(r"_[^.]+\._(?:tcp|udp)\.local", normalized):
             service_types.add(normalized)
     return service_types
-
-
-def mdns_service_hostname_from_response(response):
-    for record in dns_records(response):
-        if record["type"] == 33:
-            hostname = service_instance_hostname(record["name"])
-            if hostname:
-                return hostname
-        if record["type"] == 12:
-            service_name, _ = dns_read_name(response, record["rdata_offset"])
-            hostname = service_instance_hostname(service_name)
-            if hostname:
-                return hostname
-    return ""
 
 
 def dns_srv_target_name(packet, offset, length):
@@ -1699,11 +1683,6 @@ def sync_discovered_device(
         hostname, hostname_source = hostname_result
     else:
         hostname, hostname_source = hostname_result, ""
-    observed_hostname = hostname
-    if mismatched_default_haa_hostname(observed_hostname, mac) and not conflict_reason:
-        conflict_reason = (
-            f"HAA hostname {observed_hostname} does not match MAC address {mac} at IP {ip}"
-        )
     hostname = validated_hostname(hostname, mac)
     if not hostname:
         hostname_source = ""
