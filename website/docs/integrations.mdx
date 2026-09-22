@@ -1,0 +1,56 @@
+---
+title: Integrations
+description: Connect LanGuard to AdGuard Home, Speedtest Tracker, HomeBox, and automation services.
+slug: /integrations
+---
+
+# Integrations
+
+Docker installations can connect optional services from **Settings > Integrations**. Every integration is disabled by default, and secrets are kept write-only in API responses.
+
+## At a glance
+
+| Integration | What it adds | Data handling |
+| --- | --- | --- |
+| AdGuard Home | Network-wide and per-device DNS destinations and blocked totals | Stores aggregate counters, not raw DNS responses |
+| Speedtest Tracker | Latest internet result and health on the dashboard | Stores settings and latest processed health state, not result history |
+| HomeBox | Search and link an existing inventory item to a device | Stores the linked item ID; does not synchronize inventory |
+
+## AdGuard Home
+
+1. Enable query logging in AdGuard Home.
+2. Enable **AdGuard Home** in LanGuard.
+3. Enter its URL and credentials, then select **Test connection**.
+4. Save and select **Sync now** for the first import.
+5. Open the central **DNS Activity** page or a device's **DNS activity** tab.
+
+The scheduler imports aggregated counters per device, domain, and query type. The configured retention period removes old aggregates. Diagnostics identify AdGuard client values that do not match a current LanGuard device IP.
+
+> **Device attribution:** AdGuard Home must record the originating device IP. If all requests reach it through the router, LanGuard can associate the activity only with that router. Configure DHCP or clients to use AdGuard Home directly when device-level attribution is required.
+
+## Speedtest Tracker
+
+1. Create a Speedtest Tracker API token with the `results:read` ability.
+2. Enable **Speedtest Tracker** in LanGuard.
+3. Enter its URL and token, test the connection, and save.
+
+LanGuard displays download, upload, ping, packet loss, health, and test time. Dashboard responses use a five-minute in-memory cache; a manual dashboard refresh requests fresh data. When health notifications are enabled, the scheduler checks for a newly scored result every five minutes.
+
+Configure thresholds in Speedtest Tracker first. Unscored results and temporary connection failures do not send a health-change notification.
+
+## HomeBox
+
+LanGuard supports the `/api/v1/entities` API used by HomeBox v0.26.2. Releases that expose only the older `/items` API are not supported.
+
+1. Create a HomeBox API key for an account with access to the intended inventory.
+2. Enable HomeBox, enter its URL and API key, test, and save.
+3. Open a LanGuard device, select **Edit device**, search for a HomeBox item, and save.
+4. Use **Open in HomeBox** from the device page.
+
+Search is proxied through the backend and requires device-edit permission. LanGuard does not create or update HomeBox items, and it does not copy documents, purchase records, or warranties. Clearing the selected item removes only the link.
+
+## Automation webhook
+
+The generic webhook channel can deliver enabled events to n8n, Home Assistant, or another HTTPS endpoint. It belongs to notification settings because it follows the same event rules, quiet hours, history, and retry policy as user-facing channels.
+
+See [Notifications](./notifications#automation-webhook) for the payload and signature format.

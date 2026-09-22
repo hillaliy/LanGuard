@@ -1,0 +1,71 @@
+:root {
+  --ifm-color-primary: #3f64dc;
+  --ifm-color-primary-dark: #2f54cc;
+  --ifm-color-primary-darker: #294fc2;
+  --ifm-color-primary-darkest: #22409f;
+  --ifm-color-primary-light: #5375e1;
+  --ifm-color-primary-lighter: #6685e5;
+  --ifm-color-primary-lightest: #9badee;
+  --ifm-background-color: #ffffff;
+  --ifm-code-font-size: 92%;
+  --ifm-heading-color: #172238;
+  --ifm-font-color-base: #29354a;
+  --ifm-font-family-base: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --ifm-navbar-shadow: 0 1px 0 #dce3ef;
+  --ifm-global-radius: 6px;
+  --docusaurus-highlighted-code-line-bg: rgba(63, 100, 220, 0.12);
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #7894f0;
+  --ifm-color-primary-dark: #5c7de9;
+  --ifm-color-primary-darker: #4e72e6;
+  --ifm-color-primary-darkest: #244ed8;
+  --ifm-color-primary-light: #94abf5;
+  --ifm-color-primary-lighter: #a2b6f7;
+  --ifm-color-primary-lightest: #ccd6fb;
+  --ifm-background-color: #0d1420;
+  --ifm-background-surface-color: #151f2f;
+  --ifm-font-color-base: #d8dfeb;
+  --ifm-heading-color: #f3f6fb;
+  --ifm-navbar-background-color: #101827;
+  --ifm-navbar-shadow: 0 1px 0 #2b3950;
+  --docusaurus-highlighted-code-line-bg: rgba(120, 148, 240, 0.16);
+}
+
+html { scroll-behavior: smooth; }
+.navbar { min-height: 64px; }
+.navbar__brand { gap: 8px; }
+.navbar__logo { height: 36px; }
+.navbar__title { font-size: 1.05rem; }
+.navbar__item { font-size: 0.92rem; font-weight: 650; }
+.button { border-radius: 6px; letter-spacing: 0; }
+
+.theme-doc-markdown h1:first-child {
+  font-size: clamp(2.35rem, 5vw, 3.7rem);
+  letter-spacing: 0;
+  line-height: 1.06;
+}
+.theme-doc-markdown h2 {
+  border-top: 1px solid var(--ifm-color-emphasis-200);
+  letter-spacing: 0;
+  margin-top: 3rem;
+  padding-top: 2rem;
+}
+.theme-doc-markdown h3, .theme-doc-markdown h4 { letter-spacing: 0; }
+.theme-doc-markdown > p:first-of-type {
+  color: var(--ifm-color-emphasis-700);
+  font-size: 1.12rem;
+  line-height: 1.7;
+}
+.theme-doc-markdown table { display: table; width: 100%; }
+.theme-doc-markdown th { background: var(--ifm-color-emphasis-100); text-align: left; }
+.alert { border-left-width: 4px; border-radius: 6px; }
+.footer--dark { --ifm-footer-background-color: #0d1729; }
+.footer__title { color: #ffffff; }
+.footer__link-item { color: #bdc7d8; }
+.DocSearch-Button, .navbar__search-input { border-radius: 6px; }
+
+@media (max-width: 996px) {
+  .navbar { min-height: 58px; }
+}

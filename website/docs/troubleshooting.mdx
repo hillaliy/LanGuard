@@ -1,0 +1,82 @@
+---
+title: Troubleshooting
+description: Diagnose startup, login, discovery, status, integration, and scheduler problems safely.
+slug: /troubleshooting
+---
+
+# Troubleshooting
+
+Start with the smallest safe diagnostic: service status, the relevant Settings test, and LanGuard's privacy-filtered diagnostics export.
+
+## Export support diagnostics
+
+Administrators can open **Settings > Maintenance** and select **Export diagnostics**. The JSON report includes version, runtime and database health, configuration state, aggregate counts, and recent scan outcomes.
+
+It intentionally omits credentials, service URLs, usernames, device names, IP and MAC addresses, network ranges, and raw exception text. Attach it to a GitHub issue. Share container logs only when requested and review them for private network details first.
+
+## The interface does not open
+
+1. Check all services with `docker compose ps`.
+2. Confirm that the backend reports healthy.
+3. Check whether another process uses ports `8080` or `8000`.
+4. Verify that `BACKEND_UPSTREAM` matches `BACKEND_LISTEN_PORT` when using a custom backend port.
+5. Confirm that the address used in the browser appears in `ALLOWED_HOSTS`.
+
+```bash
+docker compose logs --tail=200 backend
+docker compose logs --tail=200 frontend
+```
+
+## The scanner finds only the Docker host
+
+Confirm that the scanner uses `network_mode: host` and runs with the privileges in the current Compose file. ARP cannot discover the LAN correctly through normal Docker bridge networking.
+
+For VLANs, the host needs a directly attached interface in each scanned Layer 2 network. A routed path alone does not carry ARP broadcasts.
+
+## A device is incorrectly offline
+
+- Check its **Status source** and **Missed scans** values.
+- Confirm that the device responds to ARP, ICMP, or one of its known ports from the Docker host.
+- Review host firewall and client sleep settings.
+- Wait for the configured number of missed scans; one missing signal does not always change state immediately.
+
+Battery-powered and aggressively sleeping devices may not answer every scheduled scan.
+
+## A known device changed or duplicated
+
+Verify the MAC addresses first. Phones may rotate private Wi-Fi addresses. DHCP can also reuse an IP while a stale neighbor or discovery record remains visible. LanGuard records IP/MAC conflicts under Needs Attention and clears the finding after subsequent consistent scans.
+
+User-selected identity fields are protected after a device is marked Known. Unknown devices can continue receiving improved automatic metadata.
+
+## Scheduled work does not run
+
+```bash
+docker compose logs --tail=200 scanner
+```
+
+Check that:
+
+- The scanner container is running.
+- Backend and scheduler images use the same release.
+- The current wait period has actually elapsed since the previous task completed.
+- The task's feature and notification rule are enabled.
+- The shared database volume is mounted at `/data` in both services.
+
+## An integration test fails
+
+Test the service URL from the Docker host, not only from your browser. A browser may resolve local DNS or cross VLANs differently from the server. Confirm credentials and required API permissions, then use the integration's **Test connection** action for a sanitized error.
+
+For HomeBox, confirm that the server exposes `/api/v1/entities`. For Speedtest Tracker, the token needs `results:read`. For per-device AdGuard data, AdGuard must see client IPs rather than only the router.
+
+## Notifications do not arrive
+
+1. Verify the channel test action.
+2. Check that the event rule is enabled.
+3. Review quiet hours and weekday selection.
+4. Check per-device overrides and visitor classification.
+5. Open notification delivery history for the saved response.
+6. Keep the scheduler running so failed deliveries can retry.
+
+## Report a problem
+
+Search [existing issues](https://github.com/hillaliy/LanGuard/issues) before opening a new report. Include the LanGuard version, deployment method, expected behavior, actual behavior, reproduction steps, and diagnostics export. Remove private network data from screenshots.

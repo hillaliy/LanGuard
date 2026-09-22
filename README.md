@@ -21,531 +21,118 @@
 </p>
 
 <p align="center">
-  <a href="#features">Features</a> &middot;
-  <a href="#portainer">Docker setup</a> &middot;
-  <a href="macos/LanGuardMac/README.md">macOS</a> &middot;
-  <a href="#migrate-from-watchyourlan">Migration</a> &middot;
-  <a href="#license">License</a>
+  <strong><a href="https://hillaliy.github.io/LanGuard/">Documentation</a></strong>
+  &middot;
+  <a href="https://hillaliy.github.io/LanGuard/docs/installation">Installation</a>
+  &middot;
+  <a href="https://hillaliy.github.io/LanGuard/docs/integrations">Integrations</a>
+  &middot;
+  <a href="https://hillaliy.github.io/LanGuard/docs/troubleshooting">Troubleshooting</a>
+  &middot;
+  <a href="https://github.com/hillaliy/LanGuard/releases">Releases</a>
 </p>
 
-LanGuard finds devices, tracks online and offline state, scans common ports,
-keeps network history, and can send Discord, Telegram, ntfy, or automation webhook
-alerts when new devices appear.
+LanGuard builds a clear inventory of local network devices, tracks availability
+and network changes, and surfaces equipment that needs attention. It is designed
+for home and small-business networks and can run continuously as a Docker web
+application or locally as a native macOS scanner.
+
+## Highlights
+
+- Discover IPv4 devices, names, vendors, MAC addresses, services, and common open ports.
+- Track online state, scan history, IP changes, availability, and attention findings.
+- Organize regular, visitor, and archived devices by room, role, icon, and notes.
+- Send Discord, Telegram, ntfy, or signed automation webhook notifications.
+- Connect AdGuard Home, Speedtest Tracker, and HomeBox.
+- Run scheduled scans, on-demand detailed port scans, and Wake-on-LAN actions.
+- Install the Docker interface as a web app on supported phones, tablets, and computers.
 
 ## Preview
 
-### Dashboard
-
 <p align="center">
-  <img src="docs/demo-preview.png" alt="LanGuard dashboard preview with fictional device data" width="920">
+  <img src="docs/demo-preview.png" alt="LanGuard dashboard with fictional device data" width="920">
 </p>
 
-### Home Map
+## Quick Start
 
-<p align="center">
-  <img src="docs/home-map-preview.png" alt="LanGuard home map preview with fictional rooms and devices" width="920">
-</p>
-
-## Features
-
-**Discover**
-
-- Find LAN devices and identify their IP, MAC address, vendor, and hostname
-- Track identity confidence, first and last seen times, and known or new state
-- Detect local HTTP/HTTPS interfaces and common open ports
-
-**Monitor**
-
-- Track online and offline state, port changes, and device activity
-- Wake supported devices directly from their device page with Wake-on-LAN
-- Compare completed scans and retain scan, event, and notification history
-- Run scheduled scans after the configured interval
-
-**Organize**
-
-- Assign names, icons, rooms, roles, and expected device behavior
-- Install LanGuard as a standalone web app on supported phones, tablets, and computers
-- Select multiple new devices and mark them as known in one action
-- Filter the device inventory by one or more configured network ranges
-- Arrange rooms and devices in the Docker Home Map view
-- Export and import device inventory between LanGuard installations
-- Grant each Docker user permission to edit devices, change the Home Map layout, or run manual scans
-
-**Notify and integrate**
-
-- Send Discord, Telegram, ntfy, or generic webhook alerts for new devices and important changes
-- Sync per-device DNS destinations and blocked-query totals from AdGuard Home
-- Show the latest Speedtest Tracker result on the Docker dashboard
-- Use Swagger, ReDoc, and the OpenAPI schema for integrations
-- Create the initial administrator directly from first-user setup
-
-## Install as a web app
-
-LanGuard includes a web app manifest and device icons, so it can open from the
-home screen in a standalone window. On iPhone or iPad, open LanGuard in Safari,
-use **Share**, and choose **Add to Home Screen**. On supported Android and
-desktop browsers, use the browser's **Install app** command.
-
-The installed web app connects to the same LanGuard server and requires network
-access to it; it does not cache device or dashboard data for offline use.
-Browser-promoted installation in Chromium requires LanGuard to be served over
-HTTPS, except when accessed through `localhost`.
-
-## How scanning works
-
-LanGuard combines several lightweight discovery methods to build and maintain
-the device inventory:
-
-| Method | Purpose |
-| --- | --- |
-| ARP discovery | Find active devices and their MAC addresses on the local network |
-| Reverse DNS, mDNS, LLMNR, SSDP, and NetBIOS | Resolve hostnames and device metadata |
-| OUI/manuf lookup | Identify hardware vendors from MAC addresses |
-| TCP port checks | Track configured ports and detect service availability changes |
-| ICMP and known-port confirmation | Avoid marking devices offline when they still respond outside ARP discovery |
-| HTTP/HTTPS probing | Suggest a reachable local device-management interface |
-| AdGuard Home sync | Collect aggregated per-device DNS destinations when the integration is enabled |
-
-By default, LanGuard scans private IPv4 ranges and a limited set of configured
-TCP ports. It does not capture packet contents or inspect application traffic,
-and its recurring port checks are not a vulnerability assessment.
-
-## Portainer
-
-Use the included [`docker-compose.yaml`](docker-compose.yaml), or create a new Portainer stack and paste:
-
-```yaml
-services:
-  backend:
-    image: ghcr.io/hillaliy/languard-backend:latest
-    container_name: languard-backend
-    privileged: true
-    network_mode: host
-    environment:
-      - SECRET_KEY=change-this-to-a-long-random-secret
-      - ALLOWED_HOSTS=192.168.1.10,languard.local,127.0.0.1
-      - BACKEND_LISTEN_PORT=${BACKEND_LISTEN_PORT:-8000}
-    volumes:
-      - languard_database:/data
-      - languard_static:/static
-    healthcheck:
-      test: ["CMD", "python", "-c", "import os, urllib.request; port = os.environ.get('BACKEND_LISTEN_PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/api/v1/health/', timeout=3).read()"]
-      interval: 10s
-      timeout: 5s
-      retries: 6
-      start_period: 60s
-    restart: unless-stopped
-
-  scanner:
-    image: ghcr.io/hillaliy/languard-scheduler:latest
-    container_name: languard-scanner
-    privileged: true
-    network_mode: host
-    command: ["python", "-u", "manage.py", "run_scheduler", "--run-now"]
-    environment:
-      - SECRET_KEY=change-this-to-a-long-random-secret
-      - ALLOWED_HOSTS=192.168.1.10,languard.local,127.0.0.1
-    volumes:
-      - languard_database:/data
-      - languard_static:/static
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-        restart: true
-
-  frontend:
-    image: ghcr.io/hillaliy/languard-frontend:latest
-    container_name: languard-frontend
-    network_mode: host
-    environment:
-      - BACKEND_UPSTREAM=127.0.0.1:${BACKEND_LISTEN_PORT:-8000}
-      - FRONTEND_LISTEN_ADDRESS=:8080
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_healthy
-        restart: true
-
-volumes:
-  languard_database:
-  languard_static:
-```
-
-> [!IMPORTANT]
-> When upgrading an existing deployment to version 1.9.0 or newer, replace the
-> `frontend` service in your Compose or Portainer stack with the definition
-> above and recreate the stack once. The frontend now uses host networking and
-> listens on `:8080` through `FRONTEND_LISTEN_ADDRESS`; remove its previous
-> `ports` and `extra_hosts` entries. This does not change the database or static
-> volumes, so stored LanGuard data is preserved.
-
-The scanner uses its own `languard-scheduler` image. It does not call the web
-backend, but both services share the database and schema, so Compose keeps their
-startup and update order coordinated. Both images are built from the same LanGuard
-source release and should be updated together. Always update and recreate the
-backend, scheduler, and frontend containers as one release, even when the scheduler
-service itself has no visible feature change.
-
-The frontend uses host networking so it can reach the backend reliably at
-`127.0.0.1:8000` without depending on Docker bridge routing. It listens on port
-`8080` by default. To use another UI port, change `FRONTEND_LISTEN_ADDRESS`, for
-example to `:8090`.
-
-The backend listens on port `8000` by default. If that port is already used on
-the Docker host, add `BACKEND_LISTEN_PORT=8010` under **Stack environment
-variables** in Portainer before deploying or updating the stack. The Compose
-definition applies that value to the backend server, its health check, and the
-frontend proxy together. This is useful when Portainer's optional Edge Agent
-tunnel already occupies port `8000`.
-
-When hard-coding the value directly in YAML instead, set
-`BACKEND_LISTEN_PORT: 8010` in the backend environment and
-`BACKEND_UPSTREAM: 127.0.0.1:8010` in the frontend environment. Do not change
-only the backend value, because the frontend proxy must use the same port. The
-health check reads `BACKEND_LISTEN_PORT` automatically.
-
-### Scheduler tasks
-
-The scheduler container runs LanGuard's recurring background work:
-
-| Task | Default schedule | Configuration |
-| --- | --- | --- |
-| Network scan | Immediately at startup, then 5 minutes after the previous scan completes | Scan interval in Settings |
-| Failed notification retry | Every 15 minutes | `NOTIFICATION_RETRY_INTERVAL` |
-| Activity cleanup | Every 24 hours | Activity retention in Settings |
-| AdGuard Home sync | Every 5 minutes when enabled | AdGuard Home settings |
-| LanGuard update check | At startup, then every 6 hours when enabled | Update check interval and new-version notification rule in Settings > Notifications |
-| Speedtest health check | At startup, then every 5 minutes when enabled | Speedtest integration, thresholds, and health-change notification rule |
-| Detailed device port scan | On demand, one scan at a time | Device page and scan or device-edit permission |
-
-The scheduler reloads the network ranges and scan interval before each cycle.
-Changes apply after the current wait or scan completes and do not require a
-container restart. Activity retention, AdGuard Home settings, and the version
-check interval are also read from the database during their scheduled loops.
-Detailed device port scans are queued in the database and processed serially by
-the scheduler so large custom ranges do not block API requests or overlap.
-
-LanGuard can scan up to 16 named IPv4 CIDR ranges with up to 1,024 addresses per
-range in one scheduled run. Add each VLAN or subnet under
-**Settings > Scanning > Network ranges**. Results are combined
-into one scan run and devices are matched by MAC address. Because discovery uses
-ARP, the Docker host needs direct Layer 2 access to every configured network,
-typically through a tagged VLAN interface. Routing alone does not forward ARP,
-and LanGuard does not bypass VLAN isolation.
-
-> [!IMPORTANT]
-> When upgrading from version 1.7.0 or earlier, update the stack with the current
-> Compose definition and recreate it once to enable the backend health check and
-> coordinated service restarts. Older Compose files remain compatible and named
-> volumes are preserved, so this does not delete LanGuard data.
-
-> [!IMPORTANT]
-> When upgrading from version 1.4.0 or earlier, change the scanner service image
-> from `ghcr.io/hillaliy/languard-backend` to
-> `ghcr.io/hillaliy/languard-scheduler`, then pull and recreate the stack.
-
-Change these before deploying:
-
-- `SECRET_KEY`
-- `ALLOWED_HOSTS`
-
-Create a `SECRET_KEY` with:
+The recommended deployment uses Docker Compose or Portainer on a trusted host
+with direct access to the network being scanned.
 
 ```bash
-openssl rand -base64 48
+git clone https://github.com/hillaliy/LanGuard.git
+cd LanGuard
 ```
 
-`ALLOWED_HOSTS` should include the IP or hostname you open in the browser. Keep
-`127.0.0.1` for the container health check, for example:
+Before deployment, edit [`docker-compose.yaml`](docker-compose.yaml):
 
-```env
-ALLOWED_HOSTS=192.168.1.10,languard.local,127.0.0.1
-```
-
-You normally do not need `CORS_ALLOWED_ORIGINS` in the Portainer stack. The frontend container serves the UI and proxies API requests to the backend on the same origin.
-
-Open `http://<docker-host-ip>:8080` and create the first user. That user becomes admin. There is no default admin password.
-
-After sign in, open Settings to change the network ranges, scan interval, timezone, and notification channels.
-
-The scanner waits for the configured scan interval after a scan completes before starting the next scheduled scan. For example, with a 5 minute interval, a scan that finishes at 20:14 will schedule the next scan for about 20:19.
-
-### Support diagnostics
-
-Admins can open **Settings > Maintenance** and select **Export diagnostics**
-when reporting a problem. The JSON report includes the LanGuard version,
-runtime and database details, configuration state, aggregate record counts,
-and recent scan outcomes. It intentionally omits credentials, service URLs,
-usernames, device names, IP and MAC addresses, network ranges, and raw exception
-text. Attach this report to a GitHub issue; only provide container logs when
-requested and review them for private network details first.
-
-Device availability history supports Day, Week, Month, and Year views. Day
-shows the last 24 hours, with missing retained history marked as No data.
-
-Use **Archive device** on a device page to remove retired equipment from the
-active inventory, Home Map, and dashboard counters without deleting history.
-Archived devices do not generate notifications. Select **Archived** in the
-device filter to find them, then use **Restore device** to restore one manually.
-A device detected again by a future scan is restored automatically. Archiving
-is not a scan exclusion, so equipment still on the network can return on the
-next scan. Inventory export and import preserve the archived state.
-
-## Integrations
-
-Docker installations can connect LanGuard to optional services from
-**Settings > Integrations**. Each integration is disabled by default.
-
-| Integration | What it adds | Data handling |
-| --- | --- | --- |
-| AdGuard Home | Network-wide and per-device DNS activity | Stores aggregated domain and query counters using the configured retention period |
-| Speedtest Tracker | Latest download, upload, ping, packet loss, and health on the dashboard | Stores connection settings only; the latest result is cached in memory for five minutes |
-| HomeBox | Link a device to an existing inventory item and open it in HomeBox | Stores connection settings and the linked item ID; no inventory synchronization |
-
-### AdGuard Home
-
-Docker installations can sync AdGuard Home query-log activity into LanGuard.
-LanGuard stores aggregated counters per device, domain, and DNS query type
-instead of copying every raw DNS response. Old aggregates are removed using
-the retention period configured in Settings.
-
-1. Make sure the query log is enabled in AdGuard Home.
-2. In LanGuard, open **Settings** and enable **AdGuard Home**.
-3. Enter the AdGuard Home URL and credentials, then select **Test connection**.
-4. Save Settings and select **Sync now** for the first import.
-5. Open **DNS Activity** for a network-wide view, or open a device and select
-   **DNS activity** for its destinations and blocked-query totals.
-
-The central DNS Activity page includes search, allowed/blocked filtering,
-device links, and diagnostics for AdGuard client identifiers that do not match
-a current LanGuard device IP. Settings also provides separate manual cleanup
-for DNS aggregates and unmatched-client diagnostics, including a **Clean all**
-option.
-
-The scheduler continues syncing at the configured interval. Update the
-`languard-scheduler` image together with the backend and frontend whenever this
-integration is included in a release.
-
-> [!IMPORTANT]
-> Per-device attribution requires AdGuard Home to record the device IP in the
-> query log. If every DNS request is forwarded through the router and AdGuard
-> Home only sees the router IP, LanGuard can only associate that activity with
-> the router. Configure clients or DHCP to use AdGuard Home directly when you
-> need device-level activity.
-
-### Speedtest Tracker
-
-Docker installations can show the latest result from an existing Speedtest
-Tracker installation directly on the dashboard. LanGuard displays download,
-upload, ping, packet loss, health, and test time, and links the card back to
-Speedtest Tracker.
-
-1. In Speedtest Tracker, create an API token with the `results:read` ability.
-2. In LanGuard, open **Settings > Integrations** and enable **Speedtest Tracker**.
-3. Enter the Speedtest Tracker URL and API token, then select **Test connection**.
-4. Save Settings. The latest result will appear on the dashboard.
-
-LanGuard stores the connection settings and, when health-change notifications
-are enabled, the identifier and health state of the last processed result. It
-does not copy Speedtest history into its database. The backend reads the latest
-result on dashboard requests and caches it in memory for five minutes, while a
-manual dashboard refresh requests fresh data immediately. The scheduler checks
-the latest scored result every five minutes when the notification rule is
-enabled. Configure Speedtest Tracker thresholds first so its API returns a
-`healthy` value; unscored results and temporary connection failures do not send
-notifications.
-
-### HomeBox
-
-The HomeBox integration targets the `/api/v1/entities` API used by HomeBox
-v0.26.2. Older releases with only an `/items` API are not supported.
-
-1. Create a HomeBox API key for an account that can access the intended inventory.
-2. Enable **HomeBox** in **Settings > Integrations**, enter its base URL and API
-   key, test the connection, and save Settings. Leave the key blank on later
-   saves to preserve it; changing the URL requires entering a key again.
-3. Open a device, select **Edit device**, search for a **HomeBox item**, and save.
-4. Select **Open in HomeBox** on the device overview to open the linked item.
-   Clearing the selection and saving removes the link without deleting the item.
-
-Search runs through the LanGuard backend on demand and requires device-edit
-permission. The API key is never returned to the browser. LanGuard does not
-create or update HomeBox items or copy documents and warranty information.
-The browser needs access to HomeBox and may require a separate HomeBox login.
-Inventory exports preserve item IDs; the HomeBox connection is configured
-separately on the destination instance.
-
-## Automation webhooks
-
-LanGuard can send each enabled network event as structured JSON to n8n, Home
-Assistant, or another automation service that accepts HTTP webhooks.
-
-1. Create a webhook trigger in the automation service and copy its production URL.
-2. In LanGuard, open **Settings > Notifications**.
-3. Enable **Automation webhook**, paste the URL, and use the test action.
-4. Save Settings and enable the event rules that should be delivered.
-
-Event deliveries use this structure:
-
-```json
-{
-  "schema_version": 1,
-  "source": "languard",
-  "kind": "network_event",
-  "delivery_id": 73,
-  "event": {
-    "id": 42,
-    "type": "new_device",
-    "label": "New device",
-    "message": "Found new device Office laptop at 192.168.1.50",
-    "created_at": "2026-08-31T08:15:00Z",
-    "metadata": {}
-  },
-  "device": {
-    "id": 12,
-    "name": "Office laptop",
-    "hostname": "office-laptop",
-    "ip": "192.168.1.50",
-    "mac": "02:00:00:00:00:12",
-    "vendor": "Example Vendor",
-    "role": "laptop",
-    "room": "Office",
-    "known": false,
-    "online": true,
-    "status": "online"
-  },
-  "scan_run_id": 18
-}
-```
-
-The test action sends a smaller payload with `kind: "test"`, a `message`, and
-delivery metadata. It does not include the `event` or `device` objects because it
-only verifies that the receiving endpoint is reachable.
-
-### Reading webhook data in Home Assistant
-
-LanGuard sends JSON with `Content-Type: application/json`, so Home Assistant
-exposes the payload as `trigger.json`, not `trigger.data`. For example:
-
-```yaml
-message: "{{ trigger.json.message }}"
-```
-
-For a real network event, fields such as the event type and device name are
-available as `trigger.json.event.type` and `trigger.json.device.name`. The test
-action has `trigger.json.kind == "test"` and its message is available as
-`trigger.json.message`.
-
-### Reading webhook data with adnanh/webhook
-
-`adnanh/webhook` receives and parses the JSON body but does not automatically
-print it in the process log or pass it to the configured command. Add an entry
-with `source: "entire-payload"` to `pass-arguments-to-command` to pass the parsed
-JSON object, or use `source: "raw-request-body"` when the command needs the exact
-request body.
-
-The webhook follows the same event rules and quiet hours as Discord and
-Telegram. You can independently enable new-device, online, offline, and port
-change events. A non-success HTTP response is recorded in notification history,
-and the scheduler retries it with the existing notification retry policy.
-
-For authenticated delivery, set a **Signing secret** in LanGuard and configure
-the same value in the receiving workflow. Signed requests include these headers:
-
-- `X-LanGuard-Delivery`: a stable delivery identifier for network events.
-- `X-LanGuard-Event`: `network_event` or `test`.
-- `X-LanGuard-Timestamp`: the Unix timestamp used in the signature.
-- `X-LanGuard-Signature`: `sha256=<hex digest>` when a secret is configured.
-
-To verify a request, calculate HMAC-SHA256 over
-`<X-LanGuard-Timestamp>.<raw request body>` with the shared secret, compare it
-to `X-LanGuard-Signature` using a constant-time comparison, and reject stale
-timestamps. The signing secret is write-only in the LanGuard API and is omitted
-from diagnostics exports.
-
-## Migrate from WatchYourLAN
-
-LanGuard can import the current device inventory from
-[WatchYourLAN](https://github.com/aceberg/WatchYourLAN). On the machine that can
-reach WatchYourLAN, download the JSON returned by its documented `/api/all`
-endpoint:
+1. Replace `SECRET_KEY` in the backend and scanner with the same long random value.
+2. Add the Docker host IP or hostname to `ALLOWED_HOSTS` while keeping `127.0.0.1`.
+3. Start the stack:
 
 ```bash
-curl http://WATCHYOURLAN_IP:8840/api/all -o watchyourlan-devices.json
+docker compose up -d
 ```
 
-If WatchYourLAN is published through a reverse proxy, replace the URL with its
-actual address and include the authentication options required by that proxy.
+Open `http://<docker-host-ip>:8080` and create the first account. The first
+account becomes the administrator; LanGuard has no default password.
 
-Then:
+> LanGuard uses host networking and privileged discovery because ARP scanning
+> requires direct Layer 2 access to the LAN. Review the Compose file before
+> deployment and use a dedicated, trusted host.
 
-1. Sign in to LanGuard as an administrator.
-2. Open **Settings**.
-3. Under **WatchYourLAN migration**, select **Import from WatchYourLAN**.
-4. Choose `watchyourlan-devices.json`.
+For Portainer instructions, custom ports, VLAN requirements, updates, backups,
+and migration, use the complete
+[installation documentation](https://hillaliy.github.io/LanGuard/docs/installation).
 
-LanGuard matches existing devices by MAC address and imports the device name,
-DNS hostname, IP address, MAC address, hardware vendor, known state, online state,
-and last-seen value. Invalid records are skipped and the completion notification
-shows how many devices were created, updated, or skipped.
+## Editions
 
-WatchYourLAN does not provide LanGuard rooms, roles, icons, comments, open-port
-history, identity confidence, or Home Map layout through this endpoint. Configure
-those fields in LanGuard after the migration; later scans can enrich hostname,
-vendor, port, and status information. Scan history is intentionally not imported.
+| Edition | Best for | Guide |
+| --- | --- | --- |
+| Docker web app | Continuous scanning, shared access, integrations, and notifications | [Installation](https://hillaliy.github.io/LanGuard/docs/installation) |
+| Native macOS scanner | A self-contained inventory and scanner on one Mac | [macOS Scanner](https://hillaliy.github.io/LanGuard/docs/macos-scanner) |
 
-## Migrate from NetAlertX
+The editions do not synchronize their inventories.
 
-LanGuard can import device inventory from the official NetAlertX `devices.csv`
-export. In NetAlertX, open **Maintenance**, download the device CSV backup, and
-then:
+## Documentation
 
-1. Sign in to LanGuard as an administrator.
-2. Open **Settings** and select **Data & migration**.
-3. Under **NetAlertX migration**, select **Import from NetAlertX**.
-4. Choose the exported `devices.csv` file.
+The public documentation is the source of truth for setup and operation:
 
-LanGuard matches existing devices by MAC address and imports compatible names,
-hostnames, IP and MAC addresses, vendors, comments, locations as rooms, recognized
-device types as roles, known state, current status, and first/last-seen timestamps.
-Invalid records and NetAlertX's synthetic `Internet` device are skipped.
-
-NetAlertX settings, credentials, workflows, notification history, presence
-history, custom properties, embedded icons, topology relationships, and scan
-history are intentionally not imported. Later LanGuard scans can refresh device
-identity, status, and port information.
-
-If you override `DISCORD_ICON_URL`, use a versioned URL when replacing the icon so Discord mobile clients do not reuse an old cached image, for example:
-
-```env
-DISCORD_ICON_URL=https://raw.githubusercontent.com/hillaliy/LanGuard/main/frontend/public/logo.png?v=current
-```
-
-Portainer will create the stack network automatically.
-
-Backend and scanner use host networking so ARP discovery can see LAN devices. Without host networking, Docker bridge networking may only show the Docker host/gateway.
-
-## Phone MAC Randomization
-
-Modern iPhone and Android devices often use a private/random MAC address per Wi-Fi network. If that address changes, LanGuard will see the same phone as a new device.
-
-For stable tracking, disable private/random MAC addressing for your home Wi-Fi network on the phone, or mark the new entry as known when it appears.
+- [Getting Started](https://hillaliy.github.io/LanGuard/docs/getting-started)
+- [Configuration](https://hillaliy.github.io/LanGuard/docs/configuration)
+- [Device Discovery](https://hillaliy.github.io/LanGuard/docs/device-discovery)
+- [Devices and Alerts](https://hillaliy.github.io/LanGuard/docs/devices-and-alerts)
+- [Integrations](https://hillaliy.github.io/LanGuard/docs/integrations)
+- [Notifications](https://hillaliy.github.io/LanGuard/docs/notifications)
+- [Scheduler Tasks](https://hillaliy.github.io/LanGuard/docs/scheduler-tasks)
+- [Backup and Migration](https://hillaliy.github.io/LanGuard/docs/backup-and-migration)
+- [Troubleshooting](https://hillaliy.github.io/LanGuard/docs/troubleshooting)
+- [Release Notes](https://hillaliy.github.io/LanGuard/docs/release-notes)
 
 ## Update
 
-Change the image tags in the Portainer stack and redeploy. Do not delete the `languard_database` volume unless you want to reset LanGuard.
+Update all three Docker services together without removing the database volume:
+
+```bash
+docker compose pull
+docker compose up -d --force-recreate
+```
+
+Review the [release notes](https://hillaliy.github.io/LanGuard/docs/release-notes)
+before updating across multiple versions.
 
 ## API
 
+Docker installations expose interactive API documentation through the LanGuard server:
+
 - Swagger: `/api/schema/swagger/`
 - ReDoc: `/api/schema/redoc/`
-- Schema: `/api/schema/`
+- OpenAPI schema: `/api/schema/`
 
 ## Contributing
 
-Development setup, checks, and release metadata instructions are documented in
-[`CONTRIBUTING.md`](CONTRIBUTING.md).
+Development setup, checks, and release instructions are documented in
+[`CONTRIBUTING.md`](CONTRIBUTING.md). User-facing behavior should update the
+public documentation in the same pull request.
 
 ## License
 

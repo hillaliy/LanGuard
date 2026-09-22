@@ -1,0 +1,58 @@
+---
+sidebar_position: 1
+title: Getting Started
+description: Understand LanGuard, choose an edition, and complete your first network scan.
+slug: /getting-started
+---
+
+# Getting Started
+
+LanGuard discovers devices on your local network, keeps a durable inventory, tracks availability and port changes, and tells you when something needs attention.
+
+## Choose an edition
+
+| Edition | Best for | Where data is stored |
+| --- | --- | --- |
+| **Docker web app** | Continuous scanning, a shared dashboard, integrations, multiple users, and notifications | A named Docker volume on your server |
+| **Native macOS scanner** | A self-contained inventory and scanner on one Mac | Locally on that Mac |
+
+The editions share the same goal but are separate applications. They do not synchronize their inventories.
+
+## What LanGuard observes
+
+LanGuard combines several lightweight network signals:
+
+- ARP discovery for active IPv4 devices and their MAC addresses.
+- Reverse DNS, mDNS, LLMNR, SSDP, and NetBIOS for names and metadata.
+- OUI/manuf lookup for hardware vendor identification.
+- ICMP and known-port checks to confirm that a device is still reachable.
+- TCP checks for configured and on-demand port inventory.
+- HTTP and HTTPS probes that can suggest a local device interface.
+
+LanGuard does **not** capture packet contents, read application traffic, or replace a vulnerability scanner. Its recurring port checks answer a narrower question: which expected network services are reachable now?
+
+## First-run checklist
+
+1. [Install the Docker stack](./installation) or the [native macOS scanner](./macos-scanner).
+2. Open the Docker interface at `http://<server-ip>:8080` and create the first account. The first account becomes an administrator.
+3. Open **Settings > Scanning** and verify the detected network range.
+4. Add any additional directly connected VLANs or subnets that LanGuard should scan.
+5. Run a scan and review the **Devices** page.
+6. Give important devices names, rooms, roles, and appropriate icons.
+7. Mark recognized devices as **Known**. Until then, automatic identification can continue improving their metadata.
+8. Configure [notification rules](./notifications) only after the initial inventory is reviewed, so the first scan does not create unnecessary alerts.
+
+> **Stable device identity:** LanGuard primarily matches devices by MAC address. Phones and tablets that use private Wi-Fi addresses can appear as new devices when that address changes. Disable private addressing only for trusted home networks where stable tracking is more important than that privacy feature.
+
+## Learn the daily workflow
+
+The **Dashboard** summarizes network health, active devices, recent changes, the latest scan, and optional integration data. The **Devices** page is the working inventory: filter it, select multiple devices, mark new entries as known, or open a device for its full history and controls.
+
+Use **Needs Attention** for actionable findings such as unknown devices, risky ports, identity conflicts, or regular devices that have remained offline for more than seven days. Each listed device includes the reason it needs review.
+
+## Next steps
+
+- Read [Device Discovery](./device-discovery) before scanning multiple VLANs.
+- Learn how [devices, visitors, archived entries, and attention findings](./devices-and-alerts) behave.
+- Connect optional services in [Integrations](./integrations).
+- Keep the [Troubleshooting](./troubleshooting) guide available during initial setup.

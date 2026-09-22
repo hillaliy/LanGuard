@@ -1,0 +1,45 @@
+---
+title: Scheduler Tasks
+description: Understand recurring scans, cleanup, synchronization, retries, and health checks.
+slug: /scheduler-tasks
+---
+
+# Scheduler Tasks
+
+The `languard-scheduler` container owns recurring and queued background work. It shares the backend's database and schema but does not call the web API to perform its normal tasks.
+
+## Default schedules
+
+| Task | Default schedule | Configuration |
+| --- | --- | --- |
+| Network scan | At startup, then 5 minutes after the previous scan completes | Scan interval in **Settings > Scanning** |
+| Failed notification retry | Every 15 minutes | `NOTIFICATION_RETRY_INTERVAL` |
+| Activity cleanup | Every 24 hours | Activity retention in Settings |
+| AdGuard Home sync | Every 5 minutes when enabled | Integration sync interval and retention |
+| LanGuard update check | At startup, then every 6 hours when enabled | Update-check interval and notification rule |
+| Speedtest health check | At startup, then every 5 minutes when enabled | Integration, thresholds, and notification rule |
+| Detailed device port scan | On demand, one queued scan at a time | Device page and user permissions |
+
+## How intervals behave
+
+Intervals are measured from the end of the previous run, not from fixed clock boundaries. A five-minute network interval and a scan ending at 10:12 results in the next scan starting at approximately 10:17.
+
+The update check works the same way. If the scheduler last checked three hours before you enabled a six-hour interval, the next check can occur about three hours later rather than immediately.
+
+## Reloading configuration
+
+The scheduler reloads network ranges and scan interval before each cycle. Activity retention, AdGuard Home configuration, and the update-check interval are also read from the database during their own loops. Restarting the container is not normally required after changing these settings.
+
+## Why there is no cron setup
+
+LanGuard uses one scheduler process so work can coordinate through the database, react to saved settings, wait until a previous scan completes, and process detailed scan requests serially. External cron entries are unnecessary and can cause overlapping runs.
+
+## Operational checks
+
+Inspect the scheduler logs when scheduled work does not run:
+
+```bash
+docker logs --tail=200 languard-scanner
+```
+
+After updating, confirm that backend and scheduler images have the same version. A schema mismatch can prevent queued or scheduled work from being processed correctly.

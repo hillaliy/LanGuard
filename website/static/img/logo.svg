@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">LanGuard logo</title>
+  <desc id="desc">A bold blue shield with a connected network symbol inside.</desc>
+  <defs>
+    <linearGradient id="plate" x1="108" y1="60" x2="916" y2="964" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".58" stop-color="#eef5ff"/>
+      <stop offset="1" stop-color="#dbe8f8"/>
+    </linearGradient>
+    <linearGradient id="shield" x1="220" y1="104" x2="804" y2="900" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1bb2ff"/>
+      <stop offset=".48" stop-color="#2174ff"/>
+      <stop offset="1" stop-color="#2440aa"/>
+    </linearGradient>
+    <linearGradient id="core" x1="350" y1="270" x2="674" y2="744" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#273a52"/>
+      <stop offset="1" stop-color="#071221"/>
+    </linearGradient>
+    <filter id="plateShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="22" stdDeviation="26" flood-color="#12233f" flood-opacity=".18"/>
+    </filter>
+    <filter id="markShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#0a1630" flood-opacity=".32"/>
+    </filter>
+  </defs>
+
+  <rect x="36" y="36" width="952" height="952" rx="210" fill="url(#plate)" filter="url(#plateShadow)"/>
+  <rect x="54" y="54" width="916" height="916" rx="192" fill="none" stroke="#ffffff" stroke-width="12" opacity=".88"/>
+  <rect x="74" y="74" width="876" height="876" rx="174" fill="none" stroke="#477ee8" stroke-width="8" opacity=".24"/>
+
+  <g filter="url(#markShadow)">
+    <path fill="url(#shield)" d="M512 112 816 206v224c0 206-96 350-304 440-208-90-304-234-304-440V206l304-94Z"/>
+    <path fill="#ffffff" opacity=".96" d="M512 176 758 252v178c0 168-71 276-246 356-175-80-246-188-246-356V252l246-76Z"/>
+    <path fill="url(#shield)" d="M512 224 708 287v147c0 131-50 214-196 286-146-72-196-155-196-286V287l196-63Z"/>
+    <path fill="url(#core)" d="M512 276 660 324v113c0 95-32 154-148 216-116-62-148-121-148-216V324l148-48Z"/>
+  </g>
+
+  <g fill="none" stroke="#a9d8ff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M512 404v104"/>
+    <path d="M512 508 418 600"/>
+    <path d="M512 508 606 600"/>
+  </g>
+
+  <g fill="#071221" stroke="#ffffff" stroke-width="18">
+    <rect x="430" y="342" width="164" height="104" rx="26"/>
+    <rect x="314" y="586" width="154" height="100" rx="26"/>
+    <rect x="556" y="586" width="154" height="100" rx="26"/>
+  </g>
+
+  <g fill="#f7fbff">
+    <rect x="462" y="373" width="100" height="40" rx="10"/>
+    <rect x="346" y="616" width="90" height="38" rx="10"/>
+    <rect x="588" y="616" width="90" height="38" rx="10"/>
+  </g>
+
+  <g fill="#1db2ff">
+    <circle cx="512" cy="508" r="22"/>
+    <circle cx="418" cy="600" r="18"/>
+    <circle cx="606" cy="600" r="18"/>
+  </g>
+</svg>

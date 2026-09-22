@@ -1,0 +1,91 @@
+---
+title: Notifications
+description: Configure rules, channels, quiet hours, retries, tests, and signed automation webhooks.
+slug: /notifications
+---
+
+# Notifications
+
+LanGuard can deliver device and system events through Discord, Telegram, ntfy, or a generic automation webhook. Rules determine what is eligible; channels determine where it is sent.
+
+## Configure delivery
+
+1. Open **Settings > Notifications**.
+2. Enable and configure one or more channels.
+3. Use each channel's test action before saving.
+4. Enable the event rules you want delivered.
+5. Set quiet hours and weekdays if routine presence changes should be silent overnight.
+
+Supported rules include new devices, online and offline changes, port changes, Speedtest health changes, and new LanGuard releases. Availability can expand between releases; the Settings page is authoritative for the installed version.
+
+## Per-device behavior
+
+Online and offline rules can be overridden for an individual device. **Use global setting** follows the site-wide rule. Visitors are quiet by default for presence changes so occasional guests do not create repetitive notifications.
+
+Archived devices do not send notifications.
+
+## Delivery history and retries
+
+Every delivery is recorded with its result. Failed eligible deliveries are retried by the scheduler every 15 minutes according to the current retry policy. Use the saved error message to distinguish invalid credentials, endpoint rejection, and temporary connectivity problems.
+
+## Channel notes
+
+### Discord
+
+Create a webhook in the target Discord channel and save its URL in LanGuard. The URL is a credential; leave the field blank on later saves to preserve the stored value.
+
+### Telegram
+
+Create a bot, start a conversation with it or add it to the intended chat, then configure the bot token and chat/user ID. A valid token alone is not enough: the bot must be able to reach the destination.
+
+### ntfy
+
+Configure the ntfy server, topic, and optional authentication supported by the Settings form. LanGuard can set notification priority and test the channel before normal events are enabled.
+
+## Automation webhook
+
+Enable **Automation webhook**, enter the endpoint URL, and optionally set a signing secret. A network event uses this structure:
+
+```json
+{
+  "schema_version": 1,
+  "source": "languard",
+  "kind": "network_event",
+  "delivery_id": 73,
+  "event": {
+    "id": 42,
+    "type": "new_device",
+    "label": "New device",
+    "message": "Found new device Office laptop at 192.168.1.50",
+    "created_at": "2026-08-31T08:15:00Z",
+    "metadata": {}
+  },
+  "device": {
+    "id": 12,
+    "name": "Office laptop",
+    "hostname": "office-laptop",
+    "ip": "192.168.1.50",
+    "mac": "02:00:00:00:00:12",
+    "vendor": "Example Vendor",
+    "role": "laptop",
+    "room": "Office",
+    "known": false,
+    "online": true,
+    "status": "online"
+  },
+  "scan_run_id": 18
+}
+```
+
+The test action sends `kind: "test"` with a message and delivery metadata. It does not contain event or device objects.
+
+### Verify signatures
+
+Signed requests include:
+
+- `X-LanGuard-Delivery`
+- `X-LanGuard-Event`
+- `X-LanGuard-Timestamp`
+- `X-LanGuard-Signature: sha256=<hex digest>`
+
+Calculate HMAC-SHA256 over `<timestamp>.<raw request body>` with the shared secret, compare it using a constant-time function, and reject stale timestamps. Home Assistant exposes JSON as `trigger.json`; for example, use `trigger.json.event.type` for the event type.

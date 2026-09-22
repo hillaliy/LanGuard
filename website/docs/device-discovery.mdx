@@ -1,0 +1,57 @@
+---
+title: Device Discovery
+description: Learn how LanGuard finds, identifies, confirms, and updates network devices.
+slug: /device-discovery
+---
+
+# Device Discovery
+
+LanGuard combines multiple signals instead of trusting a single protocol. This improves coverage across computers, phones, IoT devices, printers, routers, and equipment that responds inconsistently.
+
+## Discovery stages
+
+| Stage | What it contributes |
+| --- | --- |
+| ARP discovery | Active IPv4 addresses and MAC addresses on directly attached networks |
+| Name resolution | Hostnames from reverse DNS, mDNS, LLMNR, SSDP, and NetBIOS |
+| Vendor lookup | Manufacturer evidence from the bundled OUI/manuf database |
+| Reachability confirmation | ICMP and known-port responses that prevent premature offline status |
+| Port checks | Configured TCP services and changes since earlier scans |
+| Web probing | A suggested HTTP or HTTPS management interface when one responds |
+
+The device page shows identity confidence and evidence when available. A strong hostname or vendor signal is useful context, but the stable inventory key is normally the MAC address.
+
+## Known and unknown devices
+
+Newly discovered devices begin as **Unknown**. While a device remains unknown, later discovery can improve automatically selected metadata such as its icon. Once you mark it **Known**, LanGuard preserves your selected identity and presentation instead of replacing it during routine scans.
+
+You can mark several new devices as known from the Devices page. Review names and MAC addresses before using the bulk action.
+
+## Online and offline decisions
+
+A missing ARP response alone does not always mean a device is offline. LanGuard can use ICMP or an already known reachable port as secondary confirmation. A device is marked offline only after it misses the configured number of scans without a supporting discovery signal.
+
+The device page records the latest status source and the number of missed scans. Status changes are retained in its history and can trigger notifications according to global and per-device rules.
+
+## Scheduled and manual scans
+
+- A scheduled scan runs immediately when the scheduler starts, then waits for the configured interval after each completed scan.
+- **Run scan** starts an inventory scan when the signed-in user has scan permission.
+- **Detailed port scan** queues a per-device TCP scan with a custom range. The scheduler processes one detailed scan at a time, supports cancellation and timeouts, and does not replace saved port inventory if the target goes offline during the scan.
+
+Detailed port scans are more expensive than routine discovery. Use them for a specific device and a deliberate port range rather than as a continuous vulnerability scan.
+
+## Multiple MAC addresses for one IP
+
+Temporary or stale network information can cause different MAC addresses to report the same IP. LanGuard records an identity-conflict attention reason instead of silently combining unrelated devices. If later scans consistently resolve the conflict, the warning clears automatically.
+
+Common causes include:
+
+- DHCP reassignment while a previous neighbor entry is still cached.
+- Bridged or proxied devices reporting through another interface.
+- Private Wi-Fi addresses changing on phones or tablets.
+- Discovery protocols returning stale service records.
+
+## Limits
+
+LanGuard scans private IPv4 networks. It does not currently build an IPv6 inventory, inspect payloads, monitor arbitrary internet services, or discover containers through a container runtime API. Network segmentation and host firewall rules still determine what the scanner can observe.

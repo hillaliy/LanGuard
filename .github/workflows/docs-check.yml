@@ -1,0 +1,38 @@
+name: Documentation
+
+on:
+  pull_request:
+    paths:
+      - 'website/**'
+      - 'CHANGELOG.md'
+      - '.github/workflows/docs-check.yml'
+      - '.github/workflows/docs-pages.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: website/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check types
+        run: npm run typecheck
+
+      - name: Build documentation
+        run: npm run build
