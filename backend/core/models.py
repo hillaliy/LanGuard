@@ -1,7 +1,7 @@
 import ipaddress
 from urllib.parse import urlsplit, urlunsplit
 
-from django.db import models
+from django.db import models, transaction
 from django.conf import settings
 from django.utils import timezone
 
@@ -130,6 +130,29 @@ class Device(models.Model):
     def __str__(self):
         return f"Device: {self.name} - IP:{self.ip}"
 
+    def save(self, *args, **kwargs):
+        ip_observed_at = kwargs.pop("ip_observed_at", None) or timezone.now()
+        close_competing_ip_assignments = kwargs.pop(
+            "close_competing_ip_assignments",
+            True,
+        )
+        update_fields = kwargs.get("update_fields")
+        track_ip = self._state.adding or update_fields is None or "ip" in update_fields
+        if not track_ip:
+            return super().save(*args, **kwargs)
+
+        was_adding = self._state.adding
+        with transaction.atomic():
+            if not was_adding and self.pk:
+                type(self).objects.select_for_update().only("pk").get(pk=self.pk)
+            result = super().save(*args, **kwargs)
+            record_device_ip_assignment(
+                self,
+                observed_at=ip_observed_at,
+                close_competing=close_competing_ip_assignments,
+            )
+            return result
+
     @property
     def effective_external_url(self):
         if not self.external_url or not self.external_url_follow_device_ip:
@@ -146,6 +169,84 @@ class Device(models.Model):
             )
         except (TypeError, ValueError):
             return self.external_url
+
+
+class DeviceIPAddressAssignment(models.Model):
+    device = models.ForeignKey(
+        Device,
+        related_name="ip_assignments",
+        on_delete=models.CASCADE,
+    )
+    ip = models.GenericIPAddressField(db_index=True)
+    valid_from = models.DateTimeField(db_index=True)
+    valid_until = models.DateTimeField(blank=True, null=True, db_index=True)
+
+    class Meta:
+        ordering = ["-valid_from", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device"],
+                condition=models.Q(valid_until__isnull=True),
+                name="unique_active_device_ip_assignment",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(valid_until__isnull=True)
+                    | models.Q(valid_until__gte=models.F("valid_from"))
+                ),
+                name="device_ip_assignment_valid_range",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["ip", "valid_from", "valid_until"],
+                name="core_ip_assignment_lookup_idx",
+            ),
+        ]
+
+    def __str__(self):
+        end = self.valid_until.isoformat() if self.valid_until else "present"
+        return f"{self.device.name}: {self.ip} ({self.valid_from.isoformat()} - {end})"
+
+
+def record_device_ip_assignment(device, *, observed_at, close_competing=True):
+    observed_at = observed_at or timezone.now()
+    active_assignments = list(
+        DeviceIPAddressAssignment.objects.select_for_update().filter(
+            device=device,
+            valid_until__isnull=True,
+        )
+    )
+    current_assignment = next(
+        (
+            assignment
+            for assignment in active_assignments
+            if assignment.ip == device.ip
+        ),
+        None,
+    )
+    if current_assignment is None:
+        for assignment in active_assignments:
+            assignment.valid_until = max(observed_at, assignment.valid_from)
+            assignment.save(update_fields=["valid_until"])
+
+        current_assignment = DeviceIPAddressAssignment.objects.create(
+            device=device,
+            ip=device.ip,
+            valid_from=observed_at,
+        )
+
+    if close_competing:
+        competing_assignments = list(
+            DeviceIPAddressAssignment.objects.select_for_update()
+            .filter(ip=device.ip, valid_until__isnull=True)
+            .exclude(device=device)
+        )
+        for assignment in competing_assignments:
+            assignment.valid_until = max(observed_at, assignment.valid_from)
+            assignment.save(update_fields=["valid_until"])
+
+    return current_assignment
 
 
 class DevicePort(models.Model):

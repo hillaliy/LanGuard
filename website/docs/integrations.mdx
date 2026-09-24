@@ -24,7 +24,9 @@ Docker installations can connect optional services from **Settings > Integration
 4. Save and select **Sync now** for the first import.
 5. Open the central **DNS Activity** page or a device's **DNS activity** tab.
 
-The scheduler imports aggregated counters per device, domain, and query type. The configured retention period removes old aggregates. Diagnostics identify AdGuard client values that do not match a current LanGuard device IP.
+The scheduler imports aggregated counters per device, domain, and query type. Each query is matched against the device that owned the client IPv4 address at the query time, so later DHCP changes or address reuse do not move activity between devices. Queries without one reliable historical owner remain in unmatched-client diagnostics instead of being guessed.
+
+The configured retention period removes old DNS aggregates. IP assignment history is independent of event and DNS retention and remains available for the lifetime of the device. After upgrading from an older LanGuard release, current assignments begin when the migration runs; LanGuard does not infer earlier ownership that it did not observe.
 
 > **Device attribution:** AdGuard Home must record the originating device IP. If all requests reach it through the router, LanGuard can associate the activity only with that router. Configure DHCP or clients to use AdGuard Home directly when device-level attribution is required.
 

@@ -9,11 +9,19 @@ from rest_framework.test import APIClient
 from .adguard import (
     AdGuardClient,
     AdGuardError,
+    device_for_client_at,
+    ip_assignment_index,
     sync_adguard_query_log,
     test_adguard_connection,
 )
 from .maintenance import cleanup_all_activity
-from .models import AdGuardUnmatchedClient, AppSettings, Device, DeviceDNSActivity
+from .models import (
+    AdGuardUnmatchedClient,
+    AppSettings,
+    Device,
+    DeviceDNSActivity,
+    DeviceIPAddressAssignment,
+)
 
 
 class AdGuardClientTests(SimpleTestCase):
@@ -67,11 +75,12 @@ class AdGuardIntegrationTests(TestCase):
         self.admin_client.force_authenticate(self.admin)
         self.viewer_client = APIClient()
         self.viewer_client.force_authenticate(self.viewer)
-        self.device = Device.objects.create(
+        self.device = Device(
             name="Living room TV",
             ip="192.168.1.20",
             mac="aa:bb:cc:dd:ee:20",
         )
+        self.device.save(ip_observed_at=timezone.now() - timedelta(days=1))
         self.config = AppSettings.load()
         self.config.adguard_enabled = True
         self.config.adguard_url = "http://adguard.local:3000"
@@ -81,8 +90,17 @@ class AdGuardIntegrationTests(TestCase):
         self.config.save()
 
     def query(self, *, seconds_ago, domain, query_type="A", reason="NotFilteredNotFound", client=None):
+        return self.query_at(
+            timezone.now() - timedelta(seconds=seconds_ago),
+            domain=domain,
+            query_type=query_type,
+            reason=reason,
+            client=client,
+        )
+
+    def query_at(self, seen_at, *, domain, query_type="A", reason="NotFilteredNotFound", client=None):
         return {
-            "time": (timezone.now() - timedelta(seconds=seconds_ago)).isoformat(),
+            "time": seen_at.isoformat(),
             "client": client or self.device.ip,
             "question": {"name": domain, "type": query_type},
             "reason": reason,
@@ -131,6 +149,172 @@ class AdGuardIntegrationTests(TestCase):
         self.assertEqual(second_result["processed"], 0)
         ipv4.refresh_from_db()
         self.assertEqual(ipv4.query_count, 2)
+
+    @patch("core.adguard.AdGuardClient")
+    def test_sync_uses_ip_owner_at_query_time_after_dhcp_reuse(self, client_class):
+        now = timezone.now()
+        original_ip = self.device.ip
+        moved_at = now - timedelta(minutes=30)
+        reused_at = now - timedelta(minutes=10)
+
+        self.device.ip = "192.168.1.21"
+        self.device.save(update_fields=["ip"], ip_observed_at=moved_at)
+        replacement = Device(
+            name="Replacement device",
+            ip=original_ip,
+            mac="aa:bb:cc:dd:ee:21",
+        )
+        replacement.save(ip_observed_at=reused_at)
+
+        client_class.return_value.query_log_config.return_value = {"enabled": True}
+        client_class.return_value.query_log.return_value = {
+            "data": [
+                self.query_at(
+                    now - timedelta(minutes=5),
+                    domain="replacement.example",
+                    client=original_ip,
+                ),
+                self.query_at(
+                    now - timedelta(minutes=20),
+                    domain="moved.example",
+                    client=self.device.ip,
+                ),
+                self.query_at(
+                    now - timedelta(minutes=45),
+                    domain="original.example",
+                    client=original_ip,
+                ),
+            ]
+        }
+
+        result = sync_adguard_query_log(self.config)
+
+        self.assertEqual(result["matched"], 3)
+        self.assertTrue(
+            DeviceDNSActivity.objects.filter(
+                device=self.device,
+                domain="original.example",
+            ).exists()
+        )
+        self.assertTrue(
+            DeviceDNSActivity.objects.filter(
+                device=self.device,
+                domain="moved.example",
+            ).exists()
+        )
+        self.assertTrue(
+            DeviceDNSActivity.objects.filter(
+                device=replacement,
+                domain="replacement.example",
+            ).exists()
+        )
+
+    def test_assignment_history_tracks_multiple_changes_and_archived_devices(self):
+        now = timezone.now()
+        first_change = now - timedelta(hours=2)
+        second_change = now - timedelta(hours=1)
+
+        self.device.ip = "192.168.1.21"
+        self.device.save(update_fields=["ip"], ip_observed_at=first_change)
+        self.device.ip = "192.168.1.22"
+        self.device.save(update_fields=["ip"], ip_observed_at=second_change)
+        self.device.archived = True
+        self.device.save(update_fields=["archived"])
+        assignments = ip_assignment_index()
+
+        self.assertEqual(
+            device_for_client_at(
+                "192.168.1.20",
+                now - timedelta(hours=3),
+                assignments,
+            ),
+            self.device,
+        )
+        self.assertEqual(
+            device_for_client_at(
+                "192.168.1.21",
+                now - timedelta(minutes=90),
+                assignments,
+            ),
+            self.device,
+        )
+        self.assertEqual(
+            device_for_client_at("192.168.1.22", now, assignments),
+            self.device,
+        )
+
+    @patch("core.adguard.AdGuardClient")
+    def test_ambiguous_ip_assignment_remains_unmatched(self, client_class):
+        now = timezone.now()
+        competing = Device(
+            name="Conflicting device",
+            ip=self.device.ip,
+            mac="aa:bb:cc:dd:ee:22",
+        )
+        competing.save(
+            ip_observed_at=now - timedelta(hours=1),
+            close_competing_ip_assignments=False,
+        )
+        client_class.return_value.query_log_config.return_value = {"enabled": True}
+        client_class.return_value.query_log.return_value = {
+            "data": [self.query_at(now, domain="ambiguous.example")]
+        }
+
+        result = sync_adguard_query_log(self.config)
+
+        self.assertEqual(result["matched"], 0)
+        self.assertEqual(result["unmatched"], 1)
+        self.assertTrue(
+            AdGuardUnmatchedClient.objects.filter(client=self.device.ip).exists()
+        )
+
+    @patch("core.adguard.AdGuardClient")
+    def test_prior_activity_stays_with_device_after_ip_change(self, client_class):
+        first_seen = timezone.now() - timedelta(minutes=10)
+        client_class.return_value.query_log_config.return_value = {"enabled": True}
+        client_class.return_value.query_log.return_value = {
+            "data": [self.query_at(first_seen, domain="kept.example")]
+        }
+        sync_adguard_query_log(self.config)
+
+        self.device.ip = "192.168.1.25"
+        self.device.save(
+            update_fields=["ip"],
+            ip_observed_at=timezone.now() - timedelta(minutes=5),
+        )
+
+        activity = DeviceDNSActivity.objects.get(domain="kept.example")
+        self.assertEqual(activity.device, self.device)
+        self.assertEqual(activity.query_count, 1)
+
+    @patch("core.adguard.AdGuardClient")
+    def test_unmatched_diagnostic_is_only_resolved_by_covering_assignment(self, client_class):
+        now = timezone.now()
+        unmatched = AdGuardUnmatchedClient.objects.create(
+            client="192.168.1.99",
+            query_count=1,
+            first_seen=now - timedelta(hours=2),
+            last_seen=now - timedelta(hours=1),
+            last_domain="unknown.example",
+        )
+        later_device = Device(
+            name="Later device",
+            ip=unmatched.client,
+            mac="aa:bb:cc:dd:ee:99",
+        )
+        later_device.save(ip_observed_at=now)
+        client_class.return_value.query_log_config.return_value = {"enabled": True}
+        client_class.return_value.query_log.return_value = {"data": []}
+
+        sync_adguard_query_log(self.config)
+        self.assertTrue(AdGuardUnmatchedClient.objects.filter(pk=unmatched.pk).exists())
+
+        assignment = later_device.ip_assignments.get(valid_until__isnull=True)
+        assignment.valid_from = now - timedelta(hours=3)
+        assignment.save(update_fields=["valid_from"])
+        sync_adguard_query_log(AppSettings.load())
+
+        self.assertFalse(AdGuardUnmatchedClient.objects.filter(pk=unmatched.pk).exists())
 
     def test_global_activity_and_unmatched_diagnostics_endpoints(self):
         now = timezone.now()

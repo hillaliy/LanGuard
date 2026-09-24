@@ -1777,7 +1777,11 @@ def sync_discovered_device(
                 device.icon = "router"
                 update_fields.append("icon")
             update_fields.extend(["is_gateway", "known", "name"])
-        device.save(update_fields=update_fields)
+        device.save(
+            update_fields=update_fields,
+            ip_observed_at=scan_started_at,
+            close_competing_ip_assignments=not conflict_reason,
+        )
 
         if resolved_conflict_reason:
             Device.objects.filter(
@@ -1816,7 +1820,7 @@ def sync_discovered_device(
                 "name": "Gateway" if is_default_device_name(identity["name"]) else identity["name"],
                 "icon": "router",
             }
-        device = Device.objects.create(
+        device = Device(
             icon=identity["icon"],
             name=identity["name"],
             ip=ip,
@@ -1831,6 +1835,10 @@ def sync_discovered_device(
             known=is_gateway,
             is_gateway=is_gateway,
             lastseen=scan_started_at,
+        )
+        device.save(
+            ip_observed_at=scan_started_at,
+            close_competing_ip_assignments=not conflict_reason,
         )
         set_device_status(
             device,

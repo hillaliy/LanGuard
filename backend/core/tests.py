@@ -24,6 +24,7 @@ from .management.commands.run_scheduler import load_scan_schedule
 from .models import (
     AppSettings,
     Device,
+    DeviceIPAddressAssignment,
     DevicePort,
     NetworkEvent,
     NotificationDelivery,
@@ -1083,6 +1084,13 @@ class ScanStabilityTests(TestCase):
             duplicate.identity_conflict_reason,
         )
         self.assertEqual(original.identity_conflict_detected_at, observed_at)
+        self.assertEqual(
+            DeviceIPAddressAssignment.objects.filter(
+                ip="192.168.1.3",
+                valid_until__isnull=True,
+            ).count(),
+            2,
+        )
         get_hostname.assert_not_called()
 
     @override_settings(PORT_SCAN_ENABLED=False)
@@ -1121,6 +1129,11 @@ class ScanStabilityTests(TestCase):
         self.assertIsNone(original.identity_conflict_detected_at)
         self.assertEqual(duplicate.identity_conflict_reason, "")
         self.assertIsNone(duplicate.identity_conflict_detected_at)
+        active_assignment = DeviceIPAddressAssignment.objects.get(
+            ip=duplicate.ip,
+            valid_until__isnull=True,
+        )
+        self.assertEqual(active_assignment.device, duplicate)
 
     @override_settings(PORT_SCAN_ENABLED=False)
     @patch("core.scan.get_hostname", return_value=("", ""))
@@ -1171,13 +1184,13 @@ class ScanStabilityTests(TestCase):
         return_value=("Office printer", Device.IdentitySource.MDNS),
     )
     def test_stale_device_with_reused_ip_does_not_trigger_conflict(self, _):
-        observed_at = timezone.now()
-        Device.objects.create(
+        old_device = Device.objects.create(
             name="Old device",
             ip="192.168.1.30",
             mac="aa:bb:cc:dd:ee:01",
-            lastseen=observed_at - timedelta(hours=2),
+            lastseen=timezone.now() - timedelta(hours=2),
         )
+        observed_at = timezone.now()
 
         sync_discovered_device(
             self.scan_element("192.168.1.30", "aa:bb:cc:dd:ee:02"),
@@ -1188,6 +1201,16 @@ class ScanStabilityTests(TestCase):
         device = Device.objects.get(mac="aa:bb:cc:dd:ee:02")
         self.assertEqual(device.hostname, "Office printer")
         self.assertEqual(device.identity_conflict_reason, "")
+        self.assertEqual(
+            DeviceIPAddressAssignment.objects.get(
+                device=old_device,
+                ip="192.168.1.30",
+            ).valid_until,
+            DeviceIPAddressAssignment.objects.get(
+                device=device,
+                ip="192.168.1.30",
+            ).valid_from,
+        )
 
     @override_settings(PORT_SCAN_ENABLED=False)
     def test_existing_device_ip_change_creates_history_event(self):
@@ -1198,10 +1221,12 @@ class ScanStabilityTests(TestCase):
             known=True,
         )
         scan_run = ScanRun.objects.create(ip_range="192.168.1.0/24")
+        observed_at = timezone.now()
 
         sync_discovered_device(
             self.scan_element("192.168.1.25", device.mac),
             scan_run=scan_run,
+            scan_started_at=observed_at,
         )
 
         device.refresh_from_db()
@@ -1223,6 +1248,17 @@ class ScanStabilityTests(TestCase):
                 "notification_skipped": "known_device",
             },
         )
+        old_assignment = DeviceIPAddressAssignment.objects.get(
+            device=device,
+            ip="192.168.1.10",
+        )
+        current_assignment = DeviceIPAddressAssignment.objects.get(
+            device=device,
+            ip="192.168.1.25",
+        )
+        self.assertEqual(old_assignment.valid_until, observed_at)
+        self.assertEqual(current_assignment.valid_from, observed_at)
+        self.assertIsNone(current_assignment.valid_until)
 
     @override_settings(PORT_SCAN_ENABLED=False)
     def test_unchanged_device_ip_does_not_create_history_event(self):
@@ -5628,6 +5664,18 @@ class ScanApiTests(TestCase):
         self.assertEqual(self.device.vendor, "Apple")
         self.assertEqual(self.device.icon, "tv")
         self.assertTrue(self.device.known)
+        self.assertTrue(
+            self.device.ip_assignments.filter(
+                ip="192.168.1.20",
+                valid_until__isnull=False,
+            ).exists()
+        )
+        self.assertTrue(
+            self.device.ip_assignments.filter(
+                ip="192.168.1.50",
+                valid_until__isnull=True,
+            ).exists()
+        )
         self.assertEqual(
             list(self.device.ports.filter(open=True).values_list("port", flat=True)),
             [80, 443],
@@ -6139,6 +6187,13 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["data"]["removed_duplicates"], 0)
         self.assertTrue(Device.objects.filter(pk=active.pk).exists())
         self.assertTrue(Device.objects.filter(mac="bb:bb:bb:bb:bb:bb").exists())
+        self.assertEqual(
+            DeviceIPAddressAssignment.objects.filter(
+                ip="192.168.1.60",
+                valid_until__isnull=True,
+            ).count(),
+            2,
+        )
 
     def test_device_inventory_import_accepts_macos_export_shape(self):
         response = self.client.post(

@@ -12,6 +12,7 @@ from .models import (
     AppSettings,
     Device,
     DeviceDNSActivity,
+    DeviceIPAddressAssignment,
     DetailedPortScan,
     NetworkEvent,
     NotificationDelivery,
@@ -128,6 +129,7 @@ def build_diagnostics_report():
             "notification_deliveries": delivery_counts,
             "dns_activity": DeviceDNSActivity.objects.count(),
             "dns_unmatched_clients": AdGuardUnmatchedClient.objects.count(),
+            "device_ip_assignments": DeviceIPAddressAssignment.objects.count(),
         },
         "latest_scans": latest_scans,
     }
