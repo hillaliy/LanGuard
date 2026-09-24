@@ -1,4 +1,5 @@
 import logging
+import ipaddress
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import timedelta, timezone as datetime_timezone
@@ -11,7 +12,13 @@ from django.db.models import F
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import AdGuardUnmatchedClient, AppSettings, Device, DeviceDNSActivity
+from .models import (
+    AdGuardUnmatchedClient,
+    AppSettings,
+    Device,
+    DeviceDNSActivity,
+    DeviceIPAddressAssignment,
+)
 from .user_messages import stored_error_message
 
 
@@ -118,6 +125,62 @@ def normalize_domain(value):
     return str(value or "").strip().rstrip(".").lower()[:253]
 
 
+def normalize_client_ipv4(value):
+    try:
+        address = ipaddress.ip_address(str(value or "").strip())
+    except ValueError:
+        return ""
+    return str(address) if address.version == 4 else ""
+
+
+def ip_assignment_index():
+    assignments_by_ip = defaultdict(list)
+    for assignment in DeviceIPAddressAssignment.objects.select_related("device").order_by(
+        "ip",
+        "valid_from",
+        "id",
+    ):
+        assignments_by_ip[assignment.ip].append(assignment)
+    return assignments_by_ip
+
+
+def device_for_client_at(client, seen_at, assignments_by_ip=None):
+    client_ip = normalize_client_ipv4(client)
+    if not client_ip or seen_at is None:
+        return None
+    if assignments_by_ip is None:
+        assignments_by_ip = ip_assignment_index()
+    matching_devices = {
+        assignment.device_id: assignment.device
+        for assignment in assignments_by_ip.get(client_ip, ())
+        if assignment.valid_from <= seen_at
+        and (assignment.valid_until is None or seen_at < assignment.valid_until)
+    }
+    if len(matching_devices) != 1:
+        return None
+    return next(iter(matching_devices.values()))
+
+
+def resolved_unmatched_client_ids(assignments_by_ip):
+    resolved_ids = []
+    for unmatched in AdGuardUnmatchedClient.objects.all():
+        client_ip = normalize_client_ipv4(unmatched.client)
+        if not client_ip:
+            continue
+        covering_devices = {
+            assignment.device_id
+            for assignment in assignments_by_ip.get(client_ip, ())
+            if assignment.valid_from <= unmatched.first_seen
+            and (
+                assignment.valid_until is None
+                or unmatched.last_seen < assignment.valid_until
+            )
+        }
+        if len(covering_devices) == 1:
+            resolved_ids.append(unmatched.pk)
+    return resolved_ids
+
+
 @dataclass
 class ActivityAggregate:
     device: Device
@@ -164,7 +227,7 @@ class UnmatchedClientAggregate:
             self.last_reason = reason[:64]
 
 
-def _save_aggregates(aggregates, unmatched_aggregates, matched_clients):
+def _save_aggregates(aggregates, unmatched_aggregates, assignments_by_ip):
     with transaction.atomic():
         for aggregate in aggregates.values():
             activity, created = DeviceDNSActivity.objects.get_or_create(
@@ -242,8 +305,9 @@ def _save_aggregates(aggregates, unmatched_aggregates, matched_clients):
                 ),
             )
 
-        if matched_clients:
-            AdGuardUnmatchedClient.objects.filter(client__in=matched_clients).delete()
+        resolved_ids = resolved_unmatched_client_ids(assignments_by_ip)
+        if resolved_ids:
+            AdGuardUnmatchedClient.objects.filter(pk__in=resolved_ids).delete()
 
 
 def cleanup_adguard_activity(retention_days):
@@ -271,12 +335,9 @@ def sync_adguard_query_log(config=None, max_entries=MAX_SYNC_ENTRIES):
         config.adguard_password,
     )
     cursor = config.adguard_last_sync_at
-    devices_by_ip = {}
-    for device in Device.objects.order_by("ip", "-lastseen"):
-        devices_by_ip.setdefault(device.ip, device)
+    assignments_by_ip = ip_assignment_index()
     aggregates = {}
     unmatched_aggregates = {}
-    matched_clients = set()
     processed = 0
     matched = 0
     unmatched = 0
@@ -308,7 +369,11 @@ def sync_adguard_query_log(config=None, max_entries=MAX_SYNC_ENTRIES):
                 processed += 1
                 newest_seen = max(newest_seen, seen_at) if newest_seen else seen_at
                 client_value = str(item.get("client") or "").strip()
-                device = devices_by_ip.get(client_value)
+                device = device_for_client_at(
+                    client_value,
+                    seen_at,
+                    assignments_by_ip,
+                )
                 question = item.get("question") if isinstance(item.get("question"), dict) else {}
                 domain = normalize_domain(question.get("name"))
                 if device is None or not domain:
@@ -333,7 +398,6 @@ def sync_adguard_query_log(config=None, max_entries=MAX_SYNC_ENTRIES):
                     continue
 
                 matched += 1
-                matched_clients.add(client_value)
                 query_type = str(question.get("type") or "").strip().upper()[:16]
                 reason = str(item.get("reason") or "")
                 key = (device.pk, domain, query_type)
@@ -359,7 +423,7 @@ def sync_adguard_query_log(config=None, max_entries=MAX_SYNC_ENTRIES):
                 break
             offset += len(entries)
 
-        _save_aggregates(aggregates, unmatched_aggregates, matched_clients)
+        _save_aggregates(aggregates, unmatched_aggregates, assignments_by_ip)
         if newest_seen:
             config.adguard_last_sync_at = newest_seen
         config.adguard_last_error = ""

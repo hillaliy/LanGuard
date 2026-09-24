@@ -21,7 +21,7 @@ from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
 from django.http import JsonResponse
-from django.db import DatabaseError, IntegrityError, connection
+from django.db import DatabaseError, IntegrityError, connection, transaction
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
 from django.utils.dateparse import parse_datetime
@@ -786,6 +786,7 @@ def netalertx_devices_from_csv(payload):
     }
 
 
+@transaction.atomic
 def import_inventory_devices(payload):
     imported_devices = inventory_devices_from_payload(payload)
     created = 0
@@ -910,10 +911,13 @@ def import_inventory_devices(payload):
         )
 
         duplicate_devices = Device.objects.filter(ip=ip, archived=False).exclude(mac=mac)
+        retained_ip_duplicate = False
         for duplicate in duplicate_devices:
             if should_remove_import_ip_duplicate(duplicate):
                 duplicate.delete()
                 removed_duplicates += 1
+            else:
+                retained_ip_duplicate = True
 
         is_visitor_present = "is_visitor" in item or "isVisitor" in item
         is_visitor = parse_inventory_bool(
@@ -961,15 +965,24 @@ def import_inventory_devices(payload):
         if isinstance(item.get("archived"), bool):
             defaults["archived"] = item["archived"]
 
-        device, was_created = Device.objects.get_or_create(
-            mac=mac,
-            defaults={
-                **defaults,
-                "role": role or ("gateway" if is_gateway else "device"),
-                "room": room or "",
-                "firstseen": first_seen,
-            },
-        )
+        try:
+            device = Device.objects.get(mac=mac)
+            was_created = False
+        except Device.DoesNotExist:
+            device = Device(
+                mac=mac,
+                **{
+                    **defaults,
+                    "role": role or ("gateway" if is_gateway else "device"),
+                    "room": room or "",
+                    "firstseen": first_seen,
+                },
+            )
+            device.save(
+                ip_observed_at=now,
+                close_competing_ip_assignments=not retained_ip_duplicate,
+            )
+            was_created = True
         if not was_created:
             for field, value in defaults.items():
                 setattr(device, field, value)
@@ -1013,7 +1026,9 @@ def import_inventory_devices(payload):
                     ),
                     "firstseen",
                     "lastseen",
-                ]
+                ],
+                ip_observed_at=now,
+                close_competing_ip_assignments=not retained_ip_duplicate,
             )
         created += 1 if was_created else 0
         updated += 0 if was_created else 1

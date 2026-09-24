@@ -4,6 +4,7 @@ from .models import (
     AppSettings,
     Device,
     DeviceDNSActivity,
+    DeviceIPAddressAssignment,
     DetailedPortScan,
     DevicePort,
     NetworkEvent,
@@ -39,6 +40,14 @@ class DevicePortAdmin(admin.ModelAdmin):
     list_display = ("device", "protocol", "port", "service", "open", "lastseen")
     list_filter = ("open", "protocol", "service")
     search_fields = ("device__name", "device__ip", "port", "service")
+
+
+@admin.register(DeviceIPAddressAssignment)
+class DeviceIPAddressAssignmentAdmin(admin.ModelAdmin):
+    list_display = ("device", "ip", "valid_from", "valid_until")
+    list_filter = ("valid_from", "valid_until")
+    search_fields = ("device__name", "device__mac", "ip")
+    readonly_fields = ("device", "ip", "valid_from", "valid_until")
 
 
 @admin.register(UserAccess)
