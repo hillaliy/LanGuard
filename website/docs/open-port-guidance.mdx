@@ -1,0 +1,89 @@
+---
+title: Open-port Guidance
+description: Understand LanGuard's service explanations, context-aware recommendations, and safe review workflow for open ports.
+slug: /open-port-guidance
+---
+
+# Open-port Guidance
+
+LanGuard explains commonly discovered TCP ports directly in the device list and on device pages. Select a port badge to see what the service is commonly used for, why it may or may not be expected on that device, and what to check next.
+
+The guidance helps you review a local service. It does not prove which application owns the port, test the service for vulnerabilities, close the port, or change the device configuration.
+
+## What the panel shows
+
+Each port panel includes:
+
+- A service name and common uses associated with the port number.
+- A context-aware recommendation based on the device's known role or icon where applicable.
+- An explanation of why the recommendation applies.
+- A practical next step for confirming, restricting, or disabling the service.
+- The standard registry label reported by the scanner, when available.
+- A reminder that the port was reached from the local network, not necessarily from the Internet.
+
+## Recommendation levels
+
+| Recommendation | Meaning |
+| --- | --- |
+| **Expected** | The service is commonly associated with the role or category assigned to this known device. Confirm that you use it and keep the device maintained. |
+| **Review** | The service can be legitimate, but LanGuard cannot determine from the port number alone whether it is required on this device. |
+| **Usually disable** | The service is legacy, unencrypted, or provides broad remote access. Keep it only when you intentionally use it and can restrict access. |
+
+An **Expected** recommendation is not a security guarantee. It only means that the port is consistent with the device classification. Unknown devices do not receive an Expected recommendation from inferred context.
+
+## Identification limits
+
+LanGuard maps a port number to a commonly registered or widely used service. Any application can listen on a different port, and alternate web ports such as 8080 and 8443 are used by many unrelated products. Treat the service name as a useful lead rather than direct application detection.
+
+An open port shown by LanGuard was reachable from the LanGuard scanner on the local network. This does not mean that the router exposes it to the Internet. Internet exposure depends on firewall rules, port forwarding, UPnP, VPNs, and the surrounding network configuration.
+
+## Cataloged ports
+
+| TCP port | Common service | Default guidance | Typical use |
+| --- | --- | --- | --- |
+| 21 | FTP | Usually disable | Legacy, unencrypted file transfer and device file management |
+| 22 | SSH | Review | Encrypted administration and secure file transfer |
+| 23 | Telnet | Usually disable | Legacy, unencrypted command-line administration |
+| 53 | DNS | Review | Name resolution, large DNS responses, DNSSEC, and zone transfers |
+| 80 | HTTP | Review | Local web interfaces, dashboards, APIs, and setup pages |
+| 135 | Windows RPC | Review | Windows service management and administrative communication |
+| 139 | NetBIOS Session Service | Usually disable | Legacy Windows file and printer sharing over NetBIOS |
+| 443 | HTTPS | Review | Encrypted web interfaces, dashboards, APIs, and setup pages |
+| 445 | SMB | Review | Windows file and printer sharing, NAS access, and discovery |
+| 515 | LPD printing | Review | Legacy network printing |
+| 548 | AFP | Usually disable | Legacy Apple file sharing and Time Machine access |
+| 554 | RTSP | Review | Camera, intercom, and media streams |
+| 631 | IPP | Review | Network printing and printer status |
+| 873 | rsync | Review | File synchronization, backups, and replication |
+| 1883 | MQTT | Review | Unencrypted IoT and home-automation messaging |
+| 2049 | NFS | Review | Unix, Linux, and NAS file sharing |
+| 3389 | Remote Desktop | Usually disable | Remote control of Windows computers and servers |
+| 5000 | NAS/Web service | Review | NAS administration, dashboards, web applications, and APIs |
+| 5001 | Secure NAS/Web service | Review | Encrypted NAS administration and application interfaces |
+| 5555 | Android Debug Bridge | Usually disable | Wireless Android debugging and administration |
+| 5900 | VNC | Usually disable | Remote graphical desktop access and screen sharing |
+| 8080 | Web/API service | Review | Alternate web interfaces, APIs, proxies, and dashboards |
+| 8123 | Home Assistant | Review | Home Assistant interface, API, dashboards, and automation control |
+| 8443 | Alternate HTTPS/API service | Review | Alternate encrypted interfaces, APIs, and dashboards |
+| 8883 | MQTT over TLS | Review | Encrypted IoT and home-automation messaging |
+| 9100 | RAW printing | Review | Direct JetDirect or RAW network printing |
+
+Some Review entries become Expected when a known device has a matching role or icon. For example, DNS may be expected on a known router, IPP on a printer, and RTSP on a camera. Port 139 remains a legacy-service recommendation even on a computer because modern SMB normally uses port 445.
+
+Ports that are not yet cataloged receive generic Review guidance. LanGuard still displays the scanner's registry label when one is available, but does not infer a detailed use or safety decision from that label alone.
+
+## Review workflow
+
+1. Confirm that the IP address and device identity are correct.
+2. Decide whether you intentionally use the named service on that device.
+3. Check the device or operating-system documentation for the setting that controls the service.
+4. Disable the service when it is unnecessary, or restrict it to trusted local clients when it is required.
+5. Run another scan and confirm that the port state matches the intended configuration.
+
+For routers, gateways, and managed switches, also review firewall, port-forwarding, and UPnP settings before deciding whether a local service is reachable from outside the network.
+
+## Needs Attention
+
+Selected higher-risk catalog entries can contribute to **Needs Attention**. The device reason includes the service and a recommended next step. Device context can suppress a finding where the service is expected, such as SSH or SMB on a known server.
+
+The guidance panel itself is broader than Needs Attention: a port can have useful guidance without creating an alert. Adding specific information for a port therefore does not automatically change device risk scoring.

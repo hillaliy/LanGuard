@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added selectable open-port guidance with device-aware recommendations, identification limits, LAN exposure context, and actionable Needs Attention reasons.
 - Attribute AdGuard Home queries using timestamped device IP assignment history so DHCP address changes and reuse do not move DNS activity between devices.
 - Return to the originating dashboard view after deleting a device instead of always redirecting to the Devices page.
 - Require explicit mDNS address records before assigning service names to devices, and silently ignore default HAA hostnames whose encoded MAC suffix does not match the discovered device.

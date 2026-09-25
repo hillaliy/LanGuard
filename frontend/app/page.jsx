@@ -77,6 +77,7 @@ import {
   IconGripVertical,
   IconGauge,
   IconHistory,
+  IconInfoCircle,
   IconLamp,
   IconLayoutDashboard,
   IconLine,
@@ -635,6 +636,26 @@ function DeviceIconStack({ device, size = 18, className = '' }) {
   );
 }
 
+function isPortGuidanceInteraction(event) {
+  const pathIncludesGuidance = event.nativeEvent.composedPath().some(
+    (node) => node?.classList?.contains('port-guidance-control')
+  );
+  if (pathIncludesGuidance) return true;
+
+  const { clientX, clientY } = event.nativeEvent;
+  return Array.from(event.currentTarget.querySelectorAll('.port-guidance-control')).some(
+    (node) => {
+      const bounds = node.getBoundingClientRect();
+      return (
+        clientX >= bounds.left
+        && clientX <= bounds.right
+        && clientY >= bounds.top
+        && clientY <= bounds.bottom
+      );
+    }
+  );
+}
+
 function deviceMapShape(device) {
   const icon = normalizeDeviceIcon(device.icon);
   if (device.is_gateway) {
@@ -663,9 +684,25 @@ function NetworkMapDeviceNode({ device, onSelectDevice }) {
 
   return (
     <UnstyledButton
+      component="div"
       key={device.id}
       className={`network-device-node ${deviceMapShape(device)} ${device.online ? 'online' : 'offline'}`}
-      onClick={() => onSelectDevice(device)}
+      role="button"
+      tabIndex={0}
+      onClick={(event) => {
+        if (!isPortGuidanceInteraction(event)) {
+          onSelectDevice(device);
+        }
+      }}
+      onKeyDown={(event) => {
+        if (
+          !isPortGuidanceInteraction(event)
+          && (event.key === 'Enter' || event.key === ' ')
+        ) {
+          event.preventDefault();
+          onSelectDevice(device);
+        }
+      }}
     >
       <Group justify="space-between" align="flex-start" wrap="nowrap">
         <span className="network-device-icon">
@@ -2519,7 +2556,8 @@ function ScanRangesSummary({ ranges, labels = {}, namesOnly = false }) {
 function PortSummary({ ports = [] }) {
   const visiblePorts = ports.slice(0, 2);
   const hiddenPortCount = Math.max(0, ports.length - visiblePorts.length);
-  const portLabel = ports
+  const hiddenPortLabel = ports
+    .slice(visiblePorts.length)
     .map((port) => `${port.protocol || 'tcp'}/${port.port}`)
     .join(', ');
 
@@ -2532,24 +2570,116 @@ function PortSummary({ ports = [] }) {
   }
 
   return (
-    <Tooltip label={portLabel} disabled={!portLabel}>
-      <div className="ports-list">
-        {visiblePorts.map((port) => (
-          <Badge
-            className="port-badge"
-            key={`${port.protocol}-${port.port}`}
-            variant="light"
-          >
-            {port.port}
-          </Badge>
-        ))}
-        {hiddenPortCount > 0 && (
+    <div className="ports-list">
+      {visiblePorts.map((port) => (
+        <PortGuidanceBadge
+          key={`${port.protocol}-${port.port}`}
+          port={port}
+          compact
+        />
+      ))}
+      {hiddenPortCount > 0 && (
+        <Tooltip label={hiddenPortLabel} multiline withArrow>
           <Badge className="port-badge port-overflow-badge" color="gray" variant="light">
             +{hiddenPortCount}
           </Badge>
-        )}
-      </div>
-    </Tooltip>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
+const portRecommendationColors = {
+  expected: 'teal',
+  review: 'yellow',
+  usually_disable: 'red',
+};
+
+function PortGuidanceBadge({ port, compact = false }) {
+  const [opened, setOpened] = useState(false);
+  const guidance = port?.guidance;
+  const protocol = String(port?.protocol || 'tcp').toUpperCase();
+  const label = compact
+    ? port?.port
+    : `${protocol}/${port?.port}${port?.service ? ` ${port.service}` : ''}`;
+
+  if (!guidance) {
+    return <Badge className="port-badge" variant="light">{label}</Badge>;
+  }
+
+  const recommendationColor = portRecommendationColors[guidance.recommendation] || 'gray';
+  return (
+    <>
+      <button
+        type="button"
+        className="port-guidance-control port-guidance-trigger"
+        aria-label={`Open guidance for ${protocol}/${port.port}`}
+        aria-expanded={opened}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          setOpened(true);
+        }}
+      >
+        <Badge
+          className="port-badge port-guidance-badge"
+          variant="light"
+          rightSection={<IconInfoCircle size={12} stroke={2} />}
+        >
+          {label}
+        </Badge>
+      </button>
+      <Drawer
+        opened={opened}
+        onClose={() => setOpened(false)}
+        position="right"
+        size={420}
+        title="Open port guidance"
+        classNames={{ content: 'port-guidance-drawer' }}
+        closeButtonProps={{ 'aria-label': 'Close port guidance' }}
+      >
+        <Stack gap="sm">
+          <Group justify="space-between" align="flex-start" wrap="nowrap">
+            <Box>
+              <Text fw={800}>{guidance.service_name}</Text>
+              <Text size="xs" c="dimmed">{protocol}/{port.port}</Text>
+            </Box>
+            <Badge color={recommendationColor} variant="light">
+              {guidance.recommendation_label}
+            </Badge>
+          </Group>
+
+          <Box>
+            <Text size="xs" c="dimmed" fw={700}>Common uses</Text>
+            <Text size="sm">{guidance.common_uses}</Text>
+          </Box>
+
+          <Box>
+            <Text size="xs" c="dimmed" fw={700}>Why this guidance</Text>
+            <Text size="sm">{guidance.context}</Text>
+          </Box>
+
+          <Box>
+            <Text size="xs" c="dimmed" fw={700}>Recommended next step</Text>
+            <Text size="sm">{guidance.next_step}</Text>
+          </Box>
+
+          <Divider />
+          <Group gap="xs" align="flex-start" wrap="nowrap">
+            <IconInfoCircle size={16} stroke={1.8} className="port-guidance-info-icon" />
+            <Box>
+              <Text size="xs" fw={700}>{guidance.identification_label}</Text>
+              {guidance.registry_service ? (
+                <Text size="xs" c="dimmed">
+                  Standard registry label: {guidance.registry_service}
+                </Text>
+              ) : null}
+              <Text size="xs" c="dimmed" mt={4}>{guidance.scope_notice}</Text>
+            </Box>
+          </Group>
+        </Stack>
+      </Drawer>
+    </>
   );
 }
 
@@ -3510,9 +3640,7 @@ function DeviceDetailsPage({
                       <Group gap={6} mt={6}>
                         {(device.open_ports || []).length ? (
                           device.open_ports.map((port) => (
-                            <Badge key={`${port.protocol}-${port.port}`} variant="light">
-                              {port.protocol}/{port.port}{port.service ? ` ${port.service}` : ''}
-                            </Badge>
+                            <PortGuidanceBadge key={`${port.protocol}-${port.port}`} port={port} />
                           ))
                         ) : <Text size="sm">-</Text>}
                       </Group>
@@ -3926,9 +4054,7 @@ function DeviceDetailsPage({
                   <Group gap={6} mt={6}>
                     {portScan.open_ports?.length ? (
                       portScan.open_ports.map((port) => (
-                        <Badge key={`${port.protocol}-${port.port}`} variant="light">
-                          {port.protocol}/{port.port}{port.service ? ` ${port.service}` : ''}
-                        </Badge>
+                        <PortGuidanceBadge key={`${port.protocol}-${port.port}`} port={port} />
                       ))
                     ) : <Text size="sm">None yet</Text>}
                   </Group>
@@ -7986,10 +8112,16 @@ function Dashboard({
                         }
                         aria-checked={bulkEditEnabled ? selectedDeviceIds.includes(device.id) : undefined}
                         tabIndex={0}
-                        onClick={() => (
-                          bulkEditEnabled ? toggleBulkDevice(device) : openDevicePage(device)
-                        )}
+                        onClick={(event) => {
+                          if (isPortGuidanceInteraction(event)) return;
+                          if (bulkEditEnabled) {
+                            toggleBulkDevice(device);
+                          } else {
+                            openDevicePage(device);
+                          }
+                        }}
                         onKeyDown={(event) => {
+                          if (isPortGuidanceInteraction(event)) return;
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
                             if (bulkEditEnabled) {
@@ -8131,10 +8263,16 @@ function Dashboard({
                         }
                         aria-checked={bulkEditEnabled ? selectedDeviceIds.includes(device.id) : undefined}
                         tabIndex={0}
-                        onClick={() => (
-                          bulkEditEnabled ? toggleBulkDevice(device) : openDevicePage(device)
-                        )}
+                        onClick={(event) => {
+                          if (isPortGuidanceInteraction(event)) return;
+                          if (bulkEditEnabled) {
+                            toggleBulkDevice(device);
+                          } else {
+                            openDevicePage(device);
+                          }
+                        }}
                         onKeyDown={(event) => {
+                          if (isPortGuidanceInteraction(event)) return;
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault();
                             if (bulkEditEnabled) {
