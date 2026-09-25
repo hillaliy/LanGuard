@@ -31,6 +31,24 @@ A device can appear under **Needs Attention** for one or more reasons. The list 
 
 Visitor devices are excluded from the long-offline rule. Resolved IP/MAC identity conflicts clear automatically after later scans consistently identify the devices. You can mark selected findings as reviewed when they are understood but still valid.
 
+Risky-port findings include a recommended next step. LanGuard provides guidance only: it does not close ports or change device settings.
+
+## Open-port guidance
+
+Select an open-port badge on a device page or in the device list to see:
+
+- The service commonly associated with the port and its typical uses.
+- A context-aware **Expected**, **Review**, or **Usually disable** recommendation.
+- Why the recommendation applies to the device's role or category.
+- A practical next step for reviewing or disabling the service on the device itself.
+- Whether the label came from the port number rather than direct service detection.
+
+Port numbers alone do not prove which application is listening. This is especially important for alternate web and API ports such as 8080 and 8443, which many unrelated products use. LanGuard reports reachability from the local network only; an open port in LanGuard does not establish that the service is exposed to the Internet.
+
+The guidance catalog is maintained with the LanGuard source and released with the application. Current entries cover common administration, file-sharing, printing, camera-streaming, remote-desktop, and web-interface ports. Ports without a specific catalog entry receive cautious generic review guidance.
+
+See [Open-port guidance](/docs/open-port-guidance) for the complete explanation, recommendation levels, supported ports, and review workflow.
+
 ## Device details
 
 The overview contains:

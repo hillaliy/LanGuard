@@ -25,6 +25,7 @@ from .models import (
     ScanRun,
     default_scan_range_label,
 )
+from .port_guidance import port_attention, port_guidance
 from .user_messages import stored_error_message
 
 
@@ -143,6 +144,12 @@ class UserManagementSerializer(serializers.ModelSerializer):
 class DevicePortSerializer(serializers.ModelSerializer):
     firstseen = UTCDateTimeField(read_only=True)
     lastseen = UTCDateTimeField(read_only=True)
+    guidance = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.DictField(allow_null=True))
+    def get_guidance(self, obj):
+        device = self.context.get("device") or obj.device
+        return port_guidance(device, obj)
 
     class Meta:
         model = DevicePort
@@ -206,21 +213,6 @@ class AdGuardUnmatchedClientSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-RISKY_PORTS = {
-    21: "FTP",
-    22: "SSH",
-    23: "Telnet",
-    445: "SMB",
-    3389: "Remote Desktop",
-    5900: "VNC",
-    8080: "Web/API service",
-}
-HIGH_RISK_PORTS = {23, 445, 3389, 5900}
-ROLE_EXPECTED_PORTS = {
-    "camera": {80, 443, 554, 8000, 8080, 8443, 8554},
-    "intercom": {80, 443, 554, 8000, 8080, 8443, 8554},
-    "server": {22, 80, 443, 445, 3000, 5000, 8080, 8443},
-}
 PORT_DENSE_ROLES = {"camera", "intercom", "server"}
 
 HIGH_CONFIDENCE_IDENTITY_SOURCES = {
@@ -293,7 +285,6 @@ def device_risk(device):
     score = 0
     reasons = []
     role = (device.role or "").strip().lower()
-    expected_ports = ROLE_EXPECTED_PORTS.get(role, set()) if device.known else set()
 
     if not device.known:
         score += 3
@@ -301,31 +292,31 @@ def device_risk(device):
 
     prefetched_ports = getattr(device, "_prefetched_objects_cache", {}).get("ports")
     if prefetched_ports is None:
-        open_ports = list(
-            device.ports.filter(open=True)
-            .order_by("port", "protocol")
-            .values_list("port", "protocol")
-        )
+        open_ports = list(device.ports.filter(open=True).order_by("port", "protocol"))
     else:
         open_ports = sorted(
             (
-                (device_port.port, device_port.protocol)
+                device_port
                 for device_port in prefetched_ports
                 if device_port.open
             ),
-            key=lambda item: (item[0], item[1]),
+            key=lambda item: (item.port, item.protocol),
         )
-    risky_ports = [
-        f"{protocol}/{port} ({RISKY_PORTS[port]})"
-        for port, protocol in open_ports
-        if port in RISKY_PORTS and port not in expected_ports
+    port_findings = [
+        (device_port, port_attention(device, device_port))
+        for device_port in open_ports
     ]
-    if risky_ports:
-        high_risk_count = sum(
-            1 for port, _protocol in open_ports if port in HIGH_RISK_PORTS and port not in expected_ports
+    port_findings = [item for item in port_findings if item[1] is not None]
+    if port_findings:
+        score += 3 if any(finding["high_risk"] for _port, finding in port_findings) else 2
+        findings = "; ".join(
+            (
+                f"{device_port.protocol}/{device_port.port} ({finding['label']}): "
+                f"{finding['next_step']}"
+            )
+            for device_port, finding in port_findings
         )
-        score += 3 if high_risk_count else 2
-        reasons.append(f"Risky open ports: {', '.join(risky_ports)}")
+        reasons.append(f"Risky open ports: {findings}")
 
     if len(open_ports) >= 4 and not (device.known and role in PORT_DENSE_ROLES):
         score += 2
@@ -539,7 +530,11 @@ class DeviceSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(DevicePortSerializer(many=True))
     def get_open_ports(self, obj):
-        return DevicePortSerializer(obj.ports.filter(open=True), many=True).data
+        return DevicePortSerializer(
+            obj.ports.filter(open=True),
+            many=True,
+            context={**self.context, "device": obj},
+        ).data
 
     def get_device_risk(self, obj):
         if not hasattr(obj, "_risk_data"):
@@ -654,12 +649,20 @@ class DetailedPortScanSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     progress_percent = serializers.SerializerMethodField()
+    open_ports = serializers.SerializerMethodField()
 
     @extend_schema_field(serializers.IntegerField(min_value=0, max_value=100))
     def get_progress_percent(self, obj):
         if not obj.total_ports:
             return 0
         return min(100, round((obj.scanned_ports / obj.total_ports) * 100))
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_open_ports(self, obj):
+        return [
+            {**port, "guidance": port_guidance(obj.device, port)}
+            for port in (obj.open_ports or [])
+        ]
 
     class Meta:
         model = DetailedPortScan

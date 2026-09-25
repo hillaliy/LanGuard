@@ -42,6 +42,7 @@ from .notifications import (
     send_telegram_test,
     send_webhook_test,
 )
+from .port_guidance import PORT_CATALOG, port_guidance
 from .serializers import device_attention_reasons, device_identity
 from .views import parse_inventory_datetime
 from .versioning import check_for_version_update, is_newer_version
@@ -536,6 +537,109 @@ class DeviceIdentityConfidenceTests(TestCase):
 
         self.assertEqual(identity["confidence"], "low")
         self.assertEqual(identity["vendor_confidence"], "low")
+
+
+class PortGuidanceCatalogTests(SimpleTestCase):
+    def test_catalog_covers_initial_guidance_ports(self):
+        required_ports = {
+            21,
+            53,
+            80,
+            135,
+            139,
+            443,
+            445,
+            515,
+            548,
+            554,
+            631,
+            873,
+            1883,
+            2049,
+            3389,
+            5000,
+            5001,
+            5555,
+            5900,
+            8080,
+            8123,
+            8443,
+            8883,
+            9100,
+        }
+
+        self.assertTrue(
+            required_ports.issubset(
+                {port for protocol, port in PORT_CATALOG if protocol == "tcp"}
+            )
+        )
+
+    def test_known_printer_gets_expected_printing_guidance(self):
+        device = SimpleNamespace(known=True, role="printer", icon="printer")
+
+        guidance = port_guidance(
+            device,
+            {"protocol": "tcp", "port": 9100, "service": "jetdirect"},
+        )
+
+        self.assertEqual(guidance["recommendation"], "expected")
+        self.assertEqual(guidance["service_name"], "RAW printing")
+
+    def test_known_gateway_gets_expected_dns_guidance(self):
+        device = SimpleNamespace(known=True, role="gateway", icon="router")
+
+        guidance = port_guidance(
+            device,
+            {"protocol": "tcp", "port": 53, "service": "domain"},
+        )
+
+        self.assertEqual(guidance["recommendation"], "expected")
+        self.assertEqual(guidance["service_name"], "DNS")
+
+    def test_netbios_guidance_recommends_disabling_legacy_service(self):
+        device = SimpleNamespace(known=True, role="computer", icon="desktop")
+
+        guidance = port_guidance(
+            device,
+            {"protocol": "tcp", "port": 139, "service": "netbios-ssn"},
+        )
+
+        self.assertEqual(guidance["recommendation"], "usually_disable")
+        self.assertEqual(guidance["service_name"], "NetBIOS Session Service")
+
+    def test_android_debug_bridge_guidance_recommends_disabling_service(self):
+        device = SimpleNamespace(known=True, role="streamer", icon="tv")
+
+        guidance = port_guidance(
+            device,
+            {"protocol": "tcp", "port": 5555, "service": "freeciv"},
+        )
+
+        self.assertEqual(guidance["recommendation"], "usually_disable")
+        self.assertEqual(guidance["service_name"], "Android Debug Bridge")
+
+    def test_known_home_automation_hub_gets_expected_mqtt_guidance(self):
+        device = SimpleNamespace(known=True, role="hub", icon="smart-hub")
+
+        guidance = port_guidance(
+            device,
+            {"protocol": "tcp", "port": 1883, "service": "mqtt"},
+        )
+
+        self.assertEqual(guidance["recommendation"], "expected")
+        self.assertEqual(guidance["service_name"], "MQTT")
+
+    def test_unknown_catalog_port_gets_generic_non_definitive_guidance(self):
+        device = SimpleNamespace(known=True, role="device", icon="unknown")
+
+        guidance = port_guidance(
+            device,
+            {"protocol": "tcp", "port": 12345, "service": ""},
+        )
+
+        self.assertEqual(guidance["recommendation"], "review")
+        self.assertEqual(guidance["service_name"], "Unidentified service")
+        self.assertIn("not enough", guidance["context"])
 
 
 class ApiDocsAccessTests(SimpleTestCase):
@@ -5119,6 +5223,52 @@ class ScanApiTests(TestCase):
         self.assertTrue(device["open_ports"][0]["firstseen"].endswith("Z"))
         self.assertTrue(device["open_ports"][0]["lastseen"].endswith("Z"))
 
+    def test_device_endpoint_includes_contextual_port_guidance(self):
+        self.device.known = True
+        self.device.role = "printer"
+        self.device.icon = "printer"
+        self.device.vendor = "Brother"
+        self.device.save(update_fields=["known", "role", "icon", "vendor"])
+        DevicePort.objects.create(
+            device=self.device,
+            port=631,
+            protocol="tcp",
+            service="ipp",
+            open=True,
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+        guidance = device["open_ports"][0]["guidance"]
+
+        self.assertEqual(guidance["service_name"], "IPP")
+        self.assertEqual(guidance["recommendation"], "expected")
+        self.assertEqual(guidance["identification_basis"], "port_mapping")
+        self.assertEqual(guidance["registry_service"], "ipp")
+        self.assertIn("local network", guidance["scope_notice"])
+
+    def test_device_endpoint_returns_cautious_guidance_for_ambiguous_port(self):
+        self.device.known = True
+        self.device.vendor = "Android"
+        self.device.save(update_fields=["known", "vendor"])
+        DevicePort.objects.create(
+            device=self.device,
+            port=8443,
+            protocol="tcp",
+            service="https-alt",
+            open=True,
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+        guidance = device["open_ports"][0]["guidance"]
+
+        self.assertEqual(guidance["recommendation"], "review")
+        self.assertIn("does not prove", guidance["context"])
+        self.assertIn("does not show", guidance["scope_notice"])
+
     def test_device_endpoint_includes_low_risk_badge_data(self):
         self.device.known = True
         self.device.vendor = "Apple"
@@ -5301,10 +5451,11 @@ class ScanApiTests(TestCase):
             "/api/v1/device/", {"id": self.device.id}
         ).data["data"]
 
-        self.assertIn(
-            "Risky open ports: tcp/8080 (Web/API service)",
-            device["risk_reasons"],
+        reason = next(
+            reason for reason in device["risk_reasons"]
+            if reason.startswith("Risky open ports: tcp/8080 (Web/API service)")
         )
+        self.assertIn("check the device documentation", reason)
 
     def test_device_endpoint_still_flags_known_server_with_dangerous_remote_port(self):
         self.device.known = True

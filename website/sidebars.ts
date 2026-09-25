@@ -12,7 +12,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Understand LanGuard',
       collapsible: false,
-      items: ['device-discovery', 'devices-and-alerts', 'scheduler-tasks'],
+      items: ['device-discovery', 'devices-and-alerts', 'open-port-guidance', 'scheduler-tasks'],
     },
     {
       type: 'category',

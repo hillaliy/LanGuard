@@ -320,6 +320,41 @@
   padding-inline: 8px;
 }
 
+.port-guidance-control,
+.port-guidance-trigger {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--mantine-radius-xl);
+  color: inherit;
+  display: inline-flex;
+  flex: 0 0 auto;
+  padding: 0;
+}
+
+.port-guidance-trigger:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.port-guidance-badge {
+  cursor: pointer;
+}
+
+.port-guidance-badge:hover {
+  filter: brightness(0.96);
+}
+
+.port-guidance-drawer {
+  border-color: var(--border-color);
+}
+
+.port-guidance-info-icon {
+  color: var(--brand-strong);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .port-overflow-badge {
   min-width: 36px;
   padding-inline: 6px;
