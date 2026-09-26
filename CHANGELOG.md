@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.20.0 - 2026-09-26
+
 - Added dashboard links from Needs Attention to the filtered device list and from Recently Changed to the full event history.
 - Prevented manual and scheduled network scans from overlapping, with clear active-scan status and automatic stale-lock recovery.
 - Added dedicated roles and icons for game consoles, laptops, NAS devices, smart relays, smart power strips, and power meters.
