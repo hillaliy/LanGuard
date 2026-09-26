@@ -203,12 +203,12 @@
     display: grid;
     grid-area: controls;
     grid-template-areas: 'status network first-seen search';
-    grid-template-columns: 140px minmax(220px, 1fr) 150px minmax(220px, 1fr);
+    grid-template-columns: max-content max-content max-content minmax(220px, 1fr);
     width: 100%;
   }
 
   .devices-content-panel .devices-panel-controls > * {
-    width: 100% !important;
+    max-width: 100%;
   }
 
   .devices-content-panel .device-view-control {
@@ -233,7 +233,7 @@
 
   .devices-content-panel .devices-panel-controls.with-homebox {
     grid-template-areas: 'status homebox network first-seen search';
-    grid-template-columns: 120px 130px minmax(180px, 1fr) 135px minmax(180px, 1fr);
+    grid-template-columns: max-content max-content max-content max-content minmax(180px, 1fr);
   }
 
   .devices-content-panel .device-search {

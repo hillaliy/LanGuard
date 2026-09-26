@@ -165,10 +165,11 @@ function validExternalUrl(value) {
 }
 
 function externalUrlUsesIPv4(value) {
-  if (!validExternalUrl(value)) {
+  const candidate = String(value || '').trim();
+  if (!candidate || !validExternalUrl(candidate)) {
     return false;
   }
-  const parts = new URL(String(value).trim()).hostname.split('.');
+  const parts = new URL(candidate).hostname.split('.');
   return parts.length === 4 && parts.every((part) => {
     if (!/^\d{1,3}$/.test(part)) {
       return false;
@@ -313,6 +314,12 @@ const homeBoxLinkOptions = [
   { value: 'linked', label: 'Linked' },
   { value: 'not-linked', label: 'Not linked' },
 ];
+
+function compactFilterWidth(options, value, placeholder, min = 110, max = 176) {
+  const label = options.find((option) => option.value === value)?.label || placeholder;
+  const actionSpace = value ? 72 : 40;
+  return Math.min(max, Math.max(min, Math.ceil(label.length * 6.5 + actionSpace)));
+}
 
 const deviceRoleOptions = [
   'device',
@@ -2697,7 +2704,10 @@ function PortGuidanceBadge({ port, compact = false }) {
         position="right"
         size={420}
         title="Open port guidance"
-        classNames={{ content: 'port-guidance-drawer' }}
+        classNames={{
+          content: 'port-guidance-drawer port-guidance-control',
+          overlay: 'port-guidance-control',
+        }}
         closeButtonProps={{ 'aria-label': 'Close port guidance' }}
       >
         <Stack gap="sm">
@@ -2979,7 +2989,11 @@ function DeviceDetailsPage({
     setOnlineNotificationPreference(nextDevice?.online_notification_preference || 'inherit');
     setOfflineNotificationPreference(nextDevice?.offline_notification_preference || 'inherit');
     setComments(nextDevice?.comments || '');
-    setExternalUrl(nextDevice?.external_url || '');
+    setExternalUrl(
+      nextDevice?.external_url_follow_device_ip
+        ? nextDevice?.effective_external_url || nextDevice?.external_url || ''
+        : nextDevice?.external_url || ''
+    );
     setExternalUrlFollowDeviceIp(Boolean(nextDevice?.external_url_follow_device_ip));
     setHomeboxItemId(nextDevice?.homebox_item_id || null);
     setAttentionAcknowledged(Boolean(nextDevice?.attention_acknowledged));
@@ -3586,7 +3600,9 @@ function DeviceDetailsPage({
                         disabled={!externalUrlUsesIPv4(externalUrl)}
                         onChange={(event) => setExternalUrlFollowDeviceIp(event.currentTarget.checked)}
                       />
-                      {externalUrlFollowDeviceIp && activeUrl && (
+                      {externalUrlFollowDeviceIp
+                        && activeUrl
+                        && activeUrl !== externalUrl.trim() && (
                         <Text size="xs" c="dimmed" className="wrap-text">
                           Opens: {activeUrl}
                         </Text>
@@ -6919,6 +6935,21 @@ function Dashboard({
   const deviceRangeLabel = `Showing ${deviceStart}-${deviceEnd} of ${deviceCount} devices`;
   const selectedDeviceStatus =
     deviceStatusOptions.find((option) => option.value === deviceStatus) || null;
+  const deviceStatusFilterWidth = compactFilterWidth(
+    deviceStatusOptions,
+    deviceStatus,
+    'Status'
+  );
+  const firstSeenFilterWidth = compactFilterWidth(
+    firstSeenPeriodOptions,
+    firstSeenPeriod,
+    'First seen'
+  );
+  const homeBoxFilterWidth = compactFilterWidth(
+    homeBoxLinkOptions,
+    homeBoxLinkStatus,
+    'HomeBox'
+  );
   const networkRangeOptions = useMemo(
     () => [
       ...configuredNetworkRanges.map((networkRange) => ({
@@ -8018,7 +8049,7 @@ function Dashboard({
                 <Group className={`devices-panel-controls ${showHomeBoxFilter ? 'with-homebox' : ''}`}>
                   <Select
                     className="device-status-filter"
-                    w={140}
+                    w={deviceStatusFilterWidth}
                     placeholder="Status"
                     clearable
                     data={deviceStatusOptions}
@@ -8028,7 +8059,7 @@ function Dashboard({
                   />
                   <MultiSelect
                     className="device-network-filter"
-                    w={240}
+                    w={210}
                     placeholder="Network ranges"
                     clearable
                     searchable
@@ -8043,7 +8074,7 @@ function Dashboard({
                   />
                   <Select
                     className="device-first-seen-filter"
-                    w={150}
+                    w={firstSeenFilterWidth}
                     placeholder="First seen"
                     clearable
                     data={firstSeenPeriodOptions}
@@ -8054,7 +8085,7 @@ function Dashboard({
                   {showHomeBoxFilter && (
                     <Select
                       className="device-homebox-filter"
-                      w={140}
+                      w={homeBoxFilterWidth}
                       placeholder="HomeBox"
                       clearable
                       data={homeBoxLinkOptions}
