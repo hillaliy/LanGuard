@@ -202,6 +202,22 @@
   padding-inline: 14px;
 }
 
+.dashboard-insight-count-link {
+  border-radius: 999px;
+  flex: 0 0 auto;
+  line-height: 1;
+  transition: transform 120ms ease;
+}
+
+.dashboard-insight-count-link:hover {
+  transform: translateX(2px);
+}
+
+.dashboard-insight-count-link:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-5);
+  outline-offset: 3px;
+}
+
 .dashboard-insight-row {
   align-items: center;
   display: grid;
