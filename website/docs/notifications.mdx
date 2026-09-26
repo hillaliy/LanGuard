@@ -38,6 +38,8 @@ Create a webhook in the target Discord channel and save its URL in LanGuard. The
 
 Create a bot, start a conversation with it or add it to the intended chat, then configure the bot token and chat/user ID. A valid token alone is not enough: the bot must be able to reach the destination.
 
+The **Telegram API base URL** defaults to `https://api.telegram.org`. Change it only when using a Telegram-compatible relay or self-hosted Bot API server. Enter the base URL without the bot token or `sendMessage` path; LanGuard appends `/bot<token>/sendMessage` when delivering notifications. HTTP is supported for trusted local relays, while HTTPS is recommended for any remote service.
+
 ### ntfy
 
 Configure the ntfy server, topic, and optional authentication supported by the Settings form. LanGuard can set notification priority and test the channel before normal events are enabled.

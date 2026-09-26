@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a configurable Telegram API base URL for Telegram-compatible relays and self-hosted Bot API servers.
 - Added selectable open-port guidance with device-aware recommendations, identification limits, LAN exposure context, and actionable Needs Attention reasons.
 - Attribute AdGuard Home queries using timestamped device IP assignment history so DHCP address changes and reuse do not move DNS activity between devices.
 - Return to the originating dashboard view after deleting a device instead of always redirecting to the Devices page.

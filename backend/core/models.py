@@ -545,6 +545,10 @@ class AppSettings(models.Model):
     discord_enabled = models.BooleanField(default=True)
     discord_webhook = models.URLField(blank=True, default="")
     telegram_enabled = models.BooleanField(default=True)
+    telegram_api_url = models.URLField(
+        max_length=2048,
+        default="https://api.telegram.org",
+    )
     telegram_token = models.CharField(max_length=255, blank=True, default="")
     telegram_user_id = models.CharField(max_length=64, blank=True, default="")
     ntfy_enabled = models.BooleanField(default=False)
@@ -636,6 +640,7 @@ class AppSettings(models.Model):
             "discord_enabled": settings.NOTIFICATIONS_ENABLED,
             "discord_webhook": settings.DISCORD_WEBHOOK or "",
             "telegram_enabled": settings.NOTIFICATIONS_ENABLED,
+            "telegram_api_url": settings.TELEGRAM_API_URL,
             "telegram_token": settings.TELEGRAM_TOKEN or "",
             "telegram_user_id": settings.TELEGRAM_USERID or "",
             "ntfy_enabled": False,

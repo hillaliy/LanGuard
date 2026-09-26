@@ -1532,10 +1532,11 @@ def test_notification_channel(request):
                 data.get("discord_webhook", "").strip() or saved_webhook
             )
         elif channel == NotificationDelivery.Channel.TELEGRAM:
-            saved_token = AppSettings.load().telegram_token
+            telegram_config = AppSettings.load()
             send_telegram_test(
-                data.get("telegram_token", "").strip() or saved_token,
+                data.get("telegram_token", "").strip() or telegram_config.telegram_token,
                 data["telegram_user_id"].strip(),
+                data.get("telegram_api_url", telegram_config.telegram_api_url),
             )
         elif channel == NotificationDelivery.Channel.NTFY:
             send_ntfy_test(

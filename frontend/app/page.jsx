@@ -4457,6 +4457,7 @@ function SettingsPage({ onSaved }) {
   const [webhookConfigured, setWebhookConfigured] = useState(false);
   const [webhookSignatureConfigured, setWebhookSignatureConfigured] = useState(false);
   const [discordWebhook, setDiscordWebhook] = useState('');
+  const [telegramApiUrl, setTelegramApiUrl] = useState('https://api.telegram.org');
   const [telegramToken, setTelegramToken] = useState('');
   const [telegramUserId, setTelegramUserId] = useState('');
   const [ntfyServerUrl, setNtfyServerUrl] = useState('');
@@ -4545,6 +4546,7 @@ function SettingsPage({ onSaved }) {
       setWebhookConfigured(Boolean(data.webhook_configured));
       setWebhookSignatureConfigured(Boolean(data.webhook_signature_configured));
       setDiscordWebhook('');
+      setTelegramApiUrl(data.telegram_api_url || 'https://api.telegram.org');
       setTelegramToken('');
       setTelegramUserId(data.telegram_user_id || '');
       setNtfyServerUrl(data.ntfy_server_url || '');
@@ -4617,6 +4619,7 @@ function SettingsPage({ onSaved }) {
         time_zone: timeZone,
         discord_enabled: discordEnabled,
         telegram_enabled: telegramEnabled,
+        telegram_api_url: telegramApiUrl.trim(),
         ntfy_enabled: ntfyEnabled,
         ntfy_server_url: ntfyServerUrl.trim(),
         ntfy_topic: ntfyTopic.trim(),
@@ -4719,6 +4722,7 @@ function SettingsPage({ onSaved }) {
       } else if (channel === 'telegram') {
         body = {
           channel,
+          telegram_api_url: telegramApiUrl.trim(),
           telegram_user_id: telegramUserId.trim(),
         };
         if (telegramToken.trim()) {
@@ -5353,6 +5357,13 @@ function SettingsPage({ onSaved }) {
               {telegramConfigured ? 'Configured' : 'Not configured'}
             </Badge>
           </Group>
+          <TextInput
+            label="Telegram API base URL"
+            description="Change only when using a Telegram-compatible relay or self-hosted Bot API server."
+            placeholder="https://api.telegram.org"
+            value={telegramApiUrl}
+            onChange={(event) => setTelegramApiUrl(event.currentTarget.value)}
+          />
           <Group align="flex-end" wrap="nowrap">
             <PasswordInput
               style={{ flex: 1 }}
@@ -5377,6 +5388,7 @@ function SettingsPage({ onSaved }) {
                 aria-label="Send Telegram test notification"
                 loading={testingChannel === 'telegram'}
                 disabled={
+                  !telegramApiUrl.trim() ||
                   (!telegramToken.trim() && !telegramConfigured) ||
                   !telegramUserId.trim() ||
                   Boolean(testingChannel && testingChannel !== 'telegram')
