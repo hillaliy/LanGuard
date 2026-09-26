@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.20.1 - 2026-09-26
+
+- Fixed the device editor failing to open without an External link, and show the current resolved address directly for links that follow the device IP.
+- Preserved the Devices table context when closing port guidance opened from a device row.
+- Made device filters more compact while keeping selected labels and controls readable.
+
 ## 1.20.0 - 2026-09-26
 
 - Added dashboard links from Needs Attention to the filtered device list and from Recently Changed to the full event history.
