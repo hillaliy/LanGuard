@@ -7,8 +7,11 @@ enum DeviceRole: String, Codable, CaseIterable, Identifiable, Sendable {
     case meshRouter
     case hub
     case camera
+    case gameConsole
     case computer
+    case laptop
     case server
+    case nas
     case phone
     case tablet
     case tv
@@ -18,6 +21,9 @@ enum DeviceRole: String, Codable, CaseIterable, Identifiable, Sendable {
     case light
     case climate
     case smartPlug
+    case smartRelay
+    case smartPowerStrip
+    case powerMeter
     case controller
     case lock
     case intercom
@@ -46,10 +52,16 @@ enum DeviceRole: String, Codable, CaseIterable, Identifiable, Sendable {
             "Hub"
         case .camera:
             "Camera"
+        case .gameConsole:
+            "Game Console"
         case .computer:
             "Computer"
+        case .laptop:
+            "Laptop"
         case .server:
             "Server"
+        case .nas:
+            "NAS"
         case .phone:
             "Phone"
         case .tablet:
@@ -68,6 +80,12 @@ enum DeviceRole: String, Codable, CaseIterable, Identifiable, Sendable {
             "Climate"
         case .smartPlug:
             "Smart Plug"
+        case .smartRelay:
+            "Smart Relay"
+        case .smartPowerStrip:
+            "Smart Power Strip"
+        case .powerMeter:
+            "Power Meter"
         case .controller:
             "Controller"
         case .lock:
@@ -93,10 +111,16 @@ enum DeviceRole: String, Codable, CaseIterable, Identifiable, Sendable {
             "point.3.connected.trianglepath.dotted"
         case .camera:
             "camera"
+        case .gameConsole:
+            "gamecontroller"
         case .computer:
             "desktopcomputer"
+        case .laptop:
+            "macbook"
         case .server:
             "server.rack"
+        case .nas:
+            "externaldrive.connected.to.line.below"
         case .phone:
             "iphone"
         case .tablet:
@@ -115,6 +139,12 @@ enum DeviceRole: String, Codable, CaseIterable, Identifiable, Sendable {
             "air.conditioner.horizontal"
         case .smartPlug:
             "poweroutlet.type.h"
+        case .smartRelay:
+            "bolt.horizontal.circle"
+        case .smartPowerStrip:
+            "poweroutlet.strip"
+        case .powerMeter:
+            "gauge.with.dots.needle.50percent"
         case .controller:
             "switch.2"
         case .lock:

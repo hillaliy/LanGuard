@@ -99,13 +99,32 @@ enum DeviceProfiler {
             return .camera
         }
 
+        if profileText.contains("game console")
+            || profileText.contains("playstation")
+            || profileText.contains("xbox")
+            || profileText.contains("nintendo switch") {
+            return .gameConsole
+        }
+
         if openPorts.contains(9100) || profileText.contains("printer") {
             return .printer
         }
 
-        if profileText.contains("server")
-            || profileText.contains("nas") {
+        if profileText.contains("nas")
+            || profileText.contains("network attached storage")
+            || profileText.contains("synology")
+            || profileText.contains("qnap") {
+            return .nas
+        }
+
+        if profileText.contains("server") {
             return .server
+        }
+
+        if profileText.contains("laptop")
+            || profileText.contains("notebook")
+            || profileText.contains("macbook") {
+            return .laptop
         }
 
         if profileText.contains("desktop")
@@ -162,8 +181,24 @@ enum DeviceProfiler {
             return .sensor
         }
 
+        if profileText.contains("power meter")
+            || profileText.contains("energy meter")
+            || profileText.contains("smart meter") {
+            return .powerMeter
+        }
+
         if profileText.contains("power strip")
-            || profileText.contains("power outlet")
+            || profileText.contains("multi plug") {
+            return .smartPowerStrip
+        }
+
+        if profileText.contains("smart relay")
+            || profileText.contains("wifi relay")
+            || profileText.contains("relay switch") {
+            return .smartRelay
+        }
+
+        if profileText.contains("power outlet")
             || profileText.contains("smart outlet")
             || profileText.contains("smart socket")
             || profileText.contains("socket")
@@ -172,8 +207,7 @@ enum DeviceProfiler {
         }
 
         if profileText.contains("controller")
-            || profileText.contains("control")
-            || profileText.contains("relay") {
+            || profileText.contains("control") {
             return .controller
         }
 
@@ -210,6 +244,38 @@ enum DeviceProfiler {
         let profileText = [name, hostname, vendor]
             .compactMap { $0?.lowercased() }
             .joined(separator: " ")
+
+        if profileText.contains("game console")
+            || profileText.contains("playstation")
+            || profileText.contains("xbox")
+            || profileText.contains("nintendo switch") {
+            return "gamecontroller"
+        }
+
+        if profileText.contains("nas")
+            || profileText.contains("network attached storage")
+            || profileText.contains("synology")
+            || profileText.contains("qnap") {
+            return "externaldrive.connected.to.line.below"
+        }
+
+        if profileText.contains("laptop")
+            || profileText.contains("notebook")
+            || profileText.contains("macbook") {
+            return "macbook"
+        }
+
+        if profileText.contains("power meter")
+            || profileText.contains("energy meter")
+            || profileText.contains("smart meter") {
+            return "gauge.with.dots.needle.50percent"
+        }
+
+        if profileText.contains("smart relay")
+            || profileText.contains("wifi relay")
+            || profileText.contains("relay switch") {
+            return "bolt.horizontal.circle"
+        }
 
         if profileText.contains("smart speaker")
             || profileText.contains("homepod")

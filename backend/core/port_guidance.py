@@ -43,11 +43,11 @@ PORT_CATALOG = {
         recommendation=REVIEW,
         recommendation_reason="Remote administration should only be enabled on devices you manage.",
         next_step="Confirm SSH is intentional, uses strong authentication, and is limited to trusted clients.",
-        expected_roles=frozenset({"server"}),
-        expected_icons=frozenset({"server"}),
+        expected_roles=frozenset({"nas", "server"}),
+        expected_icons=frozenset({"nas", "server"}),
         attention_score=2,
-        attention_exempt_roles=frozenset({"server"}),
-        attention_exempt_icons=frozenset({"server"}),
+        attention_exempt_roles=frozenset({"nas", "server"}),
+        attention_exempt_icons=frozenset({"nas", "server"}),
     ),
     ("tcp", 23): PortCatalogEntry(
         service_name="Telnet",
@@ -80,8 +80,8 @@ PORT_CATALOG = {
         recommendation=REVIEW,
         recommendation_reason="HTTP traffic is not encrypted, but local device interfaces commonly use it.",
         next_step="Keep it only when the device needs a local web interface; prefer HTTPS when available.",
-        expected_roles=frozenset({"camera", "gateway", "hub", "intercom", "printer", "router", "server"}),
-        expected_icons=frozenset({"printer", "router", "security-camera", "server", "smart-hub"}),
+        expected_roles=frozenset({"camera", "gateway", "hub", "intercom", "nas", "printer", "router", "server"}),
+        expected_icons=frozenset({"nas", "printer", "router", "security-camera", "server", "smart-hub"}),
     ),
     ("tcp", 135): PortCatalogEntry(
         service_name="Windows RPC",
@@ -114,8 +114,8 @@ PORT_CATALOG = {
         recommendation=REVIEW,
         recommendation_reason="An encrypted local management interface is common, but should still be intentional.",
         next_step="Confirm the interface belongs to this device and keep its software and credentials current.",
-        expected_roles=frozenset({"camera", "gateway", "hub", "intercom", "printer", "router", "server"}),
-        expected_icons=frozenset({"printer", "router", "security-camera", "server", "smart-hub"}),
+        expected_roles=frozenset({"camera", "gateway", "hub", "intercom", "nas", "printer", "router", "server"}),
+        expected_icons=frozenset({"nas", "printer", "router", "security-camera", "server", "smart-hub"}),
     ),
     ("tcp", 515): PortCatalogEntry(
         service_name="LPD printing",
@@ -143,11 +143,11 @@ PORT_CATALOG = {
         recommendation=REVIEW,
         recommendation_reason="SMB is useful for file sharing but is a frequent target when unnecessarily exposed.",
         next_step="Confirm file sharing is required; otherwise disable it and restrict access to trusted devices.",
-        expected_roles=frozenset({"server"}),
-        expected_icons=frozenset({"server"}),
+        expected_roles=frozenset({"nas", "server"}),
+        expected_icons=frozenset({"nas", "server"}),
         attention_score=3,
-        attention_exempt_roles=frozenset({"server"}),
-        attention_exempt_icons=frozenset({"server"}),
+        attention_exempt_roles=frozenset({"nas", "server"}),
+        attention_exempt_icons=frozenset({"nas", "server"}),
     ),
     ("tcp", 554): PortCatalogEntry(
         service_name="RTSP",
@@ -177,8 +177,8 @@ PORT_CATALOG = {
         next_step=(
             "Confirm the daemon is intentional, limit modules and clients, and use SSH transport when possible."
         ),
-        expected_roles=frozenset({"server"}),
-        expected_icons=frozenset({"server"}),
+        expected_roles=frozenset({"nas", "server"}),
+        expected_icons=frozenset({"nas", "server"}),
     ),
     ("tcp", 1883): PortCatalogEntry(
         service_name="MQTT",
@@ -204,8 +204,8 @@ PORT_CATALOG = {
         next_step=(
             "Review exported paths and client restrictions, and disable NFS when no trusted client requires it."
         ),
-        expected_roles=frozenset({"server"}),
-        expected_icons=frozenset({"server"}),
+        expected_roles=frozenset({"nas", "server"}),
+        expected_icons=frozenset({"nas", "server"}),
     ),
     ("tcp", 3389): PortCatalogEntry(
         service_name="Remote Desktop",
@@ -227,8 +227,8 @@ PORT_CATALOG = {
         next_step=(
             "Confirm the interface belongs to the device and prefer its encrypted management port when available."
         ),
-        expected_roles=frozenset({"server"}),
-        expected_icons=frozenset({"server"}),
+        expected_roles=frozenset({"nas", "server"}),
+        expected_icons=frozenset({"nas", "server"}),
     ),
     ("tcp", 5001): PortCatalogEntry(
         service_name="Secure NAS/Web service",
@@ -238,8 +238,8 @@ PORT_CATALOG = {
             "Port 5001 is commonly used for encrypted NAS management, but other applications may also use it."
         ),
         next_step="Confirm the interface belongs to the device and keep its software and credentials current.",
-        expected_roles=frozenset({"server"}),
-        expected_icons=frozenset({"server"}),
+        expected_roles=frozenset({"nas", "server"}),
+        expected_icons=frozenset({"nas", "server"}),
     ),
     ("tcp", 5555): PortCatalogEntry(
         service_name="Android Debug Bridge",
@@ -269,11 +269,11 @@ PORT_CATALOG = {
         recommendation=REVIEW,
         recommendation_reason="Port 8080 has many possible uses, so the port number alone cannot identify the service.",
         next_step="Open the service only if you recognize it, then check the device documentation and access controls.",
-        expected_roles=frozenset({"camera", "intercom", "server"}),
-        expected_icons=frozenset({"security-camera", "server", "smart-hub"}),
+        expected_roles=frozenset({"camera", "intercom", "nas", "server"}),
+        expected_icons=frozenset({"nas", "security-camera", "server", "smart-hub"}),
         attention_score=2,
-        attention_exempt_roles=frozenset({"camera", "intercom", "server"}),
-        attention_exempt_icons=frozenset({"security-camera", "server"}),
+        attention_exempt_roles=frozenset({"camera", "intercom", "nas", "server"}),
+        attention_exempt_icons=frozenset({"nas", "security-camera", "server"}),
     ),
     ("tcp", 8123): PortCatalogEntry(
         service_name="Home Assistant",
@@ -295,8 +295,8 @@ PORT_CATALOG = {
         recommendation=REVIEW,
         recommendation_reason="Port 8443 is commonly used for HTTPS, but the port number does not prove the protocol or product.",
         next_step="Verify the service in the device documentation and keep it only when the interface is required.",
-        expected_roles=frozenset({"camera", "intercom", "server"}),
-        expected_icons=frozenset({"security-camera", "server", "smart-hub"}),
+        expected_roles=frozenset({"camera", "intercom", "nas", "server"}),
+        expected_icons=frozenset({"nas", "security-camera", "server", "smart-hub"}),
     ),
     ("tcp", 8883): PortCatalogEntry(
         service_name="MQTT over TLS",

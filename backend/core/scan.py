@@ -88,6 +88,15 @@ DEVICE_GUESS_RULES = [
         "keywords": ("laptop", "notebook"),
     },
     {
+        "icon": "game-console",
+        "keywords": (
+            "game console",
+            "playstation",
+            "xbox",
+            "nintendo switch",
+        ),
+    },
+    {
         "icon": "streamer",
         "keywords": ("streamer", "streaming"),
         "ports": (8008, 8009),
@@ -151,8 +160,29 @@ DEVICE_GUESS_RULES = [
         "ports": (9100,),
     },
     {
+        "icon": "nas",
+        "keywords": (
+            "nas",
+            "network attached storage",
+            "synology",
+            "qnap",
+        ),
+    },
+    {
+        "icon": "power-meter",
+        "keywords": ("power meter", "energy meter", "smart meter"),
+    },
+    {
+        "icon": "smart-power-strip",
+        "keywords": ("smart power strip", "power strip", "multi plug"),
+    },
+    {
+        "icon": "smart-relay",
+        "keywords": ("smart relay", "wifi relay", "relay switch"),
+    },
+    {
         "icon": "server",
-        "keywords": ("server", "nas"),
+        "keywords": ("server",),
         "ports": (22,),
     },
 ]
