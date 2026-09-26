@@ -11,6 +11,7 @@ from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 import requests
 import scapy.all as scapy
@@ -33,6 +34,7 @@ MDNS_SERVICE_RETRY_COUNT = 3
 MDNS_SERVICE_RETRY_DELAY_SECONDS = 0.25
 IP_IDENTITY_CONFLICT_WINDOW = timedelta(hours=1)
 IP_IDENTITY_CONFLICT_MARKER = " was reported by multiple MAC addresses: "
+STALE_SCAN_ERROR = "Scan was interrupted and its stale lock was released."
 MDNS_SERVICE_TYPES = (
     "_hap._tcp.local",
     "_services._dns-sd._udp.local",
@@ -50,6 +52,59 @@ WEB_INTERFACE_PORTS = (
     (8000, "http"),
     (8888, "http"),
 )
+
+
+class ScanAlreadyRunning(RuntimeError):
+    def __init__(self, active_scan=None):
+        self.active_scan = active_scan
+        source = active_scan.get_source_display().lower() if active_scan else "network"
+        super().__init__(f"A {source} scan is already running.")
+
+
+def expire_stale_scan_runs(now=None):
+    now = now or timezone.now()
+    stale_after = max(60, settings.SCAN_LOCK_STALE_SECONDS)
+    cutoff = now - timedelta(seconds=stale_after)
+    return ScanRun.objects.filter(
+        status=ScanRun.Status.RUNNING,
+        heartbeat_at__lt=cutoff,
+    ).update(
+        status=ScanRun.Status.FAILED,
+        finished_at=now,
+        error=STALE_SCAN_ERROR,
+    )
+
+
+def active_scan_run(now=None):
+    expire_stale_scan_runs(now=now)
+    return ScanRun.objects.filter(status=ScanRun.Status.RUNNING).first()
+
+
+def claim_scan_run(scan_ranges, scan_range_labels, source):
+    expire_stale_scan_runs()
+    try:
+        with transaction.atomic():
+            return ScanRun.objects.create(
+                ip_range=scan_ranges[0],
+                scan_ranges=scan_ranges,
+                scan_range_labels=scan_range_labels,
+                source=source,
+            )
+    except IntegrityError as exc:
+        raise ScanAlreadyRunning(active_scan_run()) from exc
+
+
+def touch_scan_run(scan_run):
+    heartbeat_at = timezone.now()
+    updated = ScanRun.objects.filter(
+        pk=scan_run.pk,
+        status=ScanRun.Status.RUNNING,
+    ).update(heartbeat_at=heartbeat_at)
+    if not updated:
+        raise ScanAlreadyRunning(active_scan_run())
+    scan_run.heartbeat_at = heartbeat_at
+
+
 DEVICE_GUESS_RULES = [
     {
         "icon": "smart-hub",
@@ -1544,7 +1599,7 @@ def discover_devices(ip_range):
     return list(discovered.values())
 
 
-def scan(ip_ranges, scan_run=None):
+def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
     scan_ranges = validate_ip_ranges(ip_ranges)
     primary_range = scan_ranges[0]
     configured_labels = AppSettings.load().effective_scan_range_labels
@@ -1553,11 +1608,7 @@ def scan(ip_ranges, scan_run=None):
         for network_range in scan_ranges
         if network_range in configured_labels
     }
-    scan_run = scan_run or ScanRun.objects.create(
-        ip_range=primary_range,
-        scan_ranges=scan_ranges,
-        scan_range_labels=scan_range_labels,
-    )
+    scan_run = claim_scan_run(scan_ranges, scan_range_labels, source)
     if (
         scan_run.ip_range != primary_range
         or scan_run.scan_ranges != scan_ranges
@@ -1573,11 +1624,14 @@ def scan(ip_ranges, scan_run=None):
     new_devices = 0
 
     try:
+        touch_scan_run(scan_run)
         discovered = {}
         local_scanner_macs = set()
         for ip_range in scan_ranges:
+            touch_scan_run(scan_run)
             for element in discover_devices(ip_range):
                 discovered[element[1].hwsrc.lower()] = element
+            touch_scan_run(scan_run)
 
             local_interface = local_scanner_interface(ip_range, route_target=gateway_ip)
             if local_interface:
@@ -1605,6 +1659,7 @@ def scan(ip_ranges, scan_run=None):
         }
 
         for element in answered_list:
+            touch_scan_run(scan_run)
             stats = sync_discovered_device(
                 element,
                 oui=oui,
@@ -1624,6 +1679,7 @@ def scan(ip_ranges, scan_run=None):
             ports_closed += stats["ports_closed"]
 
         online_macs = [element[1].hwsrc.lower() for element in answered_list]
+        touch_scan_run(scan_run)
         clear_stale_gateways(gateway_ip)
         mark_missing_devices_offline(
             online_macs,
@@ -1633,12 +1689,14 @@ def scan(ip_ranges, scan_run=None):
     except Exception as exc:
         scan_run.status = ScanRun.Status.FAILED
         scan_run.finished_at = timezone.now()
+        scan_run.heartbeat_at = scan_run.finished_at
         scan_run.error = scan_error_message(exc)
-        scan_run.save(update_fields=["status", "finished_at", "error"])
+        scan_run.save(update_fields=["status", "finished_at", "heartbeat_at", "error"])
         raise
 
     scan_run.status = ScanRun.Status.SUCCESS
     scan_run.finished_at = timezone.now()
+    scan_run.heartbeat_at = scan_run.finished_at
     scan_run.devices_seen = len(answered_list)
     scan_run.new_devices = new_devices
     scan_run.online_devices = Device.objects.filter(online=True, archived=False).count()
@@ -1649,6 +1707,7 @@ def scan(ip_ranges, scan_run=None):
         update_fields=[
             "status",
             "finished_at",
+            "heartbeat_at",
             "devices_seen",
             "new_devices",
             "online_devices",

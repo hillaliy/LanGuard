@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 
-from core.models import AppSettings
+from core.models import AppSettings, ScanRun
 from core.scan import scan
 
 
@@ -19,5 +19,5 @@ class Command(BaseCommand):
         ranges_label = ", ".join(scan_ranges)
 
         self.stdout.write(f"Scanning {ranges_label}...")
-        scan(scan_ranges)
+        scan(scan_ranges, source=ScanRun.Source.COMMAND)
         self.stdout.write(self.style.SUCCESS(f"Scan completed for {ranges_label}"))

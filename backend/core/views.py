@@ -81,6 +81,8 @@ from .api import (
     parse_int_param,
 )
 from .scan import (
+    ScanAlreadyRunning,
+    active_scan_run,
     detect_web_interface,
     mark_devices_outside_scan_ranges_offline,
     scan,
@@ -2383,7 +2385,18 @@ def scan_now(request):
         raise ValidationError({error_field: str(exc)}) from exc
 
     try:
-        scan_run = scan(scan_ranges)
+        scan_run = scan(scan_ranges, source=ScanRun.Source.MANUAL)
+    except ScanAlreadyRunning as exc:
+        active_scan = exc.active_scan
+        message = str(exc)
+        return error_response(
+            "Scan already running",
+            message,
+            response_status=status.HTTP_409_CONFLICT,
+            data=ScanRunSerializer(active_scan).data if active_scan else None,
+            status="Conflict",
+            info=message,
+        )
     except Exception as exc:
         LOGGER.exception("Scan failed for %s", scan_ranges)
         failed_scan = ScanRun.objects.filter(ip_range=scan_ranges[0]).first()
@@ -2477,8 +2490,8 @@ def scan_runs(request):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def scan_status(request):
+    active_scan = active_scan_run()
     latest_scan = ScanRun.objects.exclude(status=ScanRun.Status.RUNNING).first()
-    active_scan = ScanRun.objects.filter(status=ScanRun.Status.RUNNING).first()
     active_scan = reconcile_scan_status(latest_scan, active_scan)
     visible_scan = active_scan or latest_scan
     app_config = AppSettings.load()
@@ -2493,6 +2506,7 @@ def scan_status(request):
             "active_scan": ScanRunSerializer(active_scan).data if active_scan else None,
             "visibility": {
                 "is_scanning": active_scan is not None,
+                "source": active_scan.source if active_scan else "",
                 "current_range": visible_scan.ip_range if visible_scan else "",
                 "current_ranges": (
                     visible_scan.scan_ranges or [visible_scan.ip_range]

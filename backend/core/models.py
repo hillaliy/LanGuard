@@ -333,6 +333,11 @@ class AdGuardUnmatchedClient(models.Model):
 
 
 class ScanRun(models.Model):
+    class Source(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        SCHEDULED = "scheduled", "Scheduled"
+        COMMAND = "command", "Command"
+
     class Status(models.TextChoices):
         RUNNING = "running", "Running"
         SUCCESS = "success", "Success"
@@ -341,12 +346,18 @@ class ScanRun(models.Model):
     ip_range = models.CharField(max_length=64)
     scan_ranges = models.JSONField(default=list, blank=True)
     scan_range_labels = models.JSONField(default=dict, blank=True)
+    source = models.CharField(
+        max_length=16,
+        choices=Source.choices,
+        default=Source.COMMAND,
+    )
     status = models.CharField(
         max_length=16,
         choices=Status.choices,
         default=Status.RUNNING,
     )
     started_at = models.DateTimeField(default=timezone.now)
+    heartbeat_at = models.DateTimeField(default=timezone.now)
     finished_at = models.DateTimeField(blank=True, null=True)
     devices_seen = models.PositiveIntegerField(default=0)
     new_devices = models.PositiveIntegerField(default=0)
@@ -360,6 +371,13 @@ class ScanRun(models.Model):
         indexes = [
             models.Index(fields=["-started_at"], name="core_scanrun_started_desc_idx"),
             models.Index(fields=["status", "-started_at"], name="core_scanrun_status_idx"),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["status"],
+                condition=models.Q(status="running"),
+                name="one_active_network_scan",
+            ),
         ]
 
     def __str__(self):

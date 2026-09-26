@@ -96,16 +96,18 @@ class ScanRunAdmin(admin.ModelAdmin):
         "ip_range",
         "scan_ranges",
         "scan_range_labels",
+        "source",
         "status",
         "started_at",
+        "heartbeat_at",
         "finished_at",
         "devices_seen",
         "new_devices",
         "ports_opened",
         "ports_closed",
     )
-    list_filter = ("status",)
-    readonly_fields = ("started_at", "finished_at")
+    list_filter = ("status", "source")
+    readonly_fields = ("started_at", "heartbeat_at", "finished_at")
 
 
 @admin.register(DetailedPortScan)
