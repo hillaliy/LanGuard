@@ -2294,7 +2294,14 @@ function SpeedtestTrackerCard({ payload, timeZone }) {
   );
 }
 
-function DashboardInsightCards({ events = [], devices = [], onSelectDevice, timeZone }) {
+function DashboardInsightCards({
+  events = [],
+  devices = [],
+  onSelectDevice,
+  onOpenAttentionDevices,
+  onOpenRecentChanges,
+  timeZone,
+}) {
   const recentEvents = events;
   const deviceById = useMemo(
     () => new Map(devices.map((device) => [String(device.id), device])),
@@ -2317,6 +2324,8 @@ function DashboardInsightCards({ events = [], devices = [], onSelectDevice, time
           title="Recently Changed"
           count={events.length}
           color="blue"
+          onOpen={onOpenRecentChanges}
+          openLabel="View all recent changes"
         />
         <Stack className="dashboard-insight-list" gap="sm">
           {recentEvents.length ? recentEvents.map((event) => (
@@ -2339,6 +2348,8 @@ function DashboardInsightCards({ events = [], devices = [], onSelectDevice, time
           title="Needs Attention"
           count={attentionDevices.length}
           color="orange"
+          onOpen={onOpenAttentionDevices}
+          openLabel="View all devices needing attention"
         />
         <Stack className="dashboard-insight-list" gap="sm">
           {attentionDevices.map((device) => (
@@ -2380,16 +2391,35 @@ function eventDeviceForRow(event, deviceById, devices) {
   }) || null;
 }
 
-function DashboardInsightHeader({ icon, title, count, color }) {
+function DashboardInsightHeader({ icon, title, count, color, onOpen, openLabel }) {
+  const countBadge = (
+    <Badge
+      className="dashboard-insight-count"
+      color={color}
+      variant="light"
+      rightSection={onOpen ? <IconArrowRight size={15} aria-hidden="true" /> : null}
+    >
+      {count}
+    </Badge>
+  );
+
   return (
     <Group justify="space-between" align="center" mb="md" wrap="nowrap">
       <Group gap="sm" wrap="nowrap">
         {icon}
         <Title order={3}>{title}</Title>
       </Group>
-      <Badge className="dashboard-insight-count" color={color} variant="light">
-        {count}
-      </Badge>
+      {onOpen ? (
+        <Tooltip label={openLabel}>
+          <UnstyledButton
+            className="dashboard-insight-count-link"
+            onClick={onOpen}
+            aria-label={`${openLabel}: ${count}`}
+          >
+            {countBadge}
+          </UnstyledButton>
+        </Tooltip>
+      ) : countBadge}
     </Group>
   );
 }
@@ -7035,6 +7065,30 @@ function Dashboard({
     window.setTimeout(() => window.scrollTo({ top: 0 }), 0);
   }
 
+  function openAttentionDevices() {
+    tableStateRef.current = {
+      ...tableStateRef.current,
+      search: '',
+      deviceStatus: 'attention',
+      networkRangeFilter: [],
+      firstSeenPeriod: '',
+      homeBoxLinkStatus: '',
+      deviceOffset: 0,
+    };
+    setSearch('');
+    setDeviceStatus('attention');
+    setNetworkRangeFilter([]);
+    setFirstSeenPeriod('');
+    setHomeBoxLinkStatus('');
+    setDeviceOffset(0);
+    navigateToView('devices');
+  }
+
+  function openRecentChanges() {
+    setEventType('');
+    navigateToView('events');
+  }
+
   function returnFromDevicePage() {
     if (window.history.state?.languardDevicePage) {
       window.history.back();
@@ -7939,6 +7993,8 @@ function Dashboard({
             events={dashboardEvents}
             devices={mapDevices}
             onSelectDevice={openDevicePage}
+            onOpenAttentionDevices={openAttentionDevices}
+            onOpenRecentChanges={openRecentChanges}
             timeZone={displayTimeZone}
           />
             </>

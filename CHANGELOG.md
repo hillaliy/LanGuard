@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added dashboard links from Needs Attention to the filtered device list and from Recently Changed to the full event history.
 - Prevented manual and scheduled network scans from overlapping, with clear active-scan status and automatic stale-lock recovery.
 - Added dedicated roles and icons for game consoles, laptops, NAS devices, smart relays, smart power strips, and power meters.
 - Added a configurable Telegram API base URL for Telegram-compatible relays and self-hosted Bot API servers.
