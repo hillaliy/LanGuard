@@ -65,6 +65,7 @@ import {
   IconClock,
   IconDeviceCctv,
   IconDeviceDesktop,
+  IconDeviceGamepad2,
   IconDeviceLaptop,
   IconDeviceMobile,
   IconDeviceSpeaker,
@@ -86,6 +87,7 @@ import {
   IconMoon,
   IconNetwork,
   IconOutlet,
+  IconPlugConnected,
   IconPlus,
   IconPower,
   IconPrinter,
@@ -99,6 +101,7 @@ import {
   IconSearch,
   IconSend,
   IconServer,
+  IconServer2,
   IconPlayerStop,
   IconDeviceFloppy,
   IconSettings,
@@ -107,6 +110,8 @@ import {
   IconSmartHome,
   IconSun,
   IconTemperature,
+  IconCircuitSwitchClosed,
+  IconMeterCube,
   IconTrash,
   IconUpload,
   IconUserPlus,
@@ -316,8 +321,11 @@ const deviceRoleOptions = [
   'meshRouter',
   'hub',
   'camera',
+  'gameConsole',
   'computer',
+  'laptop',
   'server',
+  'nas',
   'phone',
   'tablet',
   'tv',
@@ -327,6 +335,9 @@ const deviceRoleOptions = [
   'light',
   'climate',
   'smartPlug',
+  'smartRelay',
+  'smartPowerStrip',
+  'powerMeter',
   'controller',
   'lock',
   'intercom',
@@ -465,12 +476,14 @@ function useHydrated() {
 const deviceIconOptions = [
   { value: 'unknown', label: 'Unknown', icon: IconQuestionMark },
   { value: 'desktop', label: 'Desktop', icon: IconDeviceDesktop },
+  { value: 'game-console', label: 'Game console', icon: IconDeviceGamepad2 },
   { value: 'router', label: 'Router', icon: IconRouter },
   { value: 'smart-hub', label: 'Smart hub', icon: IconSmartHome },
   { value: 'phone', label: 'Phone', icon: IconDeviceMobile },
   { value: 'tablet', label: 'Tablet', icon: IconDeviceTablet },
   { value: 'smart-watch', label: 'Smart watch', icon: IconDeviceWatch },
   { value: 'laptop', label: 'Laptop', icon: IconDeviceLaptop },
+  { value: 'nas', label: 'NAS', icon: IconServer2 },
   { value: 'tv', label: 'TV', icon: IconDeviceTv },
   { value: 'streamer', label: 'Streamer', icon: IconCast },
   { value: 'security-camera', label: 'Security camera', icon: IconDeviceCctv },
@@ -489,6 +502,9 @@ const deviceIconOptions = [
   { value: 'lock', label: 'Lock', icon: IconLock },
   { value: 'robot-vacuum', label: 'Robot vacuum', icon: IconVacuumCleaner },
   { value: 'power-strip', label: 'Power strip', icon: IconOutlet },
+  { value: 'smart-relay', label: 'Smart relay', icon: IconCircuitSwitchClosed },
+  { value: 'smart-power-strip', label: 'Smart power strip', icon: IconPlugConnected },
+  { value: 'power-meter', label: 'Power meter', icon: IconMeterCube },
   { value: 'server', label: 'Server', icon: IconServer },
 ];
 
@@ -519,6 +535,12 @@ function normalizeDeviceIcon(value) {
     'smart-watch': 'smart-watch',
     wearable: 'smart-watch',
     macbook: 'laptop',
+    console: 'game-console',
+    gameconsole: 'game-console',
+    'game-console': 'game-console',
+    gamepad: 'game-console',
+    playstation: 'game-console',
+    xbox: 'game-console',
     television: 'tv',
     airplayvideo: 'streamer',
     cast: 'streamer',
@@ -594,7 +616,17 @@ function normalizeDeviceIcon(value) {
     'smart-plug': 'power-strip',
     'plug-strip': 'power-strip',
     'power-outlet': 'power-strip',
-    nas: 'server',
+    nas: 'nas',
+    'network-attached-storage': 'nas',
+    relay: 'smart-relay',
+    smartrelay: 'smart-relay',
+    'smart-relay': 'smart-relay',
+    smartpowerstrip: 'smart-power-strip',
+    'smart-power-strip': 'smart-power-strip',
+    'multi-plug': 'smart-power-strip',
+    powermeter: 'power-meter',
+    'power-meter': 'power-meter',
+    'energy-meter': 'power-meter',
     'server.rack': 'server',
     'wifi.router': 'router',
   };
@@ -667,10 +699,10 @@ function deviceMapShape(device) {
   if (icon === 'router') {
     return 'router';
   }
-  if (icon === 'server') {
+  if (['server', 'nas'].includes(icon)) {
     return 'server';
   }
-  if (['smart-hub', 'phone', 'tablet', 'smart-watch', 'robot-vacuum', 'power-strip', 'lock'].includes(icon)) {
+  if (['smart-hub', 'phone', 'tablet', 'smart-watch', 'robot-vacuum', 'power-strip', 'smart-power-strip', 'smart-relay', 'power-meter', 'game-console', 'lock'].includes(icon)) {
     return 'compact';
   }
   if (['tv', 'streamer', 'security-camera'].includes(icon)) {

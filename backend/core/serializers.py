@@ -213,7 +213,7 @@ class AdGuardUnmatchedClientSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-PORT_DENSE_ROLES = {"camera", "intercom", "server"}
+PORT_DENSE_ROLES = {"camera", "intercom", "nas", "server"}
 
 HIGH_CONFIDENCE_IDENTITY_SOURCES = {
     Device.IdentitySource.REVERSE_DNS,

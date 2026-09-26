@@ -586,6 +586,17 @@ class PortGuidanceCatalogTests(SimpleTestCase):
         self.assertEqual(guidance["recommendation"], "expected")
         self.assertEqual(guidance["service_name"], "RAW printing")
 
+    def test_known_nas_gets_expected_file_sharing_guidance(self):
+        device = SimpleNamespace(known=True, role="nas", icon="nas")
+
+        guidance = port_guidance(
+            device,
+            {"protocol": "tcp", "port": 445, "service": "microsoft-ds"},
+        )
+
+        self.assertEqual(guidance["recommendation"], "expected")
+        self.assertEqual(guidance["service_name"], "SMB")
+
     def test_known_gateway_gets_expected_dns_guidance(self):
         device = SimpleNamespace(known=True, role="gateway", icon="router")
 
@@ -2304,6 +2315,25 @@ class ScanStabilityTests(TestCase):
             )["icon"],
             "ceiling-fan",
         )
+
+    def test_guess_device_identity_detects_requested_device_categories(self):
+        examples = {
+            "PlayStation 5": "game-console",
+            "Office notebook": "laptop",
+            "Synology NAS": "nas",
+            "Garage smart relay": "smart-relay",
+            "Desk smart power strip": "smart-power-strip",
+            "Main energy meter": "power-meter",
+        }
+
+        for hostname, expected_icon in examples.items():
+            with self.subTest(hostname=hostname):
+                identity = guess_device_identity(
+                    hostname=hostname,
+                    vendor="",
+                    mac="90:dd:5d:b7:bd:01",
+                )
+                self.assertEqual(identity["icon"], expected_icon)
 
 
 class NotificationTests(TestCase):
@@ -6149,7 +6179,7 @@ class ScanApiTests(TestCase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.name, "Migrated server")
         self.assertEqual(self.device.ip, "192.168.1.40")
-        self.assertEqual(self.device.role, "server")
+        self.assertEqual(self.device.role, "nas")
         self.assertEqual(self.device.room, "Office")
         self.assertTrue(self.device.known)
 

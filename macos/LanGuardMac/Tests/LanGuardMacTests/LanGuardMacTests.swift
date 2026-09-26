@@ -861,4 +861,46 @@ func deviceProfilerDetectsDeviceRoles() {
         openPorts: [],
         isGateway: false
     ) == .hub)
+    #expect(DeviceProfiler.role(
+        name: "PlayStation 5",
+        hostname: nil,
+        vendor: nil,
+        openPorts: [],
+        isGateway: false
+    ) == .gameConsole)
+    #expect(DeviceProfiler.role(
+        name: "Office MacBook",
+        hostname: nil,
+        vendor: nil,
+        openPorts: [],
+        isGateway: false
+    ) == .laptop)
+    #expect(DeviceProfiler.role(
+        name: "Synology NAS",
+        hostname: nil,
+        vendor: nil,
+        openPorts: [],
+        isGateway: false
+    ) == .nas)
+    #expect(DeviceProfiler.role(
+        name: "Garage Smart Relay",
+        hostname: nil,
+        vendor: nil,
+        openPorts: [],
+        isGateway: false
+    ) == .smartRelay)
+    #expect(DeviceProfiler.role(
+        name: "Desk Smart Power Strip",
+        hostname: nil,
+        vendor: nil,
+        openPorts: [],
+        isGateway: false
+    ) == .smartPowerStrip)
+    #expect(DeviceProfiler.role(
+        name: "Main Energy Meter",
+        hostname: nil,
+        vendor: nil,
+        openPorts: [],
+        isGateway: false
+    ) == .powerMeter)
 }
