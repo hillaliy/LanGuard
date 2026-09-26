@@ -486,6 +486,8 @@ def inventory_device_payload(device):
         "archived": device.archived,
         "online_notification_preference": device.online_notification_preference,
         "offline_notification_preference": device.offline_notification_preference,
+        "presence_expectation": device.presence_expectation,
+        "offline_attention_after_days": device.offline_attention_after_days,
         "risk": risk_data["level"],
         "attention_acknowledged": device_attention_acknowledged(device, risk_data),
         "known": device.known,
@@ -895,6 +897,32 @@ def import_inventory_devices(payload):
             online_notification_preference = Device.NotificationPreference.INHERIT
         if offline_notification_preference not in valid_notification_preferences:
             offline_notification_preference = Device.NotificationPreference.INHERIT
+        valid_presence_expectations = set(Device.PresenceExpectation.values)
+        presence_expectation_present = (
+            "presence_expectation" in item or "presenceExpectation" in item
+        )
+        presence_expectation = str(
+            item.get(
+                "presence_expectation",
+                item.get("presenceExpectation", Device.PresenceExpectation.AUTOMATIC),
+            )
+        ).strip()
+        if presence_expectation not in valid_presence_expectations:
+            presence_expectation = Device.PresenceExpectation.AUTOMATIC
+        offline_attention_after_days_present = (
+            "offline_attention_after_days" in item
+            or "offlineAttentionAfterDays" in item
+        )
+        raw_offline_attention_after_days = item.get(
+            "offline_attention_after_days",
+            item.get("offlineAttentionAfterDays"),
+        )
+        try:
+            offline_attention_after_days = int(raw_offline_attention_after_days)
+            if not 1 <= offline_attention_after_days <= 3650:
+                offline_attention_after_days = None
+        except (TypeError, ValueError):
+            offline_attention_after_days = None
         attention_acknowledged_present = (
             "attention_acknowledged" in item or "attentionAcknowledged" in item
         )
@@ -957,6 +985,18 @@ def import_inventory_devices(payload):
             defaults["online_notification_preference"] = online_notification_preference
         if offline_notification_preference_present:
             defaults["offline_notification_preference"] = offline_notification_preference
+        if presence_expectation_present:
+            defaults["presence_expectation"] = presence_expectation
+        if offline_attention_after_days_present:
+            defaults["offline_attention_after_days"] = (
+                offline_attention_after_days
+                if presence_expectation
+                not in {
+                    Device.PresenceExpectation.AUTOMATIC,
+                    Device.PresenceExpectation.NEVER,
+                }
+                else None
+            )
         if role is not None:
             defaults["role"] = role or ("gateway" if is_gateway else "device")
         if room is not None:
@@ -1029,6 +1069,16 @@ def import_inventory_devices(payload):
                     *(
                         ["offline_notification_preference"]
                         if offline_notification_preference_present
+                        else []
+                    ),
+                    *(
+                        ["presence_expectation"]
+                        if presence_expectation_present
+                        else []
+                    ),
+                    *(
+                        ["offline_attention_after_days"]
+                        if offline_attention_after_days_present
                         else []
                     ),
                     "firstseen",

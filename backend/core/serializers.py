@@ -322,11 +322,14 @@ def device_risk(device):
         score += 2
         reasons.append("Many open ports")
 
-    if not device.vendor:
+    if not device.known and not device.vendor:
         score += 1
         reasons.append("No vendor detected")
 
-    if device.status in {Device.Status.RECENTLY_SEEN, Device.Status.SLEEPING} or device.missed_scans:
+    if not device.known and (
+        device.status in {Device.Status.RECENTLY_SEEN, Device.Status.SLEEPING}
+        or device.missed_scans
+    ):
         score += 1
         reasons.append("Recently missed scans")
 
@@ -344,17 +347,41 @@ def device_risk(device):
     }
 
 
-OFFLINE_ATTENTION_AFTER = timedelta(days=7)
-OFFLINE_ATTENTION_REASON = "Offline for over 7 days"
+ALWAYS_EXPECTED_OFFLINE_DAYS = 7
+OCCASIONAL_PRESENCE_OFFLINE_DAYS = 21
+OCCASIONAL_PRESENCE_ROLES = frozenset({"laptop", "phone", "tablet", "watch"})
+OCCASIONAL_PRESENCE_ICONS = frozenset({"laptop", "phone", "smart-watch", "tablet"})
 IDENTITY_CONFLICT_ATTENTION_AFTER = timedelta(days=7)
 
 
-def device_is_offline_over_week(device, now=None):
+def device_offline_attention_days(device):
+    if device.archived or device.is_visitor:
+        return None
+
+    expectation = device.presence_expectation
+    if expectation == Device.PresenceExpectation.NEVER:
+        return None
+    if expectation == Device.PresenceExpectation.AUTOMATIC:
+        role = (device.role or "").strip().lower()
+        icon = (device.icon or "").strip().lower()
+        if role in OCCASIONAL_PRESENCE_ROLES or icon in OCCASIONAL_PRESENCE_ICONS:
+            return OCCASIONAL_PRESENCE_OFFLINE_DAYS
+        return ALWAYS_EXPECTED_OFFLINE_DAYS
+
+    default_days = (
+        OCCASIONAL_PRESENCE_OFFLINE_DAYS
+        if expectation == Device.PresenceExpectation.OCCASIONAL
+        else ALWAYS_EXPECTED_OFFLINE_DAYS
+    )
+    return device.offline_attention_after_days or default_days
+
+
+def device_is_offline_beyond_expectation(device, now=None):
+    attention_days = device_offline_attention_days(device)
     return bool(
-        not device.archived
-        and not device.is_visitor
+        attention_days is not None
         and device.status == Device.Status.OFFLINE
-        and device.lastseen < (now or timezone.now()) - OFFLINE_ATTENTION_AFTER
+        and device.lastseen < (now or timezone.now()) - timedelta(days=attention_days)
     )
 
 
@@ -363,8 +390,10 @@ def device_attention_reasons(device, risk_data=None):
     reasons = []
     if not device.known or current_risk["level"] in {"medium", "high"}:
         reasons.extend(current_risk["reasons"])
-    if device_is_offline_over_week(device):
-        reasons.append(OFFLINE_ATTENTION_REASON)
+    if device_is_offline_beyond_expectation(device):
+        reasons.append(
+            f"Offline for over {device_offline_attention_days(device)} days"
+        )
     if (
         device.identity_conflict_reason
         and device.identity_conflict_detected_at
@@ -387,7 +416,7 @@ def device_risk_signature(device, risk_data=None):
                 .values_list("port", "protocol")
             ),
             "risk_level": current_risk["level"],
-            "offline_over_week": device_is_offline_over_week(device),
+            "offline_over_week": device_is_offline_beyond_expectation(device),
             "identity_conflict_reason": device.identity_conflict_reason,
             "identity_conflict_detected_at": (
                 device.identity_conflict_detected_at.isoformat()
@@ -418,6 +447,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     homebox_link = serializers.SerializerMethodField()
     homebox_available = serializers.SerializerMethodField()
     effective_external_url = serializers.CharField(read_only=True)
+    offline_attention_effective_days = serializers.SerializerMethodField()
 
     def homebox_config(self):
         if "homebox_config" not in self.context:
@@ -478,6 +508,10 @@ class DeviceSerializer(serializers.ModelSerializer):
         source="get_status_source_display",
         read_only=True,
     )
+    presence_expectation_display = serializers.CharField(
+        source="get_presence_expectation_display",
+        read_only=True,
+    )
 
     class Meta:
         model = Device
@@ -495,6 +529,10 @@ class DeviceSerializer(serializers.ModelSerializer):
         if not hasattr(obj, "_identity_data"):
             obj._identity_data = device_identity(obj)
         return obj._identity_data
+
+    @extend_schema_field(serializers.IntegerField(allow_null=True))
+    def get_offline_attention_effective_days(self, obj):
+        return device_offline_attention_days(obj)
 
     @extend_schema_field(serializers.CharField)
     def get_identity_confidence(self, obj):
@@ -582,6 +620,33 @@ class DeviceSerializer(serializers.ModelSerializer):
         if attrs.get("acknowledge_attention") and not known:
             raise serializers.ValidationError(
                 {"acknowledge_attention": "Only known devices can be acknowledged."}
+            )
+
+        presence_expectation = attrs.get(
+            "presence_expectation",
+            self.instance.presence_expectation
+            if self.instance
+            else Device.PresenceExpectation.AUTOMATIC,
+        )
+        offline_attention_after_days = attrs.get(
+            "offline_attention_after_days",
+            self.instance.offline_attention_after_days if self.instance else None,
+        )
+        if presence_expectation in {
+            Device.PresenceExpectation.AUTOMATIC,
+            Device.PresenceExpectation.NEVER,
+        }:
+            attrs["offline_attention_after_days"] = None
+        elif (
+            offline_attention_after_days is not None
+            and not 1 <= offline_attention_after_days <= 3650
+        ):
+            raise serializers.ValidationError(
+                {
+                    "offline_attention_after_days": (
+                        "Choose a value between 1 and 3650 days."
+                    )
+                }
             )
 
         external_url = attrs.get(
