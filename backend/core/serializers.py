@@ -787,6 +787,12 @@ class NotificationTestSerializer(serializers.Serializer):
         max_length=255,
         write_only=True,
     )
+    telegram_api_url = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        max_length=2048,
+        trim_whitespace=True,
+    )
     telegram_user_id = serializers.CharField(
         required=False,
         allow_blank=True,
@@ -807,6 +813,14 @@ class NotificationTestSerializer(serializers.Serializer):
         choices=(1, 2, 3, 4, 5),
         default=3,
     )
+
+    def validate_telegram_api_url(self, value):
+        from .notifications import normalize_telegram_api_url
+
+        try:
+            return normalize_telegram_api_url(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
 
     def validate(self, attrs):
         channel = attrs["channel"]
@@ -925,6 +939,12 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         allow_blank=True,
         max_length=255,
     )
+    telegram_api_url = serializers.CharField(
+        required=False,
+        allow_blank=False,
+        max_length=2048,
+        trim_whitespace=True,
+    )
     webhook_secret = serializers.CharField(
         write_only=True,
         required=False,
@@ -964,6 +984,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "discord_webhook",
             "discord_configured",
             "telegram_enabled",
+            "telegram_api_url",
             "telegram_token",
             "telegram_user_id",
             "telegram_configured",
@@ -1021,6 +1042,14 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "speedtest_tracker_url": {"required": False, "allow_blank": True},
             "updated_at": {"read_only": True},
         }
+
+    def validate_telegram_api_url(self, value):
+        from .notifications import normalize_telegram_api_url
+
+        try:
+            return normalize_telegram_api_url(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
 
     @extend_schema_field(serializers.IntegerField)
     def get_scan_max_hosts(self, obj):

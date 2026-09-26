@@ -390,3 +390,4 @@ DISCORD_ICON_URL = os.getenv(
 )
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 TELEGRAM_USERID = os.getenv("TELEGRAM_USERID")
+TELEGRAM_API_URL = os.getenv("TELEGRAM_API_URL", "https://api.telegram.org")

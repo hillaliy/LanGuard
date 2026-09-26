@@ -39,6 +39,7 @@ from .notifications import (
     retry_failed_notifications,
     send_discord_test,
     send_ntfy_test,
+    send_telegram,
     send_telegram_test,
     send_webhook_test,
 )
@@ -2468,6 +2469,39 @@ class NotificationTests(TestCase):
 
     @override_settings(NOTIFICATION_TIMEOUT=1)
     @patch("core.notifications.requests.post")
+    def test_telegram_test_uses_custom_api_base_url(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+
+        send_telegram_test(
+            "bot-token",
+            "123456",
+            "http://telegram-relay:8081/telegram/",
+        )
+
+        self.assertEqual(
+            post.call_args.args[0],
+            "http://telegram-relay:8081/telegram/botbot-token/sendMessage",
+        )
+
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
+    def test_telegram_delivery_uses_saved_api_base_url(self, post):
+        post.return_value = Mock(raise_for_status=Mock())
+        config = AppSettings(
+            telegram_api_url="https://relay.example/telegram",
+            telegram_token="bot-token",
+            telegram_user_id="123456",
+        )
+
+        send_telegram(self.event, config)
+
+        self.assertEqual(
+            post.call_args.args[0],
+            "https://relay.example/telegram/botbot-token/sendMessage",
+        )
+
+    @override_settings(NOTIFICATION_TIMEOUT=1)
+    @patch("core.notifications.requests.post")
     def test_ntfy_test_uses_configured_topic_and_priority(self, post):
         post.return_value = Mock(raise_for_status=Mock())
 
@@ -3779,6 +3813,7 @@ class ScanApiTests(TestCase):
             "/api/v1/notifications/test/",
             {
                 "channel": "telegram",
+                "telegram_api_url": "https://relay.example/telegram/",
                 "telegram_token": "bot-token",
                 "telegram_user_id": "123456",
             },
@@ -3786,13 +3821,18 @@ class ScanApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        send_test.assert_called_once_with("bot-token", "123456")
+        send_test.assert_called_once_with(
+            "bot-token",
+            "123456",
+            "https://relay.example/telegram",
+        )
 
     @patch("core.views.send_telegram_test")
     def test_notification_test_endpoint_uses_saved_telegram_token(self, send_test):
         config = AppSettings.load()
+        config.telegram_api_url = "http://telegram-relay:8081"
         config.telegram_token = "saved-bot-token"
-        config.save(update_fields=["telegram_token"])
+        config.save(update_fields=["telegram_api_url", "telegram_token"])
 
         response = self.client.post(
             "/api/v1/notifications/test/",
@@ -3804,7 +3844,11 @@ class ScanApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        send_test.assert_called_once_with("saved-bot-token", "123456")
+        send_test.assert_called_once_with(
+            "saved-bot-token",
+            "123456",
+            "http://telegram-relay:8081",
+        )
 
     @patch("core.views.send_ntfy_test")
     def test_notification_test_endpoint_sends_ntfy(self, send_test):
@@ -3975,6 +4019,7 @@ class ScanApiTests(TestCase):
                 "version_check_interval": 3600,
                 "discord_enabled": False,
                 "telegram_enabled": True,
+                "telegram_api_url": "https://relay.example/telegram/",
                 "ntfy_enabled": True,
                 "webhook_enabled": True,
                 "notify_new_devices": True,
@@ -4013,6 +4058,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(config.version_check_interval, 3600)
         self.assertFalse(config.discord_enabled)
         self.assertTrue(config.telegram_enabled)
+        self.assertEqual(config.telegram_api_url, "https://relay.example/telegram")
         self.assertTrue(config.ntfy_enabled)
         self.assertTrue(config.webhook_enabled)
         self.assertTrue(config.notify_new_devices)
@@ -4046,6 +4092,10 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["data"]["telegram_user_id"], "123")
         self.assertFalse(response.data["data"]["discord_enabled"])
         self.assertTrue(response.data["data"]["telegram_enabled"])
+        self.assertEqual(
+            response.data["data"]["telegram_api_url"],
+            "https://relay.example/telegram",
+        )
         self.assertTrue(response.data["data"]["ntfy_enabled"])
         self.assertTrue(response.data["data"]["ntfy_configured"])
         self.assertTrue(response.data["data"]["webhook_enabled"])
@@ -4097,6 +4147,16 @@ class ScanApiTests(TestCase):
         get_response = self.client.get("/api/v1/settings/")
         self.assertEqual(get_response.status_code, 200)
         self.assertNotIn("telegram_token", get_response.data["data"])
+
+    def test_settings_endpoint_rejects_invalid_telegram_api_url(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"telegram_api_url": "ftp://user:secret@relay.example/api?token=value"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("telegram_api_url", response.data)
 
     def test_settings_endpoint_keeps_discord_webhook_secret_and_preserves_blank(self):
         config = AppSettings.load()

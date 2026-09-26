@@ -4,6 +4,7 @@ import json
 import logging
 import uuid
 from datetime import time
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import requests
@@ -28,6 +29,32 @@ DISCORD_RECOVERY_COLOR = 0x12B886
 TEST_NOTIFICATION_MESSAGE = (
     "This is a test notification from LanGuard. Your notification channel is working."
 )
+DEFAULT_TELEGRAM_API_URL = "https://api.telegram.org"
+
+
+def normalize_telegram_api_url(value):
+    normalized = str(value or "").strip().rstrip("/")
+    try:
+        parsed = urlparse(normalized)
+        parsed.port
+    except ValueError as exc:
+        raise ValueError("Enter a valid Telegram API base URL.") from exc
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError(
+            "Enter an HTTP or HTTPS Telegram API base URL without credentials, query, or fragment."
+        )
+    return normalized
+
+
+def telegram_send_message_url(api_url, token):
+    return f"{normalize_telegram_api_url(api_url)}/bot{token}/sendMessage"
 
 
 def configured_channels(app_config=None):
@@ -279,7 +306,10 @@ def send_discord(event, app_config):
 
 def send_telegram(event, app_config):
     response = requests.post(
-        f"https://api.telegram.org/bot{app_config.telegram_token}/sendMessage",
+        telegram_send_message_url(
+            app_config.telegram_api_url,
+            app_config.telegram_token,
+        ),
         json={
             "chat_id": app_config.telegram_user_id,
             "text": format_event_message(event),
@@ -366,9 +396,9 @@ def send_discord_test(webhook):
     response.raise_for_status()
 
 
-def send_telegram_test(token, user_id):
+def send_telegram_test(token, user_id, api_url=DEFAULT_TELEGRAM_API_URL):
     response = requests.post(
-        f"https://api.telegram.org/bot{token}/sendMessage",
+        telegram_send_message_url(api_url, token),
         json={
             "chat_id": user_id,
             "text": f"LanGuard: Test notification\n{TEST_NOTIFICATION_MESSAGE}",
