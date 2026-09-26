@@ -5504,6 +5504,40 @@ class ScanApiTests(TestCase):
         self.assertEqual(device["risk_reasons"], [])
         self.assertEqual(device["attention_reasons"], [])
 
+    def test_known_device_missing_vendor_and_recent_scan_stays_low_risk(self):
+        self.device.known = True
+        self.device.vendor = ""
+        self.device.status = Device.Status.RECENTLY_SEEN
+        self.device.missed_scans = 1
+        self.device.save(
+            update_fields=["known", "vendor", "status", "missed_scans"]
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertEqual(device["risk_level"], "low")
+        self.assertEqual(device["risk_score"], 0)
+        self.assertEqual(device["risk_reasons"], [])
+        self.assertEqual(device["attention_reasons"], [])
+        self.assertFalse(device["needs_attention"])
+
+    def test_unknown_device_keeps_missing_vendor_and_recent_scan_risk(self):
+        self.device.vendor = ""
+        self.device.status = Device.Status.RECENTLY_SEEN
+        self.device.missed_scans = 1
+        self.device.save(update_fields=["vendor", "status", "missed_scans"])
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertEqual(device["risk_level"], "high")
+        self.assertIn("No vendor detected", device["risk_reasons"])
+        self.assertIn("Recently missed scans", device["risk_reasons"])
+        self.assertTrue(device["needs_attention"])
+
     def test_device_endpoint_flags_regular_device_offline_for_over_week(self):
         self.device.known = True
         self.device.vendor = "Apple"
@@ -5536,6 +5570,88 @@ class ScanApiTests(TestCase):
             "/api/v1/device/", {"id": self.device.id}
         ).data["data"]
 
+        self.assertEqual(device["attention_reasons"], [])
+        self.assertFalse(device["needs_attention"])
+
+    def test_automatic_presence_allows_portable_device_three_weeks(self):
+        self.device.known = True
+        self.device.vendor = "Apple"
+        self.device.role = "phone"
+        self.device.online = False
+        self.device.status = Device.Status.OFFLINE
+        self.device.lastseen = timezone.now() - timedelta(days=14)
+        self.device.save(
+            update_fields=["known", "vendor", "role", "online", "status", "lastseen"]
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertEqual(device["presence_expectation"], "automatic")
+        self.assertEqual(device["offline_attention_effective_days"], 21)
+        self.assertEqual(device["attention_reasons"], [])
+        self.assertFalse(device["needs_attention"])
+
+        self.device.lastseen = timezone.now() - timedelta(days=22)
+        self.device.save(update_fields=["lastseen"])
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertEqual(device["attention_reasons"], ["Offline for over 21 days"])
+        self.assertTrue(device["needs_attention"])
+
+    def test_custom_presence_threshold_controls_offline_attention(self):
+        self.device.known = True
+        self.device.vendor = "Apple"
+        self.device.online = False
+        self.device.status = Device.Status.OFFLINE
+        self.device.presence_expectation = Device.PresenceExpectation.OCCASIONAL
+        self.device.offline_attention_after_days = 14
+        self.device.lastseen = timezone.now() - timedelta(days=15)
+        self.device.save(
+            update_fields=[
+                "known",
+                "vendor",
+                "online",
+                "status",
+                "presence_expectation",
+                "offline_attention_after_days",
+                "lastseen",
+            ]
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertEqual(device["offline_attention_effective_days"], 14)
+        self.assertEqual(device["attention_reasons"], ["Offline for over 14 days"])
+
+    def test_device_can_disable_offline_attention(self):
+        self.device.known = True
+        self.device.vendor = "Apple"
+        self.device.online = False
+        self.device.status = Device.Status.OFFLINE
+        self.device.presence_expectation = Device.PresenceExpectation.NEVER
+        self.device.lastseen = timezone.now() - timedelta(days=365)
+        self.device.save(
+            update_fields=[
+                "known",
+                "vendor",
+                "online",
+                "status",
+                "presence_expectation",
+                "lastseen",
+            ]
+        )
+
+        device = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertIsNone(device["offline_attention_effective_days"])
         self.assertEqual(device["attention_reasons"], [])
         self.assertFalse(device["needs_attention"])
 
@@ -5816,6 +5932,37 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("online_notification_preference", response.data["info"])
 
+    def test_device_can_save_custom_presence_expectation(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {
+                "presence_expectation": Device.PresenceExpectation.OCCASIONAL,
+                "offline_attention_after_days": 14,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 202)
+        self.device.refresh_from_db()
+        self.assertEqual(
+            self.device.presence_expectation,
+            Device.PresenceExpectation.OCCASIONAL,
+        )
+        self.assertEqual(self.device.offline_attention_after_days, 14)
+
+    def test_device_rejects_presence_threshold_outside_supported_range(self):
+        response = self.client.put(
+            f"/api/v1/device/?id={self.device.id}",
+            {
+                "presence_expectation": Device.PresenceExpectation.ALWAYS,
+                "offline_attention_after_days": 3651,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("offline_attention_after_days", response.data["info"])
+
     def test_device_rejects_non_http_external_link(self):
         response = self.client.put(
             f"/api/v1/device/?id={self.device.id}",
@@ -5966,6 +6113,8 @@ class ScanApiTests(TestCase):
         self.device.external_url_follow_device_ip = True
         self.device.online_notification_preference = Device.NotificationPreference.ALWAYS
         self.device.offline_notification_preference = Device.NotificationPreference.NEVER
+        self.device.presence_expectation = Device.PresenceExpectation.OCCASIONAL
+        self.device.offline_attention_after_days = 14
         self.device.save(
             update_fields=[
                 "known",
@@ -5975,6 +6124,8 @@ class ScanApiTests(TestCase):
                 "external_url_follow_device_ip",
                 "online_notification_preference",
                 "offline_notification_preference",
+                "presence_expectation",
+                "offline_attention_after_days",
             ]
         )
         DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
@@ -5997,6 +6148,8 @@ class ScanApiTests(TestCase):
         self.assertTrue(exported_device["external_url_follow_device_ip"])
         self.assertEqual(exported_device["online_notification_preference"], "always")
         self.assertEqual(exported_device["offline_notification_preference"], "never")
+        self.assertEqual(exported_device["presence_expectation"], "occasional")
+        self.assertEqual(exported_device["offline_attention_after_days"], 14)
         self.assertTrue(exported_device["is_visitor"])
         self.assertTrue(exported_device["attention_acknowledged"])
         self.assertTrue(exported_device["first_seen"].endswith("Z"))
@@ -6093,6 +6246,8 @@ class ScanApiTests(TestCase):
                         "mac": self.device.mac,
                         "online_notification_preference": "always",
                         "offline_notification_preference": "never",
+                        "presence_expectation": "occasional",
+                        "offline_attention_after_days": 14,
                     }
                 ],
             },
@@ -6103,6 +6258,8 @@ class ScanApiTests(TestCase):
         self.device.refresh_from_db()
         self.assertEqual(self.device.online_notification_preference, "always")
         self.assertEqual(self.device.offline_notification_preference, "never")
+        self.assertEqual(self.device.presence_expectation, "occasional")
+        self.assertEqual(self.device.offline_attention_after_days, 14)
 
     def test_device_inventory_import_preserves_notification_preferences_when_missing(self):
         self.device.online_notification_preference = Device.NotificationPreference.ALWAYS

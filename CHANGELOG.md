@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Added per-device presence expectations with automatic portable-device handling, configurable absence thresholds, and an option to disable prolonged-absence attention.
+- Stopped known devices from needing attention solely because vendor data is missing or a recent scan was missed.
+- Fixed open-port guidance opened from a device page overlapping the top navigation and device actions.
+
 ## 1.20.1 - 2026-09-26
 
 - Fixed the device editor failing to open without an External link, and show the current resolved address directly for links that follow the device IP.

@@ -368,6 +368,23 @@ function formatDeviceNotificationPreference(value) {
     || 'Use global setting';
 }
 
+const devicePresenceExpectationOptions = [
+  { value: 'automatic', label: 'Automatic' },
+  { value: 'always', label: 'Always expected' },
+  { value: 'occasional', label: 'Occasionally present' },
+  { value: 'never', label: 'Do not monitor absence' },
+];
+
+function formatDevicePresenceExpectation(value) {
+  return devicePresenceExpectationOptions.find((option) => option.value === value)?.label
+    || 'Automatic';
+}
+
+function formatOfflineAttention(device) {
+  const days = device?.offline_attention_effective_days;
+  return Number.isInteger(days) ? `After ${days} days offline` : 'Disabled';
+}
+
 const inventoryViewOptions = [
   { value: 'table', label: 'List' },
   { value: 'roles', label: 'Roles' },
@@ -2496,7 +2513,7 @@ function DashboardAttentionRow({ device, onSelectDevice }) {
     ? device.attention_reasons.filter(Boolean)
     : [];
   const reason = attentionReasons.join(', ') || (!device.known ? 'Unknown device' : `${risk.label} risk`);
-  const offlineOverWeek = attentionReasons.includes('Offline for over 7 days');
+  const offlineOverWeek = attentionReasons.some((item) => item.startsWith('Offline for over '));
   const badgeLabel = offlineOverWeek && risk.level === 'low' ? 'Offline' : risk.label;
   const badgeColor = offlineOverWeek && risk.level === 'low' ? 'orange' : risk.color;
 
@@ -2946,6 +2963,8 @@ function DeviceDetailsPage({
   const [isVisitor, setIsVisitor] = useState(false);
   const [onlineNotificationPreference, setOnlineNotificationPreference] = useState('inherit');
   const [offlineNotificationPreference, setOfflineNotificationPreference] = useState('inherit');
+  const [presenceExpectation, setPresenceExpectation] = useState('automatic');
+  const [offlineAttentionAfterDays, setOfflineAttentionAfterDays] = useState('');
   const [comments, setComments] = useState('');
   const [externalUrl, setExternalUrl] = useState('');
   const [externalUrlFollowDeviceIp, setExternalUrlFollowDeviceIp] = useState(false);
@@ -2988,6 +3007,8 @@ function DeviceDetailsPage({
     setIsVisitor(Boolean(nextDevice?.is_visitor));
     setOnlineNotificationPreference(nextDevice?.online_notification_preference || 'inherit');
     setOfflineNotificationPreference(nextDevice?.offline_notification_preference || 'inherit');
+    setPresenceExpectation(nextDevice?.presence_expectation || 'automatic');
+    setOfflineAttentionAfterDays(nextDevice?.offline_attention_after_days ?? '');
     setComments(nextDevice?.comments || '');
     setExternalUrl(
       nextDevice?.external_url_follow_device_ip
@@ -3300,6 +3321,10 @@ function DeviceDetailsPage({
           is_visitor: isVisitor,
           online_notification_preference: onlineNotificationPreference,
           offline_notification_preference: offlineNotificationPreference,
+          presence_expectation: presenceExpectation,
+          offline_attention_after_days: ['always', 'occasional'].includes(presenceExpectation)
+            ? offlineAttentionAfterDays || null
+            : null,
           comments,
           external_url: externalUrl.trim(),
           external_url_follow_device_ip: externalUrlFollowDeviceIp,
@@ -3650,6 +3675,50 @@ function DeviceDetailsPage({
                       />
                     </SimpleGrid>
                   </Box>
+                  <Divider label="Presence expectations" labelPosition="left" />
+                  <Box>
+                    <Text size="sm" c="dimmed" mb="sm">
+                      Decide when a prolonged absence should appear under Needs Attention.
+                      Visitor devices are always excluded.
+                    </Text>
+                    <SimpleGrid cols={{ base: 1, md: 2 }}>
+                      <Select
+                        label="Presence expectation"
+                        description="Automatic allows more time for portable devices."
+                        data={devicePresenceExpectationOptions}
+                        value={presenceExpectation}
+                        onChange={(value) => {
+                          const nextValue = value || 'automatic';
+                          setPresenceExpectation(nextValue);
+                          if (!['always', 'occasional'].includes(nextValue)) {
+                            setOfflineAttentionAfterDays('');
+                          }
+                        }}
+                      />
+                      {['always', 'occasional'].includes(presenceExpectation) && (
+                        <NumberInput
+                          label="Alert after days offline"
+                          description={`Leave empty to use ${presenceExpectation === 'occasional' ? 21 : 7} days.`}
+                          placeholder={presenceExpectation === 'occasional' ? '21' : '7'}
+                          min={1}
+                          max={3650}
+                          allowDecimal={false}
+                          value={offlineAttentionAfterDays}
+                          onChange={setOfflineAttentionAfterDays}
+                        />
+                      )}
+                    </SimpleGrid>
+                    {presenceExpectation === 'automatic' && (
+                      <Text size="xs" c="dimmed" mt="sm">
+                        Uses 21 days for phones, tablets, watches, and laptops; 7 days for other devices.
+                      </Text>
+                    )}
+                    {presenceExpectation === 'never' && (
+                      <Text size="xs" c="dimmed" mt="sm">
+                        This device will not need attention because it has been offline for a long time.
+                      </Text>
+                    )}
+                  </Box>
                   <Group align="flex-start">
                     <Switch
                       label="Known device"
@@ -3743,6 +3812,14 @@ function DeviceDetailsPage({
                           value={formatDeviceNotificationPreference(
                             device.offline_notification_preference
                           )}
+                        />
+                        <DeviceField
+                          label="Presence expectation"
+                          value={formatDevicePresenceExpectation(device.presence_expectation)}
+                        />
+                        <DeviceField
+                          label="Absence attention"
+                          value={formatOfflineAttention(device)}
                         />
                         <DeviceField label="First seen" value={formatDate(device.firstseen, timeZone)} />
                         <DeviceField label="Last seen" value={formatDate(device.lastseen, timeZone)} />

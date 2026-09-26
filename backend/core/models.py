@@ -31,6 +31,12 @@ class Device(models.Model):
         ALWAYS = "always", "Always notify"
         NEVER = "never", "Never notify"
 
+    class PresenceExpectation(models.TextChoices):
+        AUTOMATIC = "automatic", "Automatic"
+        ALWAYS = "always", "Always expected"
+        OCCASIONAL = "occasional", "Occasionally present"
+        NEVER = "never", "Do not monitor absence"
+
     class IdentitySource(models.TextChoices):
         REVERSE_DNS = "reverse_dns", "Reverse DNS"
         MDNS = "mdns", "mDNS"
@@ -91,6 +97,15 @@ class Device(models.Model):
         max_length=16,
         choices=NotificationPreference.choices,
         default=NotificationPreference.INHERIT,
+    )
+    presence_expectation = models.CharField(
+        max_length=16,
+        choices=PresenceExpectation.choices,
+        default=PresenceExpectation.AUTOMATIC,
+    )
+    offline_attention_after_days = models.PositiveSmallIntegerField(
+        blank=True,
+        null=True,
     )
     attention_acknowledged_signature = models.CharField(max_length=64, blank=True, default="")
     identity_conflict_reason = models.CharField(max_length=255, blank=True, default="")
