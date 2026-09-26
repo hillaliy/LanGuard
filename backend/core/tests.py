@@ -4,8 +4,9 @@ import hmac
 import importlib
 import json
 import socket
+from io import StringIO
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
@@ -48,6 +49,10 @@ from .serializers import device_attention_reasons, device_identity
 from .views import parse_inventory_datetime
 from .versioning import check_for_version_update, is_newer_version
 from .scan import (
+    STALE_SCAN_ERROR,
+    ScanAlreadyRunning,
+    active_scan_run,
+    claim_scan_run,
     clear_stale_gateways,
     create_event,
     clean_hostname,
@@ -956,7 +961,8 @@ class ScanCommandTests(TestCase):
         call_command("run_scheduler")
 
         scan_mock.assert_called_once_with(
-            ["192.168.20.0/24", "192.168.30.0/24"]
+            ["192.168.20.0/24", "192.168.30.0/24"],
+            source=ScanRun.Source.SCHEDULED,
         )
         thread_factory.assert_called()
         thread_targets = {
@@ -965,6 +971,45 @@ class ScanCommandTests(TestCase):
         }
         self.assertIn("speedtest_health_loop", thread_targets)
         signal_mock.assert_called()
+
+    @patch("core.management.commands.run_scheduler.signal.signal")
+    @patch("core.management.commands.run_scheduler.threading.Thread")
+    @patch("core.management.commands.run_scheduler.threading.Event")
+    @patch("core.management.commands.run_scheduler.scan")
+    def test_scheduler_retries_after_manual_scan_conflict(
+        self,
+        scan_mock,
+        event_factory,
+        _,
+        __,
+    ):
+        active_scan = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            source=ScanRun.Source.MANUAL,
+        )
+        scan_mock.side_effect = [ScanAlreadyRunning(active_scan), None]
+        stop_event = Mock()
+        stop_event.is_set.side_effect = [False, False, True]
+        stop_event.wait.return_value = False
+        event_factory.return_value = stop_event
+        output = StringIO()
+
+        call_command("run_scheduler", stdout=output)
+
+        self.assertIn("Scheduled scan skipped", output.getvalue())
+        self.assertEqual(scan_mock.call_count, 2)
+        scan_mock.assert_has_calls(
+            [
+                call(
+                    ["192.168.1.0/24"],
+                    source=ScanRun.Source.SCHEDULED,
+                ),
+                call(
+                    ["192.168.1.0/24"],
+                    source=ScanRun.Source.SCHEDULED,
+                ),
+            ]
+        )
 
     @patch("core.management.commands.scan_network.scan")
     def test_scan_network_accepts_repeated_ranges(self, scan_mock):
@@ -977,8 +1022,65 @@ class ScanCommandTests(TestCase):
         )
 
         scan_mock.assert_called_once_with(
-            ["192.168.1.0/24", "192.168.20.0/24"]
+            ["192.168.1.0/24", "192.168.20.0/24"],
+            source=ScanRun.Source.COMMAND,
         )
+
+
+class ScanLockTests(TestCase):
+    def test_only_one_network_scan_can_be_claimed(self):
+        first_scan = claim_scan_run(
+            ["192.168.1.0/24"],
+            {},
+            ScanRun.Source.MANUAL,
+        )
+
+        with self.assertRaises(ScanAlreadyRunning) as context:
+            claim_scan_run(
+                ["192.168.20.0/24"],
+                {},
+                ScanRun.Source.SCHEDULED,
+            )
+
+        self.assertEqual(context.exception.active_scan.id, first_scan.id)
+        self.assertEqual(ScanRun.objects.filter(status=ScanRun.Status.RUNNING).count(), 1)
+
+    @override_settings(SCAN_LOCK_STALE_SECONDS=60)
+    def test_stale_network_scan_is_failed_before_new_scan_is_claimed(self):
+        stale_scan = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            source=ScanRun.Source.MANUAL,
+            heartbeat_at=timezone.now() - timedelta(minutes=2),
+        )
+
+        replacement = claim_scan_run(
+            ["192.168.20.0/24"],
+            {},
+            ScanRun.Source.SCHEDULED,
+        )
+
+        stale_scan.refresh_from_db()
+        self.assertEqual(stale_scan.status, ScanRun.Status.FAILED)
+        self.assertEqual(stale_scan.error, STALE_SCAN_ERROR)
+        self.assertEqual(active_scan_run().id, replacement.id)
+
+    @override_settings(PORT_SCAN_ENABLED=False)
+    @patch("core.scan.get_default_gateway_ip", return_value="192.168.1.1")
+    @patch("core.scan.discover_devices", side_effect=RuntimeError("scanner stopped"))
+    def test_failed_scan_releases_lock(self, _, __):
+        with self.assertRaisesRegex(RuntimeError, "scanner stopped"):
+            scan(["192.168.1.0/24"], source=ScanRun.Source.MANUAL)
+
+        failed_scan = ScanRun.objects.get()
+        self.assertEqual(failed_scan.status, ScanRun.Status.FAILED)
+        self.assertIsNotNone(failed_scan.finished_at)
+
+        replacement = claim_scan_run(
+            ["192.168.1.0/24"],
+            {},
+            ScanRun.Source.SCHEDULED,
+        )
+        self.assertEqual(replacement.status, ScanRun.Status.RUNNING)
 
 
 class MultiNetworkMigrationTests(SimpleTestCase):
@@ -1118,7 +1220,10 @@ class ScanStabilityTests(TestCase):
         )
         sync_discovered_device(
             self.scan_element("192.168.1.3", "00:55:7b:b5:7d:f7"),
-            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_run=ScanRun.objects.create(
+                ip_range="192.168.1.0/24",
+                status=ScanRun.Status.SUCCESS,
+            ),
             scan_started_at=observed_at,
         )
         return original, Device.objects.get(mac="00:55:7b:b5:7d:f7")
@@ -1218,7 +1323,10 @@ class ScanStabilityTests(TestCase):
 
         sync_discovered_device(
             self.scan_element(duplicate.ip, duplicate.mac),
-            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_run=ScanRun.objects.create(
+                ip_range="192.168.1.0/24",
+                status=ScanRun.Status.SUCCESS,
+            ),
             scan_started_at=observed_at + timedelta(minutes=30),
         )
 
@@ -1235,7 +1343,10 @@ class ScanStabilityTests(TestCase):
 
         sync_discovered_device(
             self.scan_element(duplicate.ip, duplicate.mac),
-            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_run=ScanRun.objects.create(
+                ip_range="192.168.1.0/24",
+                status=ScanRun.Status.SUCCESS,
+            ),
             scan_started_at=observed_at + timedelta(hours=2),
         )
 
@@ -1259,13 +1370,19 @@ class ScanStabilityTests(TestCase):
         resolved_at = observed_at + timedelta(hours=2)
         sync_discovered_device(
             self.scan_element(duplicate.ip, duplicate.mac),
-            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_run=ScanRun.objects.create(
+                ip_range="192.168.1.0/24",
+                status=ScanRun.Status.SUCCESS,
+            ),
             scan_started_at=resolved_at,
         )
 
         sync_discovered_device(
             self.scan_element(original.ip, original.mac),
-            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_run=ScanRun.objects.create(
+                ip_range="192.168.1.0/24",
+                status=ScanRun.Status.SUCCESS,
+            ),
             scan_started_at=resolved_at + timedelta(minutes=5),
         )
 
@@ -1285,7 +1402,10 @@ class ScanStabilityTests(TestCase):
 
         sync_discovered_device(
             self.scan_element(duplicate.ip, duplicate.mac),
-            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_run=ScanRun.objects.create(
+                ip_range="192.168.1.0/24",
+                status=ScanRun.Status.SUCCESS,
+            ),
             scan_started_at=observed_at + timedelta(hours=2),
         )
 
@@ -1648,7 +1768,10 @@ class ScanStabilityTests(TestCase):
 
         mark_missing_devices_offline(
             [],
-            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_run=ScanRun.objects.create(
+                ip_range="192.168.1.0/24",
+                status=ScanRun.Status.SUCCESS,
+            ),
         )
         device.refresh_from_db()
         self.assertTrue(device.online)
@@ -1658,7 +1781,10 @@ class ScanStabilityTests(TestCase):
 
         mark_missing_devices_offline(
             [],
-            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_run=ScanRun.objects.create(
+                ip_range="192.168.1.0/24",
+                status=ScanRun.Status.SUCCESS,
+            ),
         )
         device.refresh_from_db()
         self.assertTrue(device.online)
@@ -1666,7 +1792,10 @@ class ScanStabilityTests(TestCase):
 
         mark_missing_devices_offline(
             [],
-            scan_run=ScanRun.objects.create(ip_range="192.168.1.0/24"),
+            scan_run=ScanRun.objects.create(
+                ip_range="192.168.1.0/24",
+                status=ScanRun.Status.SUCCESS,
+            ),
         )
         device.refresh_from_db()
         self.assertFalse(device.online)
@@ -4877,6 +5006,7 @@ class ScanApiTests(TestCase):
         running_scan = ScanRun.objects.create(
             ip_range="192.168.2.0/24",
             status=ScanRun.Status.RUNNING,
+            source=ScanRun.Source.SCHEDULED,
         )
 
         response = self.client.get("/api/v1/scan/status/")
@@ -4884,6 +5014,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["active_scan"]["id"], running_scan.id)
         self.assertTrue(response.data["visibility"]["is_scanning"])
+        self.assertEqual(response.data["visibility"]["source"], "scheduled")
         self.assertEqual(response.data["visibility"]["current_range"], "192.168.2.0/24")
         self.assertTrue(response.data["active_scan"]["started_at"].endswith("Z"))
         self.assertTrue(response.data["visibility"]["started_at"].endswith("Z"))
@@ -6662,7 +6793,10 @@ class ScanApiTests(TestCase):
         response = self.client.post("/api/v1/scan/", {}, format="json")
 
         self.assertEqual(response.status_code, 202)
-        scan_mock.assert_called_once_with(["192.168.1.0/24"])
+        scan_mock.assert_called_once_with(
+            ["192.168.1.0/24"],
+            source=ScanRun.Source.MANUAL,
+        )
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
     @patch("core.views.scan")
@@ -6677,8 +6811,24 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 202)
         scan_mock.assert_called_once_with(
-            ["192.168.1.0/24", "192.168.20.0/24"]
+            ["192.168.1.0/24", "192.168.20.0/24"],
+            source=ScanRun.Source.MANUAL,
         )
+
+    @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
+    def test_scan_now_returns_conflict_while_another_scan_is_running(self):
+        active_scan = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            scan_ranges=["192.168.1.0/24"],
+            source=ScanRun.Source.SCHEDULED,
+        )
+
+        response = self.client.post("/api/v1/scan/", {}, format="json")
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.data["status"], "Conflict")
+        self.assertEqual(response.data["data"]["id"], active_scan.id)
+        self.assertIn("scheduled scan is already running", response.data["detail"])
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
     @patch("core.views.scan")

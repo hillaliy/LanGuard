@@ -7,9 +7,9 @@ from django.db import close_old_connections
 from django.core.management.base import BaseCommand
 
 from core.maintenance import cleanup_all_activity
-from core.models import AppSettings
+from core.models import AppSettings, ScanRun
 from core.notifications import retry_failed_notifications
-from core.scan import scan
+from core.scan import ScanAlreadyRunning, scan
 from core.adguard import sync_adguard_query_log
 from core.versioning import check_for_version_update
 from core.speedtest_tracker import (
@@ -71,7 +71,7 @@ class Command(BaseCommand):
             ranges_label = ", ".join(scan_ranges)
             LOGGER.info("Starting scheduled scan for %s", ranges_label)
             self.stdout.write(f"Starting scheduled scan for {ranges_label}")
-            scan(scan_ranges)
+            scan(scan_ranges, source=ScanRun.Source.SCHEDULED)
             LOGGER.info("Completed scheduled scan for %s", ranges_label)
             self.stdout.write(self.style.SUCCESS(f"Completed scan for {ranges_label}"))
 
@@ -107,6 +107,9 @@ class Command(BaseCommand):
             close_old_connections()
             try:
                 scheduled_scan()
+            except ScanAlreadyRunning as exc:
+                LOGGER.info("Skipping scheduled network scan: %s", exc)
+                self.stdout.write(self.style.WARNING(f"Scheduled scan skipped: {exc}"))
             except Exception:
                 LOGGER.exception("Scheduled network scan failed")
                 self.stderr.write(self.style.ERROR("Scheduled network scan failed"))

@@ -6906,6 +6906,14 @@ function Dashboard({
   const canEditDevices = canManageUsers || Boolean(accessCapabilities.can_edit_devices);
   const canEditHomeMap = canManageUsers || Boolean(accessCapabilities.can_edit_home_map);
   const canRunScans = canManageUsers || Boolean(accessCapabilities.can_run_scans);
+  const scanIsActive = Boolean(scanVisibility?.is_scanning);
+  const scanButtonLabel = scanIsActive
+    ? scanVisibility?.source === 'scheduled'
+      ? 'Scheduled scan running'
+      : scanVisibility?.source === 'manual'
+        ? 'Manual scan running'
+        : 'Scan running'
+    : 'Run Scan';
   const hasUnreadChangelog = seenChangelogVersion !== APP_VERSION;
   const hasVersionUpdate = isNewerVersion(latestVersion, APP_VERSION);
   const hasVersionIndicator = hasUnreadChangelog || hasVersionUpdate;
@@ -7579,6 +7587,9 @@ function Dashboard({
   ]);
 
   async function runScan() {
+    if (scanIsActive || refreshing) {
+      return;
+    }
     setRefreshing(true);
     setError('');
     try {
@@ -7750,9 +7761,10 @@ function Dashboard({
                 leftSection={<IconRefresh size={17} />}
                 onClick={runScan}
                 loading={refreshing}
+                disabled={scanIsActive}
                 className="topbar-scan-button"
               >
-                Run Scan
+                {scanButtonLabel}
               </Button>}
               <Tooltip label="Refresh">
                 <ActionIcon

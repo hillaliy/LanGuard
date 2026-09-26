@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Prevented manual and scheduled network scans from overlapping, with clear active-scan status and automatic stale-lock recovery.
 - Added dedicated roles and icons for game consoles, laptops, NAS devices, smart relays, smart power strips, and power meters.
 - Added a configurable Telegram API base URL for Telegram-compatible relays and self-hosted Bot API servers.
 - Added selectable open-port guidance with device-aware recommendations, identification limits, LAN exposure context, and actionable Needs Attention reasons.
