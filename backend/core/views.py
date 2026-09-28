@@ -1975,6 +1975,7 @@ def active_device_counters():
         ).count(),
         "visitor_devices": visitor_devices.count(),
         "online_visitors": visitor_devices.exclude(status=Device.Status.OFFLINE).count(),
+        "archived_devices": Device.objects.filter(archived=True).count(),
     }
 
 
