@@ -1,5 +1,11 @@
 from django.urls import path
 from .homebox_views import test_homebox, search_homebox
+from .docker_views import (
+    docker_device_context,
+    docker_host_detail,
+    docker_hosts,
+    sync_docker_host_view,
+)
 
 from .views import (
     UserRegistrationView,
@@ -40,6 +46,22 @@ from .views import (
 )
 
 urlpatterns = [
+    path("integrations/docker/hosts/", docker_hosts, name="docker-hosts"),
+    path(
+        "integrations/docker/hosts/<int:host_id>/",
+        docker_host_detail,
+        name="docker-host-detail",
+    ),
+    path(
+        "integrations/docker/hosts/<int:host_id>/sync/",
+        sync_docker_host_view,
+        name="sync-docker-host",
+    ),
+    path(
+        "integrations/docker/device/",
+        docker_device_context,
+        name="docker-device-context",
+    ),
     path("integrations/homebox/test/", test_homebox, name="test-homebox"),
     path("integrations/homebox/items/", search_homebox, name="homebox-items"),
     path("health/", health_status, name="health-status"),

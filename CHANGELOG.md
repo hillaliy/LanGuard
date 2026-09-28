@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added read-only local Docker inventory through the scheduler, with container health and network details, published-port correlation, security-change events, and macvlan/ipvlan device linking.
 - Added per-device presence expectations with automatic portable-device handling, configurable absence thresholds, and an option to disable prolonged-absence attention.
 - Stopped known devices from needing attention solely because vendor data is missing or a recent scan was missed.
 - Fixed open-port guidance opened from a device page overlapping the top navigation and device actions.

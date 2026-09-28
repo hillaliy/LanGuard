@@ -46,6 +46,7 @@ application or locally as a native macOS scanner.
 - Connect AdGuard Home, Speedtest Tracker, and HomeBox.
 - Run scheduled scans, on-demand detailed port scans, and Wake-on-LAN actions.
 - Install the Docker interface as a web app on supported phones, tablets, and computers.
+- Inventory running containers and published ports from the local Docker engine through the scheduler.
 
 ## Preview
 
