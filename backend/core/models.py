@@ -287,6 +287,79 @@ class DevicePort(models.Model):
         return f"{self.device.name} {self.protocol}/{self.port} {status}"
 
 
+class DockerHost(models.Model):
+    singleton_key = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
+    device = models.OneToOneField(
+        Device,
+        related_name="docker_host",
+        on_delete=models.CASCADE,
+    )
+    name = models.CharField(max_length=100)
+    enabled = models.BooleanField(default=True)
+    sync_interval = models.PositiveIntegerField(default=5)
+    sync_requested = models.BooleanField(default=True)
+    docker_name = models.CharField(max_length=255, blank=True, default="")
+    docker_version = models.CharField(max_length=64, blank=True, default="")
+    operating_system = models.CharField(max_length=255, blank=True, default="")
+    architecture = models.CharField(max_length=64, blank=True, default="")
+    last_sync_at = models.DateTimeField(blank=True, null=True)
+    last_error = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name", "id"]
+
+    def __str__(self):
+        return self.name
+
+
+class DockerContainer(models.Model):
+    host = models.ForeignKey(
+        DockerHost,
+        related_name="containers",
+        on_delete=models.CASCADE,
+    )
+    linked_device = models.ForeignKey(
+        Device,
+        related_name="docker_containers",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+    )
+    container_id = models.CharField(max_length=64)
+    name = models.CharField(max_length=255)
+    image = models.CharField(max_length=512, blank=True, default="")
+    image_id = models.CharField(max_length=255, blank=True, default="")
+    state = models.CharField(max_length=32, blank=True, default="")
+    health = models.CharField(max_length=32, blank=True, default="")
+    status = models.CharField(max_length=255, blank=True, default="")
+    network_mode = models.CharField(max_length=64, blank=True, default="")
+    addresses = models.JSONField(default=list, blank=True)
+    published_ports = models.JSONField(default=list, blank=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    restart_count = models.PositiveIntegerField(default=0)
+    active = models.BooleanField(default=True)
+    first_seen = models.DateTimeField(default=timezone.now)
+    last_seen = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["name", "container_id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["host", "container_id"],
+                name="unique_docker_container_per_host",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["host", "active"], name="core_docker_host_active_idx"),
+            models.Index(fields=["linked_device", "active"], name="core_docker_device_active_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.host.name}: {self.name}"
+
+
 class DeviceDNSActivity(models.Model):
     device = models.ForeignKey(
         Device,
@@ -465,6 +538,8 @@ class NetworkEvent(models.Model):
         )
         PORT_OPENED = "port_opened", "Port opened"
         PORT_CLOSED = "port_closed", "Port closed"
+        CONTAINER_DISCOVERED = "container_discovered", "Container discovered"
+        CONTAINER_PORT_EXPOSED = "container_port_exposed", "Container port exposed"
 
     scan_run = models.ForeignKey(
         ScanRun,

@@ -20,6 +20,7 @@ from core.detailed_port_scans import (
     process_next_detailed_port_scan,
     recover_interrupted_detailed_port_scans,
 )
+from core.docker_inventory import sync_enabled_docker_hosts
 
 
 LOGGER = logging.getLogger(__name__)
@@ -189,6 +190,23 @@ class Command(BaseCommand):
             finally:
                 close_old_connections()
 
+        def run_docker_inventory_sync():
+            close_old_connections()
+            try:
+                results = sync_enabled_docker_hosts()
+                completed = sum(result["status"] == "ok" for result in results)
+                if completed:
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            f"Synced Docker inventory for {completed} host(s)"
+                        )
+                    )
+            except Exception:
+                LOGGER.exception("Docker inventory sync failed")
+                self.stderr.write(self.style.ERROR("Docker inventory sync failed"))
+            finally:
+                close_old_connections()
+
         def retry_loop():
             while not stop_event.wait(retry_interval * 60):
                 run_notification_retry()
@@ -257,6 +275,12 @@ class Command(BaseCommand):
                 if stop_event.wait(1):
                     break
 
+        def docker_inventory_loop():
+            while not stop_event.is_set():
+                run_docker_inventory_sync()
+                if stop_event.wait(60):
+                    break
+
         def stop_scheduler(signum, frame):
             self.stdout.write("Stopping scheduler...")
             stop_event.set()
@@ -286,6 +310,11 @@ class Command(BaseCommand):
             daemon=True,
         )
         detailed_port_scan_thread.start()
+        docker_inventory_thread = threading.Thread(
+            target=docker_inventory_loop,
+            daemon=True,
+        )
+        docker_inventory_thread.start()
 
         if ip_range_override or interval_override:
             scan_ranges, interval = load_scan_schedule(
@@ -323,6 +352,9 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS("Detailed device port scans run through the scheduler queue")
+        )
+        self.stdout.write(
+            self.style.SUCCESS("Docker inventory sync follows each host interval")
         )
 
         while not stop_event.is_set():

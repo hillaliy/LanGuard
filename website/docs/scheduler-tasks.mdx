@@ -19,6 +19,7 @@ The `languard-scheduler` container owns recurring and queued background work. It
 | LanGuard update check | At startup, then every 6 hours when enabled | Update-check interval and notification rule |
 | Speedtest health check | At startup, then every 5 minutes when enabled | Integration, thresholds, and notification rule |
 | Detailed device port scan | On demand, one queued scan at a time | Device page and user permissions |
+| Docker inventory | Checked every minute; synchronization follows its saved interval | Docker integration setting |
 
 ## How intervals behave
 
@@ -28,7 +29,7 @@ The update check works the same way. If the scheduler last checked three hours b
 
 ## Reloading configuration
 
-The scheduler reloads network ranges and scan interval before each cycle. Activity retention, AdGuard Home configuration, and the update-check interval are also read from the database during their own loops. Restarting the container is not normally required after changing these settings.
+The scheduler reloads network ranges and scan interval before each cycle. Activity retention, AdGuard Home configuration, the Docker inventory interval, and the update-check interval are also read from the database during their own loops. Restarting the container is not normally required after changing these settings.
 
 ## Why there is no cron setup
 

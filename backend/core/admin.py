@@ -7,11 +7,44 @@ from .models import (
     DeviceIPAddressAssignment,
     DetailedPortScan,
     DevicePort,
+    DockerContainer,
+    DockerHost,
     NetworkEvent,
     NotificationDelivery,
     ScanRun,
     UserAccess,
 )
+
+
+class DockerContainerInline(admin.TabularInline):
+    model = DockerContainer
+    extra = 0
+    readonly_fields = (
+        "container_id",
+        "name",
+        "image",
+        "state",
+        "health",
+        "network_mode",
+        "linked_device",
+        "last_seen",
+    )
+
+
+@admin.register(DockerHost)
+class DockerHostAdmin(admin.ModelAdmin):
+    list_display = ("name", "device", "enabled", "docker_version", "last_sync_at")
+    list_filter = ("enabled", "architecture")
+    search_fields = ("name", "device__name", "device__ip", "docker_name")
+    inlines = [DockerContainerInline]
+
+
+@admin.register(DockerContainer)
+class DockerContainerAdmin(admin.ModelAdmin):
+    list_display = ("name", "host", "image", "state", "health", "active", "last_seen")
+    list_filter = ("active", "state", "health", "network_mode")
+    search_fields = ("name", "container_id", "image", "host__name")
+    readonly_fields = ("first_seen", "last_seen")
 
 
 class DevicePortInline(admin.TabularInline):
