@@ -4951,6 +4951,12 @@ class ScanApiTests(TestCase):
             is_visitor=True,
             status=Device.Status.ONLINE,
         )
+        Device.objects.create(
+            name="Archived tablet",
+            ip="192.168.1.24",
+            mac="ee:ee:ee:ee:ee:ee",
+            archived=True,
+        )
 
         response = self.client.get("/api/v1/scan/status/")
 
@@ -4961,6 +4967,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["counters"]["offline_devices"], 1)
         self.assertEqual(response.data["counters"]["visitor_devices"], 1)
         self.assertEqual(response.data["counters"]["online_visitors"], 1)
+        self.assertEqual(response.data["counters"]["archived_devices"], 1)
         self.assertEqual(response.data["counters"]["unnotified_events"], 1)
         self.assertEqual(response.data["time_zone"], "UTC")
         self.assertEqual(response.data["network_ranges"], ["192.168.1.0/24"])
@@ -5414,6 +5421,12 @@ class ScanApiTests(TestCase):
             online=False,
             status=Device.Status.OFFLINE,
         )
+        Device.objects.create(
+            name="Archived device",
+            ip="192.168.1.42",
+            mac="bb:bb:bb:bb:bb:42",
+            archived=True,
+        )
 
         response = self.client.get("/api/v1/device/")
         visitors = self.client.get("/api/v1/device/", {"is_visitor": "true"})
@@ -5423,6 +5436,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["counters"]["online_devices"], 1)
         self.assertEqual(response.data["counters"]["visitor_devices"], 2)
         self.assertEqual(response.data["counters"]["online_visitors"], 1)
+        self.assertEqual(response.data["counters"]["archived_devices"], 1)
         self.assertEqual(visitors.data["pagination"]["count"], 2)
         self.assertEqual(visitors.data["data"][0]["is_visitor"], True)
         self.assertIn(online_visitor.id, [device["id"] for device in visitors.data["data"]])

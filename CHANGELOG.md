@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a compact archived-device count beneath the dashboard Devices total, with responsive visitor and archive details on small screens.
 - Added read-only local Docker inventory through the scheduler, with container health and network details, published-port correlation, security-change events, and macvlan/ipvlan device linking.
 - Added per-device presence expectations with automatic portable-device handling, configurable absence thresholds, and an option to disable prolonged-absence attention.
 - Stopped known devices from needing attention solely because vendor data is missing or a recent scan was missed.
