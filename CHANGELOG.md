@@ -2,11 +2,15 @@
 
 ## Unreleased
 
+## 1.21.0 - 2026-09-28
+
 - Added a compact archived-device count beneath the dashboard Devices total, with responsive visitor and archive details on small screens.
 - Added read-only local Docker inventory through the scheduler, with container health and network details, published-port correlation, security-change events, and macvlan/ipvlan device linking.
 - Added per-device presence expectations with automatic portable-device handling, configurable absence thresholds, and an option to disable prolonged-absence attention.
 - Stopped known devices from needing attention solely because vendor data is missing or a recent scan was missed.
 - Fixed open-port guidance opened from a device page overlapping the top navigation and device actions.
+- Updated frontend dependencies through Dependabot, including Mantine 9.6.2, Tabler Icons 3.48.0, Next.js 16.3.6, and ESLint Config Next 16.3.6.
+- Updated the GitHub Pages configure, upload, and deployment actions through Dependabot.
 
 ## 1.20.1 - 2026-09-26
 
