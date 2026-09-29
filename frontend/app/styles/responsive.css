@@ -171,6 +171,39 @@
   }
 }
 
+@media (max-width: 700px) {
+  .docker-host-header {
+    padding: 14px;
+  }
+
+  .docker-container-table {
+    display: none;
+  }
+
+  .docker-container-mobile-list {
+    display: flex;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .docker-container-mobile-card {
+    padding: 14px;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .docker-container-mobile-card:last-child {
+    border-bottom: 0;
+  }
+
+  .docker-container-mobile-title {
+    min-width: 0;
+  }
+
+  .docker-port-mapping {
+    white-space: normal;
+    flex-wrap: wrap;
+  }
+}
+
 @media (min-width: 561px) and (max-width: 980px) and (max-height: 560px) {
   .watchyourlan-migration-row {
     flex-wrap: nowrap;

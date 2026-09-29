@@ -2951,91 +2951,310 @@ function HomeBoxItemPicker({ value, onChange }) {
   );
 }
 
-function DockerDeviceInventory({ inventory, timeZone }) {
-  const containers = [
-    ...(inventory?.containers || []),
-    ...(inventory?.linked_containers || []),
-  ];
-  if (!inventory?.host && !containers.length) {
-    return null;
+function DockerPortMapping({ port, hostName }) {
+  const protocol = String(port.protocol || 'tcp').toUpperCase();
+  const binding = port.host_ip && !['0.0.0.0', '::'].includes(port.host_ip)
+    ? `${port.host_ip}:`
+    : '';
+  return (
+    <span className="docker-port-mapping">
+      <Text component="span" size="xs" fw={700}>{protocol}</Text>
+      <Text component="span" size="xs">Host {binding}{port.host_port}</Text>
+      <IconArrowRight size={14} aria-hidden="true" />
+      <Text component="span" size="xs">Container {port.container_port}</Text>
+      {port.observed_by_languard && (
+        <Tooltip label={`LanGuard also found ${protocol}/${port.host_port} reachable on ${hostName}`}>
+          <span className="docker-port-confirmed" aria-label="Host port confirmed reachable by LanGuard">
+            <IconCheck size={13} />
+          </span>
+        </Tooltip>
+      )}
+    </span>
+  );
+}
+
+function DockerContainerState({ container }) {
+  return (
+    <>
+      <Group gap={6} wrap="wrap">
+        <Badge color={container.state === 'running' ? 'teal' : 'gray'} variant="light">
+          {container.state || 'Unknown'}
+        </Badge>
+        {container.health && (
+          <Badge
+            color={container.health === 'healthy' ? 'teal' : container.health === 'unhealthy' ? 'red' : 'yellow'}
+            variant="light"
+          >
+            {container.health}
+          </Badge>
+        )}
+      </Group>
+      {container.status && <Text size="xs" c="dimmed" mt={4}>{container.status}</Text>}
+    </>
+  );
+}
+
+function DockerContainerNetwork({ container, onSelectDevice }) {
+  return (
+    <>
+      <Text size="sm">{container.network_mode || '-'}</Text>
+      {(container.addresses || []).map((address) => (
+        <Text key={`${address.network}-${address.ip}`} size="xs" c="dimmed">
+          {address.network}: {address.ip}
+        </Text>
+      ))}
+      {container.linked_device_name && (
+        <UnstyledButton onClick={() => onSelectDevice({ id: container.linked_device })}>
+          <Text size="xs" c="blue" fw={600}>Linked to {container.linked_device_name}</Text>
+        </UnstyledButton>
+      )}
+    </>
+  );
+}
+
+function DockerInventoryPage({ timeZone, canManageUsers, onSelectDevice }) {
+  const [inventory, setInventory] = useState({ hosts: [], total_containers: 0 });
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+
+  async function loadInventory({ quiet = false } = {}) {
+    if (!quiet) setLoading(true);
+    try {
+      const payload = await apiRequest('integrations/docker/inventory/');
+      setInventory(payload.data || { hosts: [], total_containers: 0 });
+      setError('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      if (!quiet) setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadInventory();
+  }, []);
+
+  const hosts = inventory.hosts || [];
+  const containers = hosts.flatMap((host) => host.containers || []);
+  const runningCount = containers.filter((container) => container.state === 'running').length;
+  const attentionCount = containers.filter(
+    (container) => container.state !== 'running' || container.health === 'unhealthy'
+  ).length;
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredHosts = hosts.map((host) => ({
+    ...host,
+    containers: (host.containers || []).filter((container) => {
+      if (!normalizedSearch) return true;
+      const searchable = [
+        container.name,
+        container.image,
+        container.network_mode,
+        ...(container.addresses || []).flatMap((address) => [address.network, address.ip]),
+        ...(container.published_ports || []).flatMap((port) => [
+          port.host_port,
+          port.container_port,
+          port.protocol,
+        ]),
+      ].join(' ').toLowerCase();
+      return searchable.includes(normalizedSearch);
+    }),
+  })).filter((host) => !normalizedSearch || host.containers.length);
+
+  async function requestSync() {
+    setSyncing(true);
+    try {
+      await Promise.all(hosts.map((host) => apiRequest(
+        `integrations/docker/hosts/${host.id}/sync/`,
+        { method: 'POST' }
+      )));
+      notifications.show({
+        title: 'Docker inventory',
+        message: 'Inventory sync queued. The scheduler will process it shortly.',
+        color: 'teal',
+      });
+    } catch (err) {
+      showErrorNotification(err);
+    } finally {
+      setSyncing(false);
+    }
   }
 
   return (
-    <>
-      <Divider />
-      <section className="docker-device-inventory">
-        <Group justify="space-between" align="flex-start" wrap="wrap">
+    <Stack gap="lg" className="docker-inventory-page" pos="relative">
+      <LoadingOverlay visible={loading} />
+      <Group justify="space-between" align="flex-end" wrap="wrap">
+        <Group gap="sm">
+          <PageIcon>
+            <IconBrandDocker size={27} />
+          </PageIcon>
           <Box>
-            <Group gap="xs">
-              <IconBrandDocker size={22} />
-              <Title order={4}>Docker inventory</Title>
-            </Group>
-            <Text size="sm" c="dimmed" mt={4}>
-              {inventory.host
-                ? `${inventory.host.docker_name || inventory.host.name} · Docker ${inventory.host.docker_version || 'not synced'} · ${inventory.host.operating_system || 'Operating system unknown'} ${inventory.host.architecture || ''}`
-                : `Container identity linked from ${inventory.linked_hosts?.[0]?.name || 'a Docker host'}`}
-            </Text>
+            <Title order={2}>Docker</Title>
+            <Text c="dimmed">Local container inventory and published host ports</Text>
           </Box>
-          {inventory.host?.last_sync_at && (
-            <Text size="sm" c="dimmed">Synced {formatDate(inventory.host.last_sync_at, timeZone)}</Text>
+        </Group>
+        <Group gap="sm">
+          <Tooltip label="Reload saved inventory">
+            <ActionIcon variant="light" size="lg" onClick={() => loadInventory()} loading={loading}>
+              <IconRefresh size={19} />
+            </ActionIcon>
+          </Tooltip>
+          {canManageUsers && hosts.length > 0 && (
+            <Button
+              variant="default"
+              leftSection={<IconRefresh size={17} />}
+              loading={syncing}
+              onClick={requestSync}
+            >
+              Sync inventory
+            </Button>
           )}
         </Group>
+      </Group>
 
-        <Table.ScrollContainer minWidth={760} mt="md">
-          <Table striped highlightOnHover verticalSpacing="sm">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Container</Table.Th>
-                <Table.Th>State</Table.Th>
-                <Table.Th>Network</Table.Th>
-                <Table.Th>Published ports</Table.Th>
-                <Table.Th>Restarts</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {containers.map((container) => (
-                <Table.Tr key={`${container.container_id}-${container.id}`}>
-                  <Table.Td>
-                    <Text size="sm" fw={600}>{container.name}</Text>
-                    <Text size="xs" c="dimmed" className="wrap-text">{container.image || container.image_id || '-'}</Text>
-                    {container.started_at && <Text size="xs" c="dimmed">Started {formatDate(container.started_at, timeZone)}</Text>}
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap={6} wrap="wrap">
-                      <Badge color={container.state === 'running' ? 'teal' : 'gray'} variant="light">{container.state || 'Unknown'}</Badge>
-                      {container.health && <Badge color={container.health === 'healthy' ? 'teal' : container.health === 'unhealthy' ? 'red' : 'yellow'} variant="light">{container.health}</Badge>}
+      {error && <Alert color="red" icon={<IconAlertCircle size={18} />}>{error}</Alert>}
+
+      {!loading && hosts.length === 0 ? (
+        <Paper className="content-panel docker-empty-state" radius="md" p="xl">
+          <ThemeIcon size={54} radius="md" variant="light"><IconBrandDocker size={30} /></ThemeIcon>
+          <Title order={3}>Docker inventory is not configured</Title>
+          <Text c="dimmed" ta="center">
+            {canManageUsers
+              ? 'Configure the local Docker host under Settings > Integrations > Network services.'
+              : 'Ask an administrator to configure the local Docker inventory integration.'}
+          </Text>
+        </Paper>
+      ) : (
+        <>
+          <SimpleGrid cols={{ base: 2, md: 4 }}>
+            <Box className="device-field"><Text size="xs" c="dimmed">Docker hosts</Text><Text fw={700} size="xl">{hosts.length}</Text></Box>
+            <Box className="device-field"><Text size="xs" c="dimmed">Containers</Text><Text fw={700} size="xl">{containers.length}</Text></Box>
+            <Box className="device-field"><Text size="xs" c="dimmed">Running</Text><Text fw={700} size="xl">{runningCount}</Text></Box>
+            <Box className="device-field"><Text size="xs" c="dimmed">Needs review</Text><Text fw={700} size="xl">{attentionCount}</Text></Box>
+          </SimpleGrid>
+
+          <TextInput
+            className="docker-inventory-search"
+            label="Search containers"
+            placeholder="Name, image, network, IP, or port"
+            leftSection={<IconSearch size={17} />}
+            value={search}
+            onChange={(event) => setSearch(event.currentTarget.value)}
+          />
+
+          {filteredHosts.map((host) => (
+            <Paper key={host.id} className="content-panel docker-host-panel" radius="md">
+              <Group className="docker-host-header" justify="space-between" align="flex-start" wrap="wrap">
+                <Box>
+                  <Group gap="xs" wrap="wrap">
+                    <IconBrandDocker size={22} />
+                    <Title order={3}>Docker inventory</Title>
+                    <Badge color={host.enabled ? 'teal' : 'gray'} variant="light">
+                      {host.enabled ? 'Sync enabled' : 'Sync disabled'}
+                    </Badge>
+                  </Group>
+                  <Text size="sm" c="dimmed" mt={4}>
+                    {host.docker_name || host.name} · Docker {host.docker_version || 'not synced'} · {host.operating_system || 'Operating system unknown'} {host.architecture || ''}
+                  </Text>
+                  <UnstyledButton mt={4} onClick={() => onSelectDevice({ id: host.device })}>
+                    <Text c="blue" fw={600} size="sm">{host.device_name} · {host.device_ip}</Text>
+                  </UnstyledButton>
+                </Box>
+                <Text size="sm" c="dimmed">Synced {formatDate(host.last_sync_at, timeZone)}</Text>
+              </Group>
+
+              {host.last_error && (
+                <Alert color="red" mx="md" mt="md" icon={<IconAlertCircle size={18} />}>
+                  Last synchronization failed: {host.last_error}
+                </Alert>
+              )}
+
+              <div className="docker-container-table">
+                <Table.ScrollContainer minWidth={900}>
+                  <Table striped highlightOnHover verticalSpacing="sm">
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th>Container</Table.Th>
+                        <Table.Th>State</Table.Th>
+                        <Table.Th>Network</Table.Th>
+                        <Table.Th>Published ports</Table.Th>
+                        <Table.Th>Restarts</Table.Th>
+                      </Table.Tr>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {host.containers.map((container) => (
+                        <Table.Tr key={container.id}>
+                          <Table.Td>
+                            <Text size="sm" fw={700}>{container.name}</Text>
+                            <Text size="xs" c="dimmed" className="wrap-text">{container.image || container.image_id || '-'}</Text>
+                            {container.started_at && <Text size="xs" c="dimmed">Started {formatDate(container.started_at, timeZone)}</Text>}
+                          </Table.Td>
+                          <Table.Td><DockerContainerState container={container} /></Table.Td>
+                          <Table.Td><DockerContainerNetwork container={container} onSelectDevice={onSelectDevice} /></Table.Td>
+                          <Table.Td>
+                            <Stack gap={5} align="flex-start">
+                              {(container.published_ports || []).length
+                                ? container.published_ports.map((port) => (
+                                  <DockerPortMapping
+                                    key={`${port.host_ip}-${port.host_port}-${port.protocol}`}
+                                    port={port}
+                                    hostName={host.name}
+                                  />
+                                ))
+                                : <Text size="sm">-</Text>}
+                            </Stack>
+                          </Table.Td>
+                          <Table.Td>{container.restart_count ?? 0}</Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </Table.ScrollContainer>
+              </div>
+
+              <Stack className="docker-container-mobile-list" gap="sm">
+                {host.containers.map((container) => (
+                  <Box key={container.id} className="docker-container-mobile-card">
+                    <Group justify="space-between" align="flex-start" gap="sm">
+                      <Box className="docker-container-mobile-title">
+                        <Text fw={700}>{container.name}</Text>
+                        <Text size="xs" c="dimmed" className="wrap-text">{container.image || container.image_id || '-'}</Text>
+                      </Box>
+                      <DockerContainerState container={container} />
                     </Group>
-                    {container.status && <Text size="xs" c="dimmed" mt={4}>{container.status}</Text>}
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{container.network_mode || '-'}</Text>
-                    {(container.addresses || []).map((address) => (
-                      <Text key={`${address.network}-${address.ip}`} size="xs" c="dimmed">{address.network}: {address.ip}</Text>
-                    ))}
-                    {container.linked_device_name && <Text size="xs" c="teal">Linked to {container.linked_device_name}</Text>}
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap={5}>
-                      {(container.published_ports || []).length ? container.published_ports.map((port) => (
-                        <Tooltip
-                          key={`${port.host_ip}-${port.host_port}-${port.protocol}`}
-                          label={port.observed_by_languard ? 'Also observed by LanGuard' : 'Reported by Docker only'}
-                        >
-                          <Badge color={port.observed_by_languard ? 'teal' : 'blue'} variant="light">
-                            {String(port.protocol || 'tcp').toUpperCase()}/{port.host_port} → {port.container_port}
-                          </Badge>
-                        </Tooltip>
-                      )) : <Text size="sm">-</Text>}
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>{container.restart_count ?? 0}</Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
-        </Table.ScrollContainer>
-      </section>
-    </>
+                    <SimpleGrid cols={2} mt="sm">
+                      <Box><Text size="xs" c="dimmed">Network</Text><DockerContainerNetwork container={container} onSelectDevice={onSelectDevice} /></Box>
+                      <Box><Text size="xs" c="dimmed">Restarts</Text><Text size="sm">{container.restart_count ?? 0}</Text></Box>
+                    </SimpleGrid>
+                    <Stack gap={5} mt="sm" align="flex-start">
+                      <Text size="xs" c="dimmed">Published ports</Text>
+                      {(container.published_ports || []).length
+                        ? container.published_ports.map((port) => (
+                          <DockerPortMapping
+                            key={`${port.host_ip}-${port.host_port}-${port.protocol}`}
+                            port={port}
+                            hostName={host.name}
+                          />
+                        ))
+                        : <Text size="sm">-</Text>}
+                    </Stack>
+                  </Box>
+                ))}
+              </Stack>
+
+              {!host.containers.length && (
+                <Text c="dimmed" ta="center" py="xl">No containers match this search.</Text>
+              )}
+            </Paper>
+          ))}
+
+          {!loading && normalizedSearch && filteredHosts.length === 0 && (
+            <Alert color="blue" icon={<IconSearch size={18} />}>No containers match this search.</Alert>
+          )}
+        </>
+      )}
+    </Stack>
   );
 }
 
@@ -3084,7 +3303,6 @@ function DeviceDetailsPage({
   const [dnsSearch, setDnsSearch] = useState('');
   const [dnsFilter, setDnsFilter] = useState('all');
   const [dnsOrdering, setDnsOrdering] = useState('-last_seen');
-  const [dockerInventory, setDockerInventory] = useState(null);
   const [loadingDnsActivity, setLoadingDnsActivity] = useState(false);
   const [loadingMoreDnsActivity, setLoadingMoreDnsActivity] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -3200,9 +3418,8 @@ function DeviceDetailsPage({
     Promise.all([
       apiRequest('device/', { params: { id: deviceId } }),
       apiRequest('events/', { params: { device: deviceId, limit: 100 } }),
-      apiRequest('integrations/docker/device/', { params: { device: deviceId } }),
     ])
-      .then(([devicePayload, eventPayload, dockerPayload]) => {
+      .then(([devicePayload, eventPayload]) => {
         if (!active) {
           return;
         }
@@ -3210,7 +3427,6 @@ function DeviceDetailsPage({
         populateForm(devicePayload.data);
         setEvents(eventPayload.data || []);
         setEventPagination(eventPayload.pagination || null);
-        setDockerInventory(dockerPayload.data || null);
         setError('');
       })
       .catch((err) => {
@@ -3289,7 +3505,6 @@ function DeviceDetailsPage({
     setDnsSearch('');
     setDnsFilter('all');
     setDnsOrdering('-last_seen');
-    setDockerInventory(null);
   }, [deviceId]);
 
   useEffect(() => {
@@ -3954,7 +4169,6 @@ function DeviceDetailsPage({
                       )}
                     </section>
                   </SimpleGrid>
-                  <DockerDeviceInventory inventory={dockerInventory} timeZone={timeZone} />
                   {currentStatus?.reason && <Alert color="gray">{currentStatus.reason}</Alert>}
                 </Stack>
               )}
@@ -4710,7 +4924,7 @@ const emptyDockerHostForm = {
   sync_interval: 5,
 };
 
-function DockerIntegrationSettings({ timeZone }) {
+function DockerIntegrationSettings({ timeZone, onChanged }) {
   const [hosts, setHosts] = useState([]);
   const [devices, setDevices] = useState([]);
   const [form, setForm] = useState(emptyDockerHostForm);
@@ -4792,6 +5006,7 @@ function DockerIntegrationSettings({ timeZone }) {
         { method: form.id ? 'PUT' : 'POST', body }
       );
       await loadDockerData();
+      await onChanged?.();
       resetForm();
       notifications.show({ title: 'Docker inventory', message: 'Host saved.', color: 'teal' });
     } catch (err) {
@@ -4829,6 +5044,7 @@ function DockerIntegrationSettings({ timeZone }) {
       setDeleteTarget(null);
       resetForm();
       await loadDockerData();
+      await onChanged?.();
       notifications.show({ title: 'Docker inventory', message: 'Host removed.', color: 'teal' });
     } catch (err) {
       showErrorNotification(err);
@@ -5026,10 +5242,22 @@ function SettingsPage({ onSaved }) {
   const [importingNetAlertX, setImportingNetAlertX] = useState(false);
   const [importingWatchYourLan, setImportingWatchYourLan] = useState(false);
   const [cleanupDays, setCleanupDays] = useState(90);
+  const [savedCleanupDays, setSavedCleanupDays] = useState(90);
+  const [cleanupRetentionStatus, setCleanupRetentionStatus] = useState('');
   const [cleanupTarget, setCleanupTarget] = useState(null);
   const [cleaningActivity, setCleaningActivity] = useState('');
   const [error, setError] = useState('');
+  const [settingsCategory, setSettingsCategory] = useState('scanning');
+  const [integrationCategory, setIntegrationCategory] = useState('network-services');
   const [cleanupConfirmOpened, cleanupConfirm] = useDisclosure(false);
+
+  const showSettingsSave =
+    settingsCategory === 'scanning'
+    || settingsCategory === 'notifications'
+    || (settingsCategory === 'integrations' && integrationCategory === 'network-services');
+  const settingsSaveLabel = settingsCategory === 'integrations'
+    ? 'Save integration settings'
+    : 'Save changes';
 
   async function loadSettings() {
     setLoading(true);
@@ -5108,7 +5336,10 @@ function SettingsPage({ onSaved }) {
           ? data.notification_quiet_hours_days
           : allQuietHoursDays
       );
-      setCleanupDays(Number(data.activity_cleanup_retention_days ?? 90));
+      const loadedCleanupDays = Number(data.activity_cleanup_retention_days ?? 90);
+      setCleanupDays(loadedCleanupDays);
+      setSavedCleanupDays(loadedCleanupDays);
+      setCleanupRetentionStatus('');
     } catch (err) {
       setError(err.message);
       showErrorNotification(err);
@@ -5511,6 +5742,29 @@ function SettingsPage({ onSaved }) {
     cleanupConfirm.open();
   }
 
+  async function saveCleanupRetention() {
+    const normalizedDays = Math.min(3650, Math.max(1, Number(cleanupDays) || 90));
+    setCleanupDays(normalizedDays);
+    if (normalizedDays === savedCleanupDays) {
+      setCleanupRetentionStatus('');
+      return;
+    }
+
+    setCleanupRetentionStatus('saving');
+    try {
+      await apiRequest('settings/', {
+        method: 'PUT',
+        body: { activity_cleanup_retention_days: normalizedDays },
+      });
+      setSavedCleanupDays(normalizedDays);
+      setCleanupRetentionStatus('saved');
+    } catch (err) {
+      setCleanupRetentionStatus('error');
+      setError(err.message);
+      showErrorNotification(err);
+    }
+  }
+
   return (
     <Paper className="content-panel settings-page" radius="md" p="lg">
       <LoadingOverlay visible={loading} />
@@ -5525,9 +5779,6 @@ function SettingsPage({ onSaved }) {
               <Text c="dimmed">Scanner, notifications, and inventory tools</Text>
             </Box>
           </Group>
-          <Button onClick={saveSettings} loading={saving}>
-            Save
-          </Button>
         </Group>
 
         {error && (
@@ -5536,7 +5787,12 @@ function SettingsPage({ onSaved }) {
           </Alert>
         )}
 
-        <Tabs defaultValue="scanning" orientation="vertical" className="settings-layout">
+        <Tabs
+          value={settingsCategory}
+          onChange={(value) => setSettingsCategory(value || 'scanning')}
+          orientation="vertical"
+          className="settings-layout"
+        >
           <Tabs.List className="settings-category-nav">
             <Tabs.Tab value="scanning" leftSection={<IconNetwork size={18} />}>Scanning</Tabs.Tab>
             <Tabs.Tab value="notifications" leftSection={<IconBell size={18} />}>Notifications</Tabs.Tab>
@@ -6002,7 +6258,12 @@ function SettingsPage({ onSaved }) {
             </Box>
             <Badge variant="light">4 available</Badge>
           </Group>
-        <Tabs defaultValue="network-services" variant="pills" keepMounted={false}>
+        <Tabs
+          value={integrationCategory}
+          onChange={(value) => setIntegrationCategory(value || 'network-services')}
+          variant="pills"
+          keepMounted={false}
+        >
           <Tabs.List>
             <Tabs.Tab value="network-services" leftSection={<IconWorldSearch size={17} />}>
               Network services
@@ -6230,7 +6491,7 @@ function SettingsPage({ onSaved }) {
               <Text size="sm" c="dimmed">
                 Add runtime context from the infrastructure that hosts LanGuard.
               </Text>
-              <DockerIntegrationSettings timeZone={timeZone} />
+              <DockerIntegrationSettings timeZone={timeZone} onChanged={onSaved} />
             </Stack>
           </Tabs.Panel>
         </Tabs>
@@ -6272,11 +6533,33 @@ function SettingsPage({ onSaved }) {
               w={150}
               label="Older than"
               value={cleanupDays}
-              onChange={(value) => setCleanupDays(value === '' || value === null ? 90 : Number(value))}
+              description="Saved automatically"
+              onChange={(value) => {
+                setCleanupDays(value === '' || value === null ? 90 : Number(value));
+                setCleanupRetentionStatus('pending');
+              }}
+              onBlur={saveCleanupRetention}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.currentTarget.blur();
+                }
+              }}
               min={1}
               max={3650}
               suffix=" days"
             />
+            {cleanupRetentionStatus === 'saving' && (
+              <Group gap={6} pb={8} wrap="nowrap">
+                <Loader size="xs" />
+                <Text size="xs" c="dimmed">Saving</Text>
+              </Group>
+            )}
+            {cleanupRetentionStatus === 'saved' && (
+              <Group gap={6} pb={8} wrap="nowrap">
+                <IconCheck size={15} color="var(--mantine-color-teal-6)" />
+                <Text size="xs" c="teal">Saved</Text>
+              </Group>
+            )}
             <Button
               color="red"
               variant="light"
@@ -6427,11 +6710,13 @@ function SettingsPage({ onSaved }) {
           </Tabs.Panel>
         </Tabs>
 
-        <Group justify="flex-end" className="settings-page-actions">
-          <Button onClick={saveSettings} loading={saving}>
-            Save
-          </Button>
-        </Group>
+        {showSettingsSave && (
+          <Group justify="flex-end" className="settings-page-actions">
+            <Button onClick={saveSettings} loading={saving}>
+              {settingsSaveLabel}
+            </Button>
+          </Group>
+        )}
       </Stack>
       <Modal
         opened={cleanupConfirmOpened}
@@ -7120,6 +7405,7 @@ const mainViewPaths = {
   dashboard: '/dashboard',
   devices: '/devices',
   'home-map': '/home-map',
+  docker: '/docker',
   events: '/events',
   history: '/scan-history',
   notifications: '/notifications',
@@ -7176,6 +7462,7 @@ function PrimaryNavigation({
   mainView,
   devicePageId,
   showDnsActivity,
+  showDockerInventory,
   canManageUsers,
   onNavigate,
   onNavigateComplete,
@@ -7218,6 +7505,18 @@ function PrimaryNavigation({
       >
         Home Map
       </Button>
+      {showDockerInventory && (
+        <Button
+          className="sidebar-nav-button"
+          variant={!devicePageId && mainView === 'docker' ? 'filled' : 'subtle'}
+          justify="flex-start"
+          leftSection={<IconBrandDocker size={18} />}
+          onClick={() => navigate('docker')}
+          fullWidth
+        >
+          Docker
+        </Button>
+      )}
       <Divider my={4} />
       <Button
         className="sidebar-nav-button"
@@ -7451,6 +7750,7 @@ function Dashboard({
   const showDnsActivity = Boolean(
     integrationStatus?.adguard?.enabled && integrationStatus?.adguard?.configured
   );
+  const showDockerInventory = Boolean(integrationStatus?.docker?.configured);
   const homeBoxStatusKnown = Boolean(integrationStatus?.homebox);
   const showHomeBoxFilter = Boolean(
     integrationStatus?.homebox?.enabled && integrationStatus?.homebox?.configured
@@ -8363,6 +8663,7 @@ function Dashboard({
                   dashboard: 'Dashboard',
                   devices: 'Devices',
                   'home-map': 'Home Map',
+                  docker: 'Docker',
                   events: 'Events',
                   history: 'Scan history',
                   notifications: 'Notifications',
@@ -8383,6 +8684,7 @@ function Dashboard({
             mainView={mainView}
             devicePageId={devicePageId}
             showDnsActivity={showDnsActivity}
+            showDockerInventory={showDockerInventory}
             canManageUsers={canManageUsers}
             onNavigate={navigateToView}
             onNavigateComplete={mobileNavigation.close}
@@ -8395,6 +8697,7 @@ function Dashboard({
             mainView={mainView}
             devicePageId={devicePageId}
             showDnsActivity={showDnsActivity}
+            showDockerInventory={showDockerInventory}
             canManageUsers={canManageUsers}
             onNavigate={navigateToView}
           />
@@ -8426,6 +8729,12 @@ function Dashboard({
               devices={mapDevices}
               onSelectDevice={openDevicePage}
               canEditLayout={canEditHomeMap}
+            />
+          ) : mainView === 'docker' ? (
+            <DockerInventoryPage
+              timeZone={displayTimeZone}
+              canManageUsers={canManageUsers}
+              onSelectDevice={openDevicePage}
             />
           ) : mainView === 'settings' && canManageUsers ? (
             <SettingsPage

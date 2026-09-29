@@ -69,6 +69,7 @@ from .models import (
     DeviceDNSActivity,
     DetailedPortScan,
     DevicePort,
+    DockerHost,
     NetworkEvent,
     NotificationDelivery,
     ScanRun,
@@ -2598,6 +2599,9 @@ def scan_status(request):
                     "configured": bool(
                         app_config.homebox_url and app_config.homebox_api_token
                     ),
+                },
+                "docker": {
+                    "configured": DockerHost.objects.exists(),
                 },
             },
             "permissions": user_capabilities(request.user),

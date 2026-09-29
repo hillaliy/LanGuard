@@ -72,3 +72,58 @@
   color: var(--brand-strong);
   background: var(--brand-soft);
 }
+
+.docker-inventory-search {
+  width: min(100%, 420px);
+}
+
+.docker-empty-state {
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.docker-host-panel {
+  overflow: hidden;
+}
+
+.docker-host-header {
+  padding: var(--mantine-spacing-lg);
+}
+
+.docker-container-table {
+  border-top: 1px solid var(--border-color);
+}
+
+.docker-container-mobile-list {
+  display: none;
+}
+
+.docker-port-mapping {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 5px 7px;
+  color: var(--field-text);
+  background: var(--muted-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.docker-port-confirmed {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mantine-color-teal-7);
+}
+
+[data-mantine-color-scheme='dark'] .docker-port-confirmed {
+  color: var(--mantine-color-teal-4);
+}

@@ -4,6 +4,7 @@ from .docker_views import (
     docker_device_context,
     docker_host_detail,
     docker_hosts,
+    docker_inventory_overview,
     sync_docker_host_view,
 )
 
@@ -46,6 +47,11 @@ from .views import (
 )
 
 urlpatterns = [
+    path(
+        "integrations/docker/inventory/",
+        docker_inventory_overview,
+        name="docker-inventory-overview",
+    ),
     path("integrations/docker/hosts/", docker_hosts, name="docker-hosts"),
     path(
         "integrations/docker/hosts/<int:host_id>/",

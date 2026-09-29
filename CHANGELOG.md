@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Moved Docker container inventory from individual device pages to a dedicated responsive Docker page, with centralized search, host summaries, clearer port mappings, neutral reachability confirmation, and navigation shown only after configuration.
+- Removed duplicate global settings actions, hide them on screens whose local actions save immediately, and automatically save the scheduled activity-retention period.
+
 ## 1.21.0 - 2026-09-28
 
 - Added a compact archived-device count beneath the dashboard Devices total, with responsive visitor and archive details on small screens.
