@@ -7,6 +7,7 @@
 - Kept device actions aligned in the detail header when names are long, and displayed hostnames and vendors on separate lines.
 - Expanded diagnostics exports with privacy-safe scan failure codes, stages, exception types, fingerprints, recent reliability counts, database runtime settings, and background integration workload details.
 - Included scheduler tracebacks in container logs so production scan failures can be diagnosed without reading an ephemeral internal log file.
+- Applied search, status, network, first-seen, and HomeBox filters to the Roles device view, while keeping role groups alphabetized and list-only sorting and bulk actions separate.
 
 ## 1.21.0 - 2026-09-28
 

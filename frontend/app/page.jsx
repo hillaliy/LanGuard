@@ -7618,6 +7618,8 @@ function Dashboard({
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [devices, setDevices] = useState([]);
   const [mapDevices, setMapDevices] = useState([]);
+  const [roleDevices, setRoleDevices] = useState([]);
+  const [roleDeviceCount, setRoleDeviceCount] = useState(0);
   const [devicePagination, setDevicePagination] = useState({
     count: 0,
     limit: 100,
@@ -7691,6 +7693,7 @@ function Dashboard({
     deviceLimit: 100,
     deviceOffset: 0,
     deviceOrdering: '',
+    inventoryView: 'table',
   });
 
   const filteredDevices = useMemo(() => devices, [devices]);
@@ -7986,6 +7989,7 @@ function Dashboard({
       deviceLimit,
       deviceOffset,
       deviceOrdering,
+      inventoryView,
     };
   }, [
     search,
@@ -7994,6 +7998,7 @@ function Dashboard({
     firstSeenPeriod,
     homeBoxLinkStatus,
     deviceOrdering,
+    inventoryView,
     deviceLimit,
     deviceOffset,
   ]);
@@ -8026,7 +8031,7 @@ function Dashboard({
 
     try {
       const currentTableState = tableStateRef.current;
-      const deviceParams = {
+      const deviceFilterParams = {
         search: currentTableState.search,
         status:
           currentTableState.deviceStatus
@@ -8047,6 +8052,9 @@ function Dashboard({
         homebox_linked: currentTableState.homeBoxLinkStatus
           ? String(currentTableState.homeBoxLinkStatus === 'linked')
           : undefined,
+      };
+      const deviceParams = {
+        ...deviceFilterParams,
         limit: currentTableState.deviceLimit,
         offset: currentTableState.deviceOffset,
         ordering: currentTableState.deviceOrdering || undefined,
@@ -8058,14 +8066,33 @@ function Dashboard({
       const dashboardEventParams = {
         limit: 8,
       };
+      const roleDeviceRequest = currentTableState.inventoryView === 'roles'
+        ? apiRequest('device/', {
+          params: {
+            ...deviceFilterParams,
+            limit: 100,
+            offset: 0,
+            ordering: 'name',
+          },
+        })
+        : Promise.resolve(null);
 
       const settingsRequest = canManageUsers
         ? apiRequest('settings/')
         : Promise.resolve({ data: null });
-      const [deviceData, mapDeviceData, statusData, dashboardEventData, settingsData, speedtestData] =
+      const [
+        deviceData,
+        mapDeviceData,
+        roleDeviceData,
+        statusData,
+        dashboardEventData,
+        settingsData,
+        speedtestData,
+      ] =
         await Promise.all([
           apiRequest('device/', { params: deviceParams }),
           apiRequest('device/', { params: mapDeviceParams }),
+          roleDeviceRequest,
           apiRequest('scan/status/'),
           apiRequest('events/', { params: dashboardEventParams }),
           settingsRequest,
@@ -8076,6 +8103,10 @@ function Dashboard({
 
       setDevices(deviceData.data || []);
       setMapDevices(mapDeviceData.data || []);
+      if (roleDeviceData) {
+        setRoleDevices(roleDeviceData.data || []);
+        setRoleDeviceCount(roleDeviceData.pagination?.count || 0);
+      }
       setDevicePagination(
         deviceData.pagination || {
           count: 0,
@@ -8284,6 +8315,7 @@ function Dashboard({
         firstSeenPeriod: state.firstSeenPeriod || '',
         homeBoxLinkStatus: state.homeBoxLinkStatus || '',
         deviceOrdering: state.deviceOrdering || '',
+        inventoryView: state.inventoryView || 'table',
       };
       pendingDashboardScrollRef.current = Math.max(Number(state.scrollY) || 0, 0);
       pendingDeviceListScrollRef.current = Math.max(
@@ -8444,6 +8476,7 @@ function Dashboard({
     networkRangeFilter,
     firstSeenPeriod,
     homeBoxLinkStatus,
+    inventoryView,
     deviceOrdering,
     deviceLimit,
     deviceOffset,
@@ -8908,11 +8941,13 @@ function Dashboard({
               {inventoryView === 'roles' ? (
                 <Box p="md">
                   <RolesMap
-                    devices={deviceStatus === 'archived' ? devices : mapDevices}
+                    devices={roleDevices}
                     onSelectDevice={openDevicePage}
                   />
                   <Text size="xs" c="dimmed" mt="sm">
-                    Showing up to 100 devices grouped by role.
+                    {roleDeviceCount > roleDevices.length
+                      ? `Showing ${roleDevices.length} of ${roleDeviceCount} devices grouped by role.`
+                      : `Showing ${roleDevices.length} ${roleDevices.length === 1 ? 'device' : 'devices'} grouped by role.`}
                   </Text>
                 </Box>
               ) : (

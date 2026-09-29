@@ -3270,6 +3270,25 @@ class ScanApiTests(TestCase):
             attempts=1,
         )
 
+    def test_device_search_matches_hostname_and_vendor(self):
+        self.device.hostname = "office-workstation"
+        self.device.vendor = "Example Hardware Ltd."
+        self.device.save(update_fields=["hostname", "vendor"])
+
+        hostname_response = self.client.get(
+            "/api/v1/device/",
+            {"search": "workstation"},
+        )
+        vendor_response = self.client.get(
+            "/api/v1/device/",
+            {"search": "hardware"},
+        )
+
+        self.assertEqual(hostname_response.status_code, 200)
+        self.assertEqual(vendor_response.status_code, 200)
+        self.assertEqual(hostname_response.data["data"][0]["id"], self.device.id)
+        self.assertEqual(vendor_response.data["data"][0]["id"], self.device.id)
+
     def test_scan_endpoints_require_authentication(self):
         client = APIClient()
 

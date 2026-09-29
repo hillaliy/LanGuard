@@ -2045,6 +2045,8 @@ def device(request):
                     Q(name__icontains=search)
                     | Q(ip__icontains=search)
                     | Q(mac__icontains=search)
+                    | Q(hostname__icontains=search)
+                    | Q(vendor__icontains=search)
                 )
             if open_port:
                 port = parse_int_param(
