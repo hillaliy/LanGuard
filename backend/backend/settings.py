@@ -324,9 +324,9 @@ LOGGING = {
             "propagate": True,
         },
         "core": {
-            "handlers": ["file"],
+            "handlers": ["console", "file"],
             "level": "INFO",
-            "propagate": True,
+            "propagate": False,
         },
     },
 }

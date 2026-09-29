@@ -4,6 +4,9 @@
 
 - Moved Docker container inventory from individual device pages to a dedicated responsive Docker page, with centralized search, host summaries, clearer port mappings, neutral reachability confirmation, and navigation shown only after configuration.
 - Removed duplicate global settings actions, hide them on screens whose local actions save immediately, and automatically save the scheduled activity-retention period.
+- Kept device actions aligned in the detail header when names are long, and displayed hostnames and vendors on separate lines.
+- Expanded diagnostics exports with privacy-safe scan failure codes, stages, exception types, fingerprints, recent reliability counts, database runtime settings, and background integration workload details.
+- Included scheduler tracebacks in container logs so production scan failures can be diagnosed without reading an ephemeral internal log file.
 
 ## 1.21.0 - 2026-09-28
 

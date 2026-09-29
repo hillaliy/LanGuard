@@ -462,7 +462,21 @@ def reconcile_scan_status(latest_scan, active_scan):
     active_scan.status = ScanRun.Status.FAILED
     active_scan.finished_at = latest_finished_at
     active_scan.error = "Scan was superseded by a newer completed scan."
-    active_scan.save(update_fields=["status", "finished_at", "error"])
+    active_scan.failure_code = "superseded_scan"
+    active_scan.failure_type = "InterruptedScan"
+    active_scan.failure_stage = "heartbeat"
+    active_scan.failure_fingerprint = "superseded-scan"
+    active_scan.save(
+        update_fields=[
+            "status",
+            "finished_at",
+            "error",
+            "failure_code",
+            "failure_type",
+            "failure_stage",
+            "failure_fingerprint",
+        ]
+    )
     return None
 
 
