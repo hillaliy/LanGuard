@@ -1,5 +1,6 @@
 import platform
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -14,6 +15,7 @@ from .models import (
     DeviceDNSActivity,
     DeviceIPAddressAssignment,
     DetailedPortScan,
+    DockerHost,
     NetworkEvent,
     NotificationDelivery,
     ScanRun,
@@ -33,8 +35,23 @@ def _database_size():
         return None
 
 
+def _database_runtime():
+    if connection.vendor != "sqlite":
+        return {}
+    with connection.cursor() as cursor:
+        cursor.execute("PRAGMA journal_mode")
+        journal_mode = cursor.fetchone()[0]
+        cursor.execute("PRAGMA busy_timeout")
+        busy_timeout_ms = cursor.fetchone()[0]
+    return {
+        "journal_mode": journal_mode,
+        "busy_timeout_ms": busy_timeout_ms,
+    }
+
+
 def build_diagnostics_report():
     config = AppSettings.load()
+    generated_at = timezone.now()
     latest_scans = []
     for scan_run in ScanRun.objects.order_by("-started_at")[:10]:
         duration_seconds = None
@@ -46,11 +63,17 @@ def build_diagnostics_report():
         latest_scans.append(
             {
                 "status": scan_run.status,
+                "source": scan_run.source,
                 "started_at": utc_isoformat(scan_run.started_at),
+                "finished_at": utc_isoformat(scan_run.finished_at),
                 "duration_seconds": duration_seconds,
                 "devices_seen": scan_run.devices_seen,
                 "new_devices": scan_run.new_devices,
                 "error": stored_error_message("scan", scan_run.error),
+                "failure_code": scan_run.failure_code,
+                "failure_type": scan_run.failure_type,
+                "failure_stage": scan_run.failure_stage,
+                "failure_fingerprint": scan_run.failure_fingerprint,
             }
         )
 
@@ -62,16 +85,24 @@ def build_diagnostics_report():
         value: ScanRun.objects.filter(status=value).count()
         for value in ScanRun.Status.values
     }
+    recent_scan_counts = {
+        value: ScanRun.objects.filter(
+            status=value,
+            started_at__gte=generated_at - timedelta(hours=24),
+        ).count()
+        for value in ScanRun.Status.values
+    }
     detailed_scan_counts = {
         value: DetailedPortScan.objects.filter(status=value).count()
         for value in DetailedPortScan.Status.values
     }
+    docker_hosts = DockerHost.objects.filter(enabled=True)
 
     return {
         "report": {
             "format": "languard-diagnostics",
-            "format_version": 1,
-            "generated_at": utc_isoformat(timezone.now()),
+            "format_version": 2,
+            "generated_at": utc_isoformat(generated_at),
             "privacy": (
                 "Credentials, URLs, usernames, device names, IP addresses, MAC addresses, "
                 "network ranges, and raw exception text are intentionally omitted."
@@ -88,9 +119,11 @@ def build_diagnostics_report():
         "database": {
             "engine": connection.vendor,
             "size_bytes": _database_size(),
+            **_database_runtime(),
         },
         "configuration": {
             "scan_interval_minutes": config.scan_interval,
+            "scan_network_count": len(config.effective_scan_ranges),
             "time_zone": config.time_zone,
             "activity_retention_days": config.activity_cleanup_retention_days,
             "discord_enabled": config.discord_enabled,
@@ -119,12 +152,17 @@ def build_diagnostics_report():
                 config.speedtest_tracker_url
                 and config.speedtest_tracker_api_token
             ),
+            "docker_inventory_enabled_hosts": docker_hosts.count(),
+            "docker_inventory_sync_intervals_minutes": sorted(
+                set(docker_hosts.values_list("sync_interval", flat=True))
+            ),
         },
         "counts": {
             "devices": Device.objects.count(),
             "devices_online": Device.objects.filter(online=True).count(),
             "events": NetworkEvent.objects.count(),
             "scan_runs": scan_counts,
+            "scan_runs_last_24_hours": recent_scan_counts,
             "detailed_port_scans": detailed_scan_counts,
             "notification_deliveries": delivery_counts,
             "dns_activity": DeviceDNSActivity.objects.count(),

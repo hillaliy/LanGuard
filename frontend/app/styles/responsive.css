@@ -1,4 +1,15 @@
+@media (max-width: 1280px) {
+  .device-detail-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .device-detail-actions {
+    justify-content: flex-start;
+  }
+}
+
 @media (max-width: 980px) {
+
   .topbar-clock {
     display: none;
   }
@@ -172,6 +183,10 @@
 }
 
 @media (max-width: 700px) {
+  .device-detail-actions {
+    flex-wrap: wrap;
+  }
+
   .docker-host-header {
     padding: 14px;
   }

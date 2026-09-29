@@ -13,7 +13,7 @@ from rest_framework.authtoken.models import Token
 from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.core.cache import cache
-from django.db import DatabaseError
+from django.db import DatabaseError, OperationalError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 import requests
@@ -83,6 +83,7 @@ from .scan import (
     normalize_scan_ports,
     preferred_vendor,
     scan,
+    scan_failure_diagnostics,
     ssdp_hostname_from_response,
     ssdp_metadata_from_response,
     sync_discovered_device,
@@ -1062,7 +1063,21 @@ class ScanLockTests(TestCase):
         stale_scan.refresh_from_db()
         self.assertEqual(stale_scan.status, ScanRun.Status.FAILED)
         self.assertEqual(stale_scan.error, STALE_SCAN_ERROR)
+        self.assertEqual(stale_scan.failure_code, "stale_scan_lock")
+        self.assertEqual(stale_scan.failure_stage, "heartbeat")
         self.assertEqual(active_scan_run().id, replacement.id)
+
+    def test_database_lock_diagnostics_do_not_store_raw_error(self):
+        details = scan_failure_diagnostics(
+            OperationalError("database is locked for private-device-name"),
+            "device_sync",
+        )
+
+        self.assertEqual(details["code"], "database_locked")
+        self.assertEqual(details["type"], "OperationalError")
+        self.assertEqual(details["stage"], "device_sync")
+        self.assertEqual(len(details["fingerprint"]), 16)
+        self.assertNotIn("private-device-name", str(details))
 
     @override_settings(PORT_SCAN_ENABLED=False)
     @patch("core.scan.get_default_gateway_ip", return_value="192.168.1.1")
@@ -1074,6 +1089,10 @@ class ScanLockTests(TestCase):
         failed_scan = ScanRun.objects.get()
         self.assertEqual(failed_scan.status, ScanRun.Status.FAILED)
         self.assertIsNotNone(failed_scan.finished_at)
+        self.assertEqual(failed_scan.failure_code, "unexpected_error")
+        self.assertEqual(failed_scan.failure_type, "RuntimeError")
+        self.assertEqual(failed_scan.failure_stage, "arp_discovery")
+        self.assertEqual(len(failed_scan.failure_fingerprint), 16)
 
         replacement = claim_scan_run(
             ["192.168.1.0/24"],
@@ -3868,7 +3887,19 @@ class ScanApiTests(TestCase):
         config.speedtest_tracker_api_token = "super-secret-speedtest-token"
         config.save()
         self.scan_run.error = "Failed on 192.168.1.20 with aa:aa:aa:aa:aa:aa"
-        self.scan_run.save(update_fields=["error"])
+        self.scan_run.failure_code = "database_locked"
+        self.scan_run.failure_type = "OperationalError"
+        self.scan_run.failure_stage = "device_sync"
+        self.scan_run.failure_fingerprint = "0123456789abcdef"
+        self.scan_run.save(
+            update_fields=[
+                "error",
+                "failure_code",
+                "failure_type",
+                "failure_stage",
+                "failure_fingerprint",
+            ]
+        )
         self.delivery.error = (
             "POST https://api.telegram.org/botsuper-secret-bot-token/sendMessage failed"
         )
@@ -3897,6 +3928,13 @@ class ScanApiTests(TestCase):
             response.data["data"]["report"]["report"]["format"],
             "languard-diagnostics",
         )
+        diagnostics = response.data["data"]["report"]
+        self.assertEqual(diagnostics["report"]["format_version"], 2)
+        latest_scan = diagnostics["latest_scans"][0]
+        self.assertEqual(latest_scan["failure_code"], "database_locked")
+        self.assertEqual(latest_scan["failure_type"], "OperationalError")
+        self.assertEqual(latest_scan["failure_stage"], "device_sync")
+        self.assertEqual(latest_scan["failure_fingerprint"], "0123456789abcdef")
         configuration = response.data["data"]["report"]["configuration"]
         self.assertTrue(configuration["speedtest_tracker_enabled"])
         self.assertTrue(configuration["speedtest_tracker_configured"])

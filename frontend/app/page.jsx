@@ -3791,8 +3791,8 @@ function DeviceDetailsPage({
     <Paper className="device-detail-page" radius="md">
       <LoadingOverlay visible={loading} />
       <Stack gap="lg">
-        <Group justify="space-between" align="flex-start" wrap="wrap">
-          <Group gap="sm" align="flex-start" wrap="nowrap">
+        <div className="device-detail-header">
+          <Group className="device-detail-summary" gap="sm" align="flex-start" wrap="nowrap">
             <Tooltip label="Back to devices">
               <ActionIcon variant="subtle" color="gray" onClick={onBack} aria-label="Back to devices">
                 <IconArrowLeft size={20} />
@@ -3803,15 +3803,27 @@ function DeviceDetailsPage({
                 <DeviceIconStack device={device} size={26} />
               </span>
             )}
-            <Box>
-              <Group gap="xs" wrap="wrap">
+            <Box className="device-detail-identity">
+              <Group className="device-detail-title-row" gap="xs" wrap="wrap">
                 <Title order={2}>{device ? displayDeviceName(device) : 'Device'}</Title>
                 {device?.archived && <Badge color="gray" variant="light">Archived</Badge>}
                 {device?.is_visitor && <DeviceClassificationBadge device={device} compact />}
                 {device && <GatewayBadge device={device} compact />}
                 {device && <RiskBadge device={device} compact />}
               </Group>
-              {device && <Text c="dimmed">{deviceSubtitle(device)}</Text>}
+              {device && (
+                <Stack className="device-detail-subtitle" gap={0}>
+                  {String(device.hostname || '').trim() && (
+                    <Text c="dimmed">{device.hostname}</Text>
+                  )}
+                  {String(device.vendor || '').trim() && (
+                    <Text c="dimmed">{device.vendor}</Text>
+                  )}
+                  {!String(device.hostname || '').trim() && !String(device.vendor || '').trim() && (
+                    <Text c="dimmed">-</Text>
+                  )}
+                </Stack>
+              )}
               {currentStatus && (
                 <Group gap="xs" mt={4}>
                   <span className={`status-dot ${currentStatus.dot}`} />
@@ -3825,14 +3837,14 @@ function DeviceDetailsPage({
           </Group>
           {device && (canEditDevices || canRunScans) && (
             editing && canEditDevices ? (
-              <Group gap="xs">
+              <Group className="device-detail-actions" gap="xs" wrap="nowrap">
                 <Button variant="default" onClick={cancelEditing} disabled={saving}>Cancel</Button>
                 <Button leftSection={<IconDeviceFloppy size={18} />} onClick={save} loading={saving}>
                   Save
                 </Button>
               </Group>
             ) : (
-              <Group gap="xs">
+              <Group className="device-detail-actions" gap="xs" wrap="nowrap">
               {(canEditDevices || canRunScans) && !device.archived && device.status === 'online' && (
                 <Button
                   variant="light"
@@ -3866,7 +3878,7 @@ function DeviceDetailsPage({
               </Group>
             )
           )}
-        </Group>
+        </div>
 
         {error && (
           <Alert color="red" icon={<IconAlertCircle size={18} />}>

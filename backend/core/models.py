@@ -453,6 +453,10 @@ class ScanRun(models.Model):
     ports_opened = models.PositiveIntegerField(default=0)
     ports_closed = models.PositiveIntegerField(default=0)
     error = models.TextField(blank=True, default="")
+    failure_code = models.CharField(max_length=32, blank=True, default="")
+    failure_type = models.CharField(max_length=64, blank=True, default="")
+    failure_stage = models.CharField(max_length=32, blank=True, default="")
+    failure_fingerprint = models.CharField(max_length=16, blank=True, default="")
 
     class Meta:
         ordering = ["-started_at"]

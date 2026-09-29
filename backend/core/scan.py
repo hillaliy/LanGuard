@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import ipaddress
 import os
@@ -11,7 +12,7 @@ from datetime import timedelta
 from urllib.parse import urlparse
 
 from django.conf import settings
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, OperationalError, transaction
 from django.utils import timezone
 import requests
 import scapy.all as scapy
@@ -61,6 +62,37 @@ class ScanAlreadyRunning(RuntimeError):
         super().__init__(f"A {source} scan is already running.")
 
 
+def scan_failure_diagnostics(exc, stage):
+    message = str(exc).lower()
+    if isinstance(exc, OperationalError) and "locked" in message:
+        code = "database_locked"
+    elif isinstance(exc, IntegrityError):
+        code = "database_integrity"
+    elif isinstance(exc, DatabaseError):
+        code = "database_error"
+    elif isinstance(exc, PermissionError):
+        code = "permission_denied"
+    elif isinstance(exc, (TimeoutError, socket.timeout)):
+        code = "timeout"
+    elif isinstance(exc, requests.RequestException):
+        code = "external_request"
+    elif isinstance(exc, ScanAlreadyRunning):
+        code = "scan_lock_lost"
+    elif isinstance(exc, OSError):
+        code = "network_io"
+    else:
+        code = "unexpected_error"
+
+    failure_type = re.sub(r"[^A-Za-z0-9_.-]", "_", type(exc).__name__)[:64]
+    fingerprint_source = f"{type(exc).__module__}.{type(exc).__qualname__}:{exc}"
+    return {
+        "code": code,
+        "type": failure_type,
+        "stage": stage,
+        "fingerprint": hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()[:16],
+    }
+
+
 def expire_stale_scan_runs(now=None):
     now = now or timezone.now()
     stale_after = max(60, settings.SCAN_LOCK_STALE_SECONDS)
@@ -72,6 +104,10 @@ def expire_stale_scan_runs(now=None):
         status=ScanRun.Status.FAILED,
         finished_at=now,
         error=STALE_SCAN_ERROR,
+        failure_code="stale_scan_lock",
+        failure_type="InterruptedScan",
+        failure_stage="heartbeat",
+        failure_fingerprint="stale-scan-lock",
     )
 
 
@@ -1623,11 +1659,13 @@ def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
     ports_closed = 0
     new_devices = 0
 
+    failure_stage = "scan_setup"
     try:
         touch_scan_run(scan_run)
         discovered = {}
         local_scanner_macs = set()
         for ip_range in scan_ranges:
+            failure_stage = "arp_discovery"
             touch_scan_run(scan_run)
             for element in discover_devices(ip_range):
                 discovered[element[1].hwsrc.lower()] = element
@@ -1651,6 +1689,7 @@ def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
         answered_list = list(discovered.values())
         scan_started_at = timezone.now()
         oui = scapy.MANUFDB
+        failure_stage = "metadata_discovery"
         hostname_hints = discover_hostname_hints()
         vendor_hints = {
             ip: (metadata["vendor"], Device.IdentitySource.SSDP)
@@ -1658,6 +1697,7 @@ def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
             if metadata.get("vendor")
         }
 
+        failure_stage = "device_sync"
         for element in answered_list:
             touch_scan_run(scan_run)
             stats = sync_discovered_device(
@@ -1679,6 +1719,7 @@ def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
             ports_closed += stats["ports_closed"]
 
         online_macs = [element[1].hwsrc.lower() for element in answered_list]
+        failure_stage = "status_reconciliation"
         touch_scan_run(scan_run)
         clear_stale_gateways(gateway_ip)
         mark_missing_devices_offline(
@@ -1686,36 +1727,55 @@ def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
             scan_run=scan_run,
             ip_ranges=scan_ranges,
         )
-    except Exception as exc:
-        scan_run.status = ScanRun.Status.FAILED
+
+        failure_stage = "finalization"
+        scan_run.status = ScanRun.Status.SUCCESS
         scan_run.finished_at = timezone.now()
         scan_run.heartbeat_at = scan_run.finished_at
-        scan_run.error = scan_error_message(exc)
-        scan_run.save(update_fields=["status", "finished_at", "heartbeat_at", "error"])
+        scan_run.devices_seen = len(answered_list)
+        scan_run.new_devices = new_devices
+        scan_run.online_devices = Device.objects.filter(online=True, archived=False).count()
+        scan_run.ports_opened = ports_opened
+        scan_run.ports_closed = ports_closed
+        scan_run.error = ""
+        scan_run.failure_code = ""
+        scan_run.failure_type = ""
+        scan_run.failure_stage = ""
+        scan_run.failure_fingerprint = ""
+        scan_run.save(
+            update_fields=[
+                "status",
+                "finished_at",
+                "heartbeat_at",
+                "devices_seen",
+                "new_devices",
+                "online_devices",
+                "ports_opened",
+                "ports_closed",
+                "error",
+                "failure_code",
+                "failure_type",
+                "failure_stage",
+                "failure_fingerprint",
+            ]
+        )
+    except Exception as exc:
+        failure = scan_failure_diagnostics(exc, failure_stage)
+        finished_at = timezone.now()
+        try:
+            ScanRun.objects.filter(pk=scan_run.pk).update(
+                status=ScanRun.Status.FAILED,
+                finished_at=finished_at,
+                heartbeat_at=finished_at,
+                error=scan_error_message(exc),
+                failure_code=failure["code"],
+                failure_type=failure["type"],
+                failure_stage=failure["stage"],
+                failure_fingerprint=failure["fingerprint"],
+            )
+        except Exception:
+            LOGGER.exception("Could not persist network scan failure diagnostics")
         raise
-
-    scan_run.status = ScanRun.Status.SUCCESS
-    scan_run.finished_at = timezone.now()
-    scan_run.heartbeat_at = scan_run.finished_at
-    scan_run.devices_seen = len(answered_list)
-    scan_run.new_devices = new_devices
-    scan_run.online_devices = Device.objects.filter(online=True, archived=False).count()
-    scan_run.ports_opened = ports_opened
-    scan_run.ports_closed = ports_closed
-    scan_run.error = ""
-    scan_run.save(
-        update_fields=[
-            "status",
-            "finished_at",
-            "heartbeat_at",
-            "devices_seen",
-            "new_devices",
-            "online_devices",
-            "ports_opened",
-            "ports_closed",
-            "error",
-        ]
-    )
     return scan_run
 
 

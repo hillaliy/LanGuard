@@ -132,6 +132,33 @@
   box-shadow: var(--shadow-soft);
 }
 
+.device-detail-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 20px;
+  align-items: start;
+}
+
+.device-detail-summary,
+.device-detail-identity,
+.device-detail-title-row {
+  min-width: 0;
+}
+
+.device-detail-title-row .mantine-Title-root,
+.device-detail-subtitle .mantine-Text-root {
+  overflow-wrap: anywhere;
+}
+
+.device-detail-actions {
+  flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+.device-detail-actions .mantine-Button-root {
+  flex-shrink: 0;
+}
+
 .device-detail-icon {
   width: 54px;
   height: 54px;
