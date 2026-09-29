@@ -4979,6 +4979,10 @@ class ScanApiTests(TestCase):
             response.data["integrations"]["adguard"],
             {"enabled": False, "configured": False},
         )
+        self.assertEqual(
+            response.data["integrations"]["docker"],
+            {"configured": False},
+        )
         self.assertFalse(response.data["visibility"]["is_scanning"])
         self.assertEqual(response.data["visibility"]["current_range"], "192.168.1.0/24")
         self.assertEqual(

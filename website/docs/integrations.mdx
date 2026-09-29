@@ -40,11 +40,13 @@ Existing installations must add this volume and recreate the scheduler container
 2. Open **Settings > Integrations > Docker inventory**.
 3. Select that device, enter a display name, choose the synchronization interval, and save.
 4. The scheduler queues the first synchronization automatically. **Sync now** requests another run within the scheduler's next one-minute check.
-5. Open the Docker host's device page to inspect its containers and published ports.
+5. Open **Docker** from the main navigation to inspect containers and published ports across the configured host.
 
 The scheduler checks once per minute and synchronizes when the configured interval is due. Newly discovered containers and newly published host ports are recorded in device history.
 
-Bridge and host-network containers remain metadata beneath their Docker host. Containers attached through `macvlan` or `ipvlan` receive independent LAN addresses; when an address matches a LanGuard device, the container is linked to that device automatically. A published port marked **Also observed by LanGuard** was independently found open by the network scanner. Docker-only metadata does not prove Internet exposure.
+Bridge and host-network containers remain associated with their Docker host. Containers attached through `macvlan` or `ipvlan` receive independent LAN addresses; when an address matches a LanGuard device, the container is linked to that device automatically.
+
+Port mappings distinguish the host port from the internal container port. For example, **Host 8080 → Container 80** means connections to port `8080` on the Docker host are forwarded to port `80` inside the container. A check mark means the LanGuard network scanner also found that host port reachable; it is confirmation of the mapping, not a deployment warning. Docker metadata and LAN reachability do not prove Internet exposure.
 
 ## AdGuard Home
 

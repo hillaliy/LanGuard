@@ -37,6 +37,33 @@ def docker_hosts(request):
     return Response({"data": DockerHostSerializer(host).data}, status=status.HTTP_201_CREATED)
 
 
+@extend_schema(responses=OpenApiTypes.OBJECT)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def docker_inventory_overview(request):
+    hosts = DockerHost.objects.select_related("device").prefetch_related("containers")
+    data = []
+    total_containers = 0
+    for host in hosts:
+        containers = host.containers.filter(active=True).select_related("linked_device").order_by("name")
+        serialized_host = DockerHostSerializer(host).data
+        serialized_host["containers"] = DockerContainerSerializer(
+            containers,
+            many=True,
+            context={"observed_ports": _observed_ports(host.device)},
+        ).data
+        total_containers += len(serialized_host["containers"])
+        data.append(serialized_host)
+    return Response(
+        {
+            "data": {
+                "hosts": data,
+                "total_containers": total_containers,
+            }
+        }
+    )
+
+
 @extend_schema(request=DockerHostSerializer, responses=OpenApiTypes.OBJECT)
 @api_view(["PUT", "DELETE"])
 @permission_classes([permissions.IsAdminUser])

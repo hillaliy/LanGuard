@@ -207,6 +207,17 @@ class DockerInventoryApiTests(TestCase):
         host.refresh_from_db()
         self.assertTrue(host.sync_requested)
 
+    def test_scan_status_reports_configured_docker_inventory(self):
+        DockerHost.objects.create(device=self.device, name="Server")
+
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["integrations"]["docker"],
+            {"configured": True},
+        )
+
     def test_device_context_marks_ports_observed_by_languard(self):
         host = DockerHost.objects.create(
             device=self.device,
@@ -235,3 +246,41 @@ class DockerInventoryApiTests(TestCase):
         port = response.data["data"]["containers"][0]["published_ports"][0]
         self.assertTrue(port["observed_by_languard"])
         self.assertNotIn("agent_url", response.data["data"]["host"])
+
+    def test_inventory_overview_lists_active_containers_for_authenticated_users(self):
+        host = DockerHost.objects.create(
+            device=self.device,
+            name="Server",
+            docker_version="29.0.0",
+        )
+        DockerContainer.objects.create(
+            host=host,
+            container_id="b" * 64,
+            name="web",
+            published_ports=[
+                {
+                    "container_port": 80,
+                    "host_ip": "0.0.0.0",
+                    "host_port": 8080,
+                    "protocol": "tcp",
+                }
+            ],
+        )
+        DockerContainer.objects.create(
+            host=host,
+            container_id="c" * 64,
+            name="stopped",
+            active=False,
+        )
+        DevicePort.objects.create(device=self.device, port=8080, protocol="tcp")
+        viewer = User.objects.create_user(username="viewer", password="password")
+        self.client.force_authenticate(viewer)
+
+        response = self.client.get("/api/v1/integrations/docker/inventory/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["total_containers"], 1)
+        self.assertEqual(response.data["data"]["hosts"][0]["docker_version"], "29.0.0")
+        containers = response.data["data"]["hosts"][0]["containers"]
+        self.assertEqual([container["name"] for container in containers], ["web"])
+        self.assertTrue(containers[0]["published_ports"][0]["observed_by_languard"])
