@@ -27,6 +27,14 @@
   flex: 0 0 auto;
 }
 
+.topbar-brand-details {
+  min-width: 0;
+}
+
+.topbar-brand-title {
+  flex-wrap: nowrap;
+}
+
 .app-layout {
   display: grid;
   grid-template-columns: 210px minmax(0, 1fr);
@@ -47,15 +55,9 @@
   box-shadow: var(--shadow-soft);
 }
 
-.mobile-navigation-bar {
-  align-items: center;
-  background: var(--panel-bg);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+.mobile-topbar-menu,
+.mobile-page-title {
   display: none;
-  gap: 10px;
-  min-height: 46px;
-  padding: 8px 12px;
 }
 
 .sidebar-nav-button {

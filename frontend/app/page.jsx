@@ -8583,10 +8583,17 @@ function Dashboard({
       <header className="topbar">
         <Container size="xl" py="sm">
           <Group justify="space-between">
-            <Group gap="sm">
+            <Group className="topbar-brand" gap="sm" wrap="nowrap">
+              <Burger
+                className="mobile-topbar-menu"
+                opened={mobileNavigationOpened}
+                onClick={mobileNavigation.toggle}
+                size="sm"
+                aria-label={mobileNavigationOpened ? 'Close navigation' : 'Open navigation'}
+              />
               <Image src="/logo.png" alt="LanGuard" w={42} h={42} radius="sm" />
-              <Box>
-                <Group gap="xs" wrap="nowrap">
+              <Box className="topbar-brand-details">
+                <Group className="topbar-brand-title" gap="xs">
                   <Title order={3}>LanGuard</Title>
                   <Tooltip label={versionTooltip}>
                     <UnstyledButton
@@ -8694,14 +8701,8 @@ function Dashboard({
       </header>
 
       <div className="app-layout">
-        <div className="mobile-navigation-bar">
-          <Burger
-            opened={mobileNavigationOpened}
-            onClick={mobileNavigation.toggle}
-            size="sm"
-            aria-label={mobileNavigationOpened ? 'Close navigation' : 'Open navigation'}
-          />
-          <Text fw={700}>
+        <div className="mobile-page-title">
+          <Title order={2}>
             {devicePageId
               ? 'Device details'
               : {
@@ -8715,7 +8716,7 @@ function Dashboard({
                   dns: 'DNS Activity',
                   settings: 'Settings',
                 }[mainView] || 'Navigation'}
-          </Text>
+          </Title>
         </div>
 
         <Drawer
