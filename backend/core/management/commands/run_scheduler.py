@@ -11,6 +11,7 @@ from core.models import AppSettings, ScanRun
 from core.notifications import retry_failed_notifications
 from core.scan import ScanAlreadyRunning, scan
 from core.adguard import sync_adguard_query_log
+from core.pihole import sync_pihole
 from core.versioning import check_for_version_update
 from core.speedtest_tracker import (
     HEALTH_CHECK_INTERVAL_SECONDS,
@@ -155,6 +156,25 @@ class Command(BaseCommand):
             finally:
                 close_old_connections()
 
+        def run_pihole_sync():
+            close_old_connections()
+            try:
+                result = sync_pihole()
+                if result["status"] == "ok":
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            "Pi-hole sync completed: "
+                            f"{result['matched']} matched queries across "
+                            f"{result['domains_updated']} device domains; "
+                            f"{result['leases']} DHCP leases processed"
+                        )
+                    )
+            except Exception:
+                LOGGER.exception("Pi-hole sync failed")
+                self.stderr.write(self.style.ERROR("Pi-hole sync failed"))
+            finally:
+                close_old_connections()
+
         def run_version_update_check():
             close_old_connections()
             try:
@@ -229,6 +249,20 @@ class Command(BaseCommand):
                 if stop_event.wait(interval_seconds):
                     break
 
+        def pihole_sync_loop():
+            while not stop_event.is_set():
+                close_old_connections()
+                try:
+                    config = AppSettings.load()
+                    enabled = config.pihole_enabled
+                    interval_seconds = max(config.pihole_sync_interval, 1) * 60
+                finally:
+                    close_old_connections()
+                if enabled:
+                    run_pihole_sync()
+                if stop_event.wait(interval_seconds):
+                    break
+
         def version_update_loop():
             while not stop_event.is_set():
                 run_version_update_check()
@@ -298,6 +332,8 @@ class Command(BaseCommand):
 
         adguard_sync_thread = threading.Thread(target=adguard_sync_loop, daemon=True)
         adguard_sync_thread.start()
+        pihole_sync_thread = threading.Thread(target=pihole_sync_loop, daemon=True)
+        pihole_sync_thread.start()
         version_update_thread = threading.Thread(target=version_update_loop, daemon=True)
         version_update_thread.start()
         speedtest_health_thread = threading.Thread(
@@ -343,6 +379,9 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS("AdGuard Home sync follows the saved integration interval")
+        )
+        self.stdout.write(
+            self.style.SUCCESS("Pi-hole sync follows the saved integration interval")
         )
         self.stdout.write(
             self.style.SUCCESS("LanGuard update checks follow the saved version interval")

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added a read-only Pi-hole v6 integration with application-password authentication, scheduled DNS activity synchronization, DHCP client discovery, protected known-device identity, and shared network-wide and per-device DNS views.
 - Moved Docker container inventory from individual device pages to a dedicated responsive Docker page, with centralized search, host summaries, clearer port mappings, neutral reachability confirmation, and navigation shown only after configuration.
 - Removed duplicate global settings actions, hide them on screens whose local actions save immediately, and automatically save the scheduled activity-retention period.
 - Kept device actions aligned in the detail header when names are long, and displayed hostnames and vendors on separate lines.

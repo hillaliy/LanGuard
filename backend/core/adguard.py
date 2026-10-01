@@ -161,9 +161,9 @@ def device_for_client_at(client, seen_at, assignments_by_ip=None):
     return next(iter(matching_devices.values()))
 
 
-def resolved_unmatched_client_ids(assignments_by_ip):
+def resolved_unmatched_client_ids(assignments_by_ip, provider="adguard"):
     resolved_ids = []
-    for unmatched in AdGuardUnmatchedClient.objects.all():
+    for unmatched in AdGuardUnmatchedClient.objects.filter(provider=provider):
         client_ip = normalize_client_ipv4(unmatched.client)
         if not client_ip:
             continue
@@ -227,10 +227,17 @@ class UnmatchedClientAggregate:
             self.last_reason = reason[:64]
 
 
-def _save_aggregates(aggregates, unmatched_aggregates, assignments_by_ip):
+def _save_aggregates(
+    aggregates,
+    unmatched_aggregates,
+    assignments_by_ip,
+    *,
+    provider="adguard",
+):
     with transaction.atomic():
         for aggregate in aggregates.values():
             activity, created = DeviceDNSActivity.objects.get_or_create(
+                provider=provider,
                 device=aggregate.device,
                 domain=aggregate.domain,
                 query_type=aggregate.query_type,
@@ -270,6 +277,7 @@ def _save_aggregates(aggregates, unmatched_aggregates, assignments_by_ip):
 
         for aggregate in unmatched_aggregates.values():
             unmatched, created = AdGuardUnmatchedClient.objects.get_or_create(
+                provider=provider,
                 client=aggregate.client,
                 defaults={
                     "query_count": aggregate.query_count,
@@ -305,15 +313,19 @@ def _save_aggregates(aggregates, unmatched_aggregates, assignments_by_ip):
                 ),
             )
 
-        resolved_ids = resolved_unmatched_client_ids(assignments_by_ip)
+        resolved_ids = resolved_unmatched_client_ids(assignments_by_ip, provider)
         if resolved_ids:
             AdGuardUnmatchedClient.objects.filter(pk__in=resolved_ids).delete()
 
 
-def cleanup_adguard_activity(retention_days):
+def cleanup_adguard_activity(retention_days, provider="adguard"):
     cutoff = timezone.now() - timedelta(days=max(int(retention_days), 1))
-    _, activity_details = DeviceDNSActivity.objects.filter(last_seen__lt=cutoff).delete()
+    _, activity_details = DeviceDNSActivity.objects.filter(
+        provider=provider,
+        last_seen__lt=cutoff,
+    ).delete()
     _, unmatched_details = AdGuardUnmatchedClient.objects.filter(
+        provider=provider,
         last_seen__lt=cutoff
     ).delete()
     return {

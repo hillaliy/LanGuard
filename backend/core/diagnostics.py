@@ -146,6 +146,14 @@ def build_diagnostics_report():
             "adguard_last_error": stored_error_message(
                 "adguard", config.adguard_last_error
             ),
+            "pihole_enabled": config.pihole_enabled,
+            "pihole_configured": bool(config.pihole_url and config.pihole_password),
+            "pihole_sync_interval_minutes": config.pihole_sync_interval,
+            "pihole_retention_days": config.pihole_retention_days,
+            "pihole_last_sync_at": utc_isoformat(config.pihole_last_sync_at),
+            "pihole_last_error": stored_error_message(
+                "pihole", config.pihole_last_error
+            ),
             "speedtest_tracker_enabled": config.speedtest_tracker_enabled,
             "notify_speedtest_changes": config.notify_speedtest_changes,
             "speedtest_tracker_configured": bool(

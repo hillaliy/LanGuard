@@ -1078,6 +1078,19 @@ class AdGuardConnectionSerializer(serializers.Serializer):
         return attrs
 
 
+class PiHoleConnectionSerializer(serializers.Serializer):
+    url = serializers.URLField(max_length=2048)
+    password = serializers.CharField(required=False, allow_blank=True, max_length=255)
+
+    def validate(self, attrs):
+        saved = AppSettings.load()
+        if not attrs.get("password") and not saved.pihole_password:
+            raise serializers.ValidationError(
+                {"password": "Enter a Pi-hole application password."}
+            )
+        return attrs
+
+
 class SpeedtestTrackerConnectionSerializer(serializers.Serializer):
     url = serializers.URLField(max_length=2048)
     api_token = serializers.CharField(
@@ -1099,6 +1112,7 @@ class SpeedtestTrackerConnectionSerializer(serializers.Serializer):
 class AppSettingsSerializer(serializers.ModelSerializer):
     updated_at = UTCDateTimeField(read_only=True)
     adguard_last_sync_at = UTCDateTimeField(read_only=True)
+    pihole_last_sync_at = UTCDateTimeField(read_only=True)
     scan_max_hosts = serializers.SerializerMethodField()
     discord_configured = serializers.SerializerMethodField()
     telegram_configured = serializers.SerializerMethodField()
@@ -1106,6 +1120,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     webhook_configured = serializers.SerializerMethodField()
     webhook_signature_configured = serializers.SerializerMethodField()
     adguard_configured = serializers.SerializerMethodField()
+    pihole_configured = serializers.SerializerMethodField()
     speedtest_tracker_configured = serializers.SerializerMethodField()
     homebox_configured = serializers.SerializerMethodField()
     homebox_api_token = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=512)
@@ -1129,6 +1144,12 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         allow_blank=True,
     )
     adguard_password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=255,
+    )
+    pihole_password = serializers.CharField(
         write_only=True,
         required=False,
         allow_blank=True,
@@ -1165,10 +1186,15 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         default=False,
     )
     adguard_last_error = serializers.SerializerMethodField()
+    pihole_last_error = serializers.SerializerMethodField()
 
     @extend_schema_field(serializers.CharField)
     def get_adguard_last_error(self, obj):
         return stored_error_message("adguard", obj.adguard_last_error)
+
+    @extend_schema_field(serializers.CharField)
+    def get_pihole_last_error(self, obj):
+        return stored_error_message("pihole", obj.pihole_last_error)
 
     class Meta:
         model = AppSettings
@@ -1220,6 +1246,14 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "adguard_retention_days",
             "adguard_last_sync_at",
             "adguard_last_error",
+            "pihole_enabled",
+            "pihole_url",
+            "pihole_password",
+            "pihole_configured",
+            "pihole_sync_interval",
+            "pihole_retention_days",
+            "pihole_last_sync_at",
+            "pihole_last_error",
             "speedtest_tracker_enabled",
             "homebox_enabled",
             "homebox_url",
@@ -1240,6 +1274,9 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "adguard_username": {"required": False, "allow_blank": True},
             "adguard_last_sync_at": {"read_only": True},
             "adguard_last_error": {"read_only": True},
+            "pihole_url": {"required": False, "allow_blank": True},
+            "pihole_last_sync_at": {"read_only": True},
+            "pihole_last_error": {"read_only": True},
             "speedtest_tracker_url": {"required": False, "allow_blank": True},
             "updated_at": {"read_only": True},
         }
@@ -1279,6 +1316,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.BooleanField)
     def get_adguard_configured(self, obj):
         return bool(obj.adguard_url and (not obj.adguard_username or obj.adguard_password))
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_pihole_configured(self, obj):
+        return bool(obj.pihole_url and obj.pihole_password)
 
     @extend_schema_field(serializers.BooleanField)
     def get_speedtest_tracker_configured(self, obj):
@@ -1416,6 +1457,35 @@ class AppSettingsSerializer(serializers.ModelSerializer):
                 {"adguard_password": "Enter the AdGuard Home password."}
             )
 
+        pihole_enabled = attrs.get(
+            "pihole_enabled",
+            self.instance.pihole_enabled if self.instance else False,
+        )
+        pihole_url = attrs.get(
+            "pihole_url",
+            self.instance.pihole_url if self.instance else "",
+        )
+        pihole_password = attrs.get("pihole_password") or (
+            self.instance.pihole_password if self.instance else ""
+        )
+        if pihole_enabled and not pihole_url:
+            raise serializers.ValidationError(
+                {"pihole_url": "Configure the Pi-hole URL before enabling sync."}
+            )
+        if pihole_enabled and not pihole_password:
+            raise serializers.ValidationError(
+                {"pihole_password": "Enter a Pi-hole application password."}
+            )
+        if enabled and pihole_enabled:
+            raise serializers.ValidationError(
+                {
+                    "pihole_enabled": (
+                        "Disable AdGuard Home before enabling Pi-hole. Only one DNS "
+                        "activity provider can be active at a time."
+                    )
+                }
+            )
+
         speedtest_enabled = attrs.get(
             "speedtest_tracker_enabled",
             self.instance.speedtest_tracker_enabled if self.instance else False,
@@ -1458,6 +1528,8 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             validated_data.pop("discord_webhook", None)
         if not validated_data.get("adguard_username", instance.adguard_username):
             validated_data.setdefault("adguard_password", "")
+        if not validated_data.get("pihole_password"):
+            validated_data.pop("pihole_password", None)
         if not validated_data.get("telegram_token"):
             validated_data.pop("telegram_token", None)
         if not validated_data.get("speedtest_tracker_api_token"):
@@ -1541,6 +1613,20 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("AdGuard retention must be at least 1 day.")
         if value > 3650:
             raise serializers.ValidationError("AdGuard retention must be 3650 days or less.")
+        return value
+
+    def validate_pihole_sync_interval(self, value):
+        if value < 1:
+            raise serializers.ValidationError("Pi-hole sync interval must be at least 1 minute.")
+        if value > 1440:
+            raise serializers.ValidationError("Pi-hole sync interval must be 1440 minutes or less.")
+        return value
+
+    def validate_pihole_retention_days(self, value):
+        if value < 1:
+            raise serializers.ValidationError("Pi-hole retention must be at least 1 day.")
+        if value > 3650:
+            raise serializers.ValidationError("Pi-hole retention must be 3650 days or less.")
         return value
 
     def validate_notification_quiet_hours_start(self, value):

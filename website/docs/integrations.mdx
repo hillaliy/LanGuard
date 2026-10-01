@@ -1,6 +1,6 @@
 ---
 title: Integrations
-description: Connect LanGuard to Docker hosts, AdGuard Home, Speedtest Tracker, HomeBox, and automation services.
+description: Connect LanGuard to Docker hosts, AdGuard Home, Pi-hole, Speedtest Tracker, HomeBox, and automation services.
 slug: /integrations
 ---
 
@@ -13,6 +13,7 @@ Docker installations can connect optional services from **Settings > Integration
 | Integration | What it adds | Data handling |
 | --- | --- | --- |
 | AdGuard Home | Network-wide and per-device DNS destinations and blocked totals | Stores aggregate counters, not raw DNS responses |
+| Pi-hole v6 | DNS destinations, blocked totals, and DHCP client discovery | Stores aggregate counters and current lease identity data, not raw DNS responses |
 | Speedtest Tracker | Latest internet result and health on the dashboard | Stores settings and latest processed health state, not result history |
 | HomeBox | Search and link an existing inventory item to a device | Stores the linked item ID; does not synchronize inventory |
 | Docker inventory | Running containers, health, addresses, restarts, and published ports | Reads the local Docker engine from the scheduler |
@@ -61,6 +62,22 @@ The scheduler imports aggregated counters per device, domain, and query type. Ea
 The configured retention period removes old DNS aggregates. IP assignment history is independent of event and DNS retention and remains available for the lifetime of the device. After upgrading from an older LanGuard release, current assignments begin when the migration runs; LanGuard does not infer earlier ownership that it did not observe.
 
 > **Device attribution:** AdGuard Home must record the originating device IP. If all requests reach it through the router, LanGuard can associate the activity only with that router. Configure DHCP or clients to use AdGuard Home directly when device-level attribution is required.
+
+## Pi-hole
+
+Pi-hole v6 is supported as an alternative to AdGuard Home. Only one DNS activity provider can be enabled at a time so the same query is not counted twice.
+
+1. In Pi-hole, create an application password under **Settings > Web interface / API**.
+2. Enable **Pi-hole** in **Settings > Integrations > Network services**.
+3. Enter the Pi-hole URL and application password, then select **Test connection**.
+4. Save and select **Sync now** for the first import.
+5. Open the central **DNS Activity** page or a device's **DNS activity** tab.
+
+LanGuard uses the supported Pi-hole v6 API. It imports aggregated DNS counters and current DHCP leases; it does not mount Pi-hole databases or configuration files. Queries are attributed using LanGuard's historical IP ownership at the query time. DHCP leases can create unknown devices and update an existing device's IP by MAC address. A known device's name, hostname, icon, and other user-managed identity remain protected.
+
+Pi-hole is not a presence monitor. A lease can be active while a device is away, and a missing lease does not prove that a device is offline. LanGuard therefore never marks a device offline merely because it is absent from Pi-hole.
+
+> **Device attribution:** Pi-hole must see each originating client IP. DNS requests forwarded by a router are attributed to that router rather than guessed. Pi-hole DHCP discovery is available only when Pi-hole itself has active lease data.
 
 ## Speedtest Tracker
 

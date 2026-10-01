@@ -4315,7 +4315,7 @@ function DeviceDetailsPage({
                   <Box>
                     <Title order={4}>DNS activity</Title>
                     <Text size="sm" c="dimmed">
-                      Aggregated AdGuard Home destinations for this device.
+                      Aggregated {dnsIntegration?.provider_name || 'DNS provider'} destinations for this device.
                     </Text>
                   </Box>
                   {dnsIntegration?.last_sync_at && (
@@ -4327,11 +4327,11 @@ function DeviceDetailsPage({
 
                 {dnsIntegration && !dnsIntegration.configured && (
                   <Alert color="blue" icon={<IconWorldSearch size={18} />}>
-                    Configure AdGuard Home in Settings to collect DNS activity.
+                    Configure a DNS provider in Settings to collect DNS activity.
                   </Alert>
                 )}
                 {dnsIntegration?.configured && !dnsIntegration.enabled && (
-                  <Alert color="gray">AdGuard Home sync is currently disabled.</Alert>
+                  <Alert color="gray">DNS activity synchronization is currently disabled.</Alert>
                 )}
                 {dnsIntegration?.last_error && (
                   <Alert color="red" icon={<IconAlertCircle size={18} />}>
@@ -4414,7 +4414,7 @@ function DeviceDetailsPage({
                             <Table.Td>{Number(activity.query_count || 0).toLocaleString()}</Table.Td>
                             <Table.Td>
                               {activity.blocked_count > 0 ? (
-                                <Tooltip label={activity.last_reason || 'Blocked by AdGuard Home'}>
+                                <Tooltip label={activity.last_reason || `Blocked by ${dnsIntegration?.provider_name || 'DNS provider'}`}>
                                   <Badge color="red" variant="light">
                                     {Number(activity.blocked_count).toLocaleString()}
                                   </Badge>
@@ -5222,6 +5222,14 @@ function SettingsPage({ onSaved }) {
   const [adguardRetentionDays, setAdguardRetentionDays] = useState(90);
   const [adguardLastSyncAt, setAdguardLastSyncAt] = useState(null);
   const [adguardLastError, setAdguardLastError] = useState('');
+  const [piholeEnabled, setPiholeEnabled] = useState(false);
+  const [piholeConfigured, setPiholeConfigured] = useState(false);
+  const [piholeUrl, setPiholeUrl] = useState('');
+  const [piholePassword, setPiholePassword] = useState('');
+  const [piholeSyncInterval, setPiholeSyncInterval] = useState(5);
+  const [piholeRetentionDays, setPiholeRetentionDays] = useState(90);
+  const [piholeLastSyncAt, setPiholeLastSyncAt] = useState(null);
+  const [piholeLastError, setPiholeLastError] = useState('');
   const [speedtestTrackerEnabled, setSpeedtestTrackerEnabled] = useState(false);
   const [homeboxEnabled, setHomeboxEnabled] = useState(false);
   const [homeboxUrl, setHomeboxUrl] = useState('');
@@ -5247,6 +5255,8 @@ function SettingsPage({ onSaved }) {
   const [testingChannel, setTestingChannel] = useState('');
   const [testingAdguard, setTestingAdguard] = useState(false);
   const [syncingAdguard, setSyncingAdguard] = useState(false);
+  const [testingPihole, setTestingPihole] = useState(false);
+  const [syncingPihole, setSyncingPihole] = useState(false);
   const [testingSpeedtestTracker, setTestingSpeedtestTracker] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportingDiagnostics, setExportingDiagnostics] = useState(false);
@@ -5323,6 +5333,14 @@ function SettingsPage({ onSaved }) {
       setAdguardRetentionDays(Number(data.adguard_retention_days || 90));
       setAdguardLastSyncAt(data.adguard_last_sync_at || null);
       setAdguardLastError(data.adguard_last_error || '');
+      setPiholeEnabled(Boolean(data.pihole_enabled));
+      setPiholeConfigured(Boolean(data.pihole_configured));
+      setPiholeUrl(data.pihole_url || '');
+      setPiholePassword('');
+      setPiholeSyncInterval(Number(data.pihole_sync_interval || 5));
+      setPiholeRetentionDays(Number(data.pihole_retention_days || 90));
+      setPiholeLastSyncAt(data.pihole_last_sync_at || null);
+      setPiholeLastError(data.pihole_last_error || '');
       setSpeedtestTrackerEnabled(Boolean(data.speedtest_tracker_enabled));
       setHomeboxEnabled(Boolean(data.homebox_enabled));
       setHomeboxUrl(data.homebox_url || '');
@@ -5404,6 +5422,10 @@ function SettingsPage({ onSaved }) {
         adguard_username: adguardUsername.trim(),
         adguard_sync_interval: adguardSyncInterval,
         adguard_retention_days: adguardRetentionDays,
+        pihole_enabled: piholeEnabled,
+        pihole_url: piholeUrl.trim(),
+        pihole_sync_interval: piholeSyncInterval,
+        pihole_retention_days: piholeRetentionDays,
         speedtest_tracker_enabled: speedtestTrackerEnabled,
         homebox_enabled: homeboxEnabled,
         homebox_url: homeboxUrl.trim(),
@@ -5426,6 +5448,9 @@ function SettingsPage({ onSaved }) {
       }
       if (adguardPassword) {
         body.adguard_password = adguardPassword;
+      }
+      if (piholePassword) {
+        body.pihole_password = piholePassword;
       }
       if (speedtestTrackerApiToken) {
         body.speedtest_tracker_api_token = speedtestTrackerApiToken;
@@ -5550,6 +5575,42 @@ function SettingsPage({ onSaved }) {
       showErrorNotification(err);
     } finally {
       setSyncingAdguard(false);
+    }
+  }
+
+  async function testPiholeConnection() {
+    setTestingPihole(true);
+    setError('');
+    try {
+      const body = { url: piholeUrl.trim() };
+      if (piholePassword) {
+        body.password = piholePassword;
+      }
+      const payload = await apiRequest('integrations/pihole/test/', {
+        method: 'POST',
+        body,
+      });
+      showServerNotification(payload);
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification(err);
+    } finally {
+      setTestingPihole(false);
+    }
+  }
+
+  async function syncPiholeNow() {
+    setSyncingPihole(true);
+    setError('');
+    try {
+      const payload = await apiRequest('integrations/pihole/sync/', { method: 'POST' });
+      await loadSettings();
+      showServerNotification(payload);
+    } catch (err) {
+      setError(err.message);
+      showErrorNotification(err);
+    } finally {
+      setSyncingPihole(false);
     }
   }
 
@@ -6268,7 +6329,7 @@ function SettingsPage({ onSaved }) {
               <Title order={3}>Integrations</Title>
               <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
             </Box>
-            <Badge variant="light">4 available</Badge>
+            <Badge variant="light">5 available</Badge>
           </Group>
         <Tabs
           value={integrationCategory}
@@ -6305,7 +6366,11 @@ function SettingsPage({ onSaved }) {
                 <Switch
                   label="Enabled"
                   checked={adguardEnabled}
-                  onChange={(event) => setAdguardEnabled(event.currentTarget.checked)}
+                  onChange={(event) => {
+                    const enabled = event.currentTarget.checked;
+                    setAdguardEnabled(enabled);
+                    if (enabled) setPiholeEnabled(false);
+                  }}
                 />
               </Group>
               <Text size="sm" c="dimmed" mt={4}>
@@ -6395,6 +6460,118 @@ function SettingsPage({ onSaved }) {
                 onClick={syncAdguardNow}
                 loading={syncingAdguard}
                 disabled={!adguardEnabled || !adguardConfigured || testingAdguard}
+              >
+                Sync now
+              </Button>
+            </Group>
+          </Group>
+        </Stack>
+        <Stack className="settings-subsection" gap="sm">
+          <Group justify="space-between" align="flex-start">
+            <Box>
+              <Group gap="sm">
+                <Image
+                  src="/integrations/pi-hole.svg"
+                  alt=""
+                  aria-hidden="true"
+                  w={24}
+                  h={24}
+                  fit="contain"
+                />
+                <Text fw={700}>Pi-hole</Text>
+                <Switch
+                  label="Enabled"
+                  checked={piholeEnabled}
+                  onChange={(event) => {
+                    const enabled = event.currentTarget.checked;
+                    setPiholeEnabled(enabled);
+                    if (enabled) setAdguardEnabled(false);
+                  }}
+                />
+              </Group>
+              <Text size="sm" c="dimmed" mt={4}>
+                Sync aggregated DNS activity and discover clients from Pi-hole v6 DHCP leases.
+                Only one DNS provider can be active at a time.
+              </Text>
+            </Box>
+            <Badge color={piholeConfigured && piholeEnabled ? 'teal' : 'gray'} variant="light">
+              {piholeConfigured ? 'Configured' : 'Not configured'}
+            </Badge>
+          </Group>
+
+          <SimpleGrid cols={{ base: 1, md: 2 }}>
+            <TextInput
+              label="Pi-hole URL"
+              placeholder="http://192.168.1.2"
+              value={piholeUrl}
+              onChange={(event) => setPiholeUrl(event.currentTarget.value)}
+              disabled={!piholeEnabled}
+            />
+            <PasswordInput
+              label="Application password"
+              placeholder={piholeConfigured ? 'Saved application password' : 'Application password'}
+              value={piholePassword}
+              onChange={(event) => setPiholePassword(event.currentTarget.value)}
+              disabled={!piholeEnabled}
+            />
+          </SimpleGrid>
+          {piholeConfigured && (
+            <Text size="xs" c="dimmed">
+              Leave the application password blank to keep the saved password.
+            </Text>
+          )}
+
+          <Group justify="space-between" align="flex-end" wrap="wrap">
+            <Group align="flex-end" wrap="wrap">
+              <NumberInput
+                w={170}
+                label="Sync interval"
+                value={piholeSyncInterval}
+                onChange={(value) => setPiholeSyncInterval(Number(value) || 5)}
+                min={1}
+                max={1440}
+                suffix=" min"
+                disabled={!piholeEnabled}
+              />
+              <NumberInput
+                w={170}
+                label="Activity retention"
+                value={piholeRetentionDays}
+                onChange={(value) => setPiholeRetentionDays(Number(value) || 90)}
+                min={1}
+                max={3650}
+                suffix=" days"
+                disabled={!piholeEnabled}
+              />
+              <Box pb={6}>
+                <Text size="xs" c="dimmed">
+                  {piholeLastSyncAt
+                    ? `Last sync: ${formatDate(piholeLastSyncAt, timeZone)}`
+                    : 'Not synced yet'}
+                </Text>
+                {piholeLastError && (
+                  <Text size="xs" c="red" maw={420} className="wrap-text">
+                    Last error: {piholeLastError}
+                  </Text>
+                )}
+              </Box>
+            </Group>
+            <Group gap="sm">
+              <Button
+                variant="default"
+                leftSection={<IconSend size={18} />}
+                onClick={testPiholeConnection}
+                loading={testingPihole}
+                disabled={!piholeEnabled || !piholeUrl.trim() || syncingPihole}
+              >
+                Test connection
+              </Button>
+              <Button
+                variant="light"
+                leftSection={<IconRefresh size={18} />}
+                onClick={syncPiholeNow}
+                loading={syncingPihole}
+                disabled={!piholeEnabled || !piholeConfigured || testingPihole}
               >
                 Sync now
               </Button>
@@ -7160,7 +7337,9 @@ function DNSActivityPage({ timeZone, onSelectDevice }) {
           </PageIcon>
           <Box>
             <Title order={2}>DNS Activity</Title>
-            <Text c="dimmed">AdGuard Home destinations grouped by device</Text>
+            <Text c="dimmed">
+              {integration?.provider_name || 'DNS provider'} destinations grouped by device
+            </Text>
           </Box>
         </Group>
         <Group gap="xs">
@@ -7173,7 +7352,7 @@ function DNSActivityPage({ timeZone, onSelectDevice }) {
               variant="default"
               leftSection={<IconArrowUpRight size={17} />}
             >
-              Open AdGuard Home
+              Open {integration?.provider_name || 'DNS provider'}
             </Button>
           )}
           <Badge variant="light">{number(summary?.unique_domains)} domains</Badge>
@@ -7184,7 +7363,7 @@ function DNSActivityPage({ timeZone, onSelectDevice }) {
       {error && <Alert color="red" icon={<IconAlertCircle size={18} />}>{error}</Alert>}
       {!integration?.enabled && !loading && (
         <Alert color="blue" icon={<IconWorldSearch size={18} />}>
-          Enable and configure AdGuard Home in Settings to collect DNS activity.
+          Enable and configure AdGuard Home or Pi-hole in Settings to collect DNS activity.
         </Alert>
       )}
       {integration?.last_error && (
@@ -7763,7 +7942,8 @@ function Dashboard({
     : 'Version history';
   const displayTimeZone = appSettings?.time_zone || dashboardTimeZone || undefined;
   const showDnsActivity = Boolean(
-    integrationStatus?.adguard?.enabled && integrationStatus?.adguard?.configured
+    (integrationStatus?.adguard?.enabled && integrationStatus?.adguard?.configured)
+    || (integrationStatus?.pihole?.enabled && integrationStatus?.pihole?.configured)
   );
   const showDockerInventory = Boolean(integrationStatus?.docker?.configured);
   const homeBoxStatusKnown = Boolean(integrationStatus?.homebox);
