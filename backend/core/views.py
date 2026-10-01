@@ -43,6 +43,7 @@ from .maintenance import cleanup_activity
 from .serializers import (
     AdGuardUnmatchedClientSerializer,
     AdGuardConnectionSerializer,
+    PiHoleConnectionSerializer,
     AppSettingsSerializer,
     DeviceDNSActivitySerializer,
     DeviceBulkUpdateSerializer,
@@ -96,6 +97,7 @@ from .notifications import (
     send_webhook_test,
 )
 from .adguard import AdGuardError, sync_adguard_query_log, test_adguard_connection
+from .pihole import PiHoleError, sync_pihole, test_pihole_connection
 from .speedtest_tracker import SpeedtestTrackerError, latest_speedtest_result
 from .diagnostics import build_diagnostics_report
 from .user_messages import error_response, scan_error_message, success_response
@@ -1311,6 +1313,81 @@ def sync_adguard(request):
     )
 
 
+@extend_schema(request=PiHoleConnectionSerializer, responses=OpenApiTypes.OBJECT)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def test_pihole(request):
+    serializer = PiHoleConnectionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    config = AppSettings.load()
+    password = data.get("password") or config.pihole_password
+    try:
+        result = test_pihole_connection(data["url"], password)
+    except PiHoleError as exc:
+        return error_response(
+            "Pi-hole connection failed",
+            str(exc),
+            response_status=status.HTTP_502_BAD_GATEWAY,
+        )
+    return success_response(
+        result,
+        "Pi-hole connected",
+        "Connection succeeded. Query and DHCP APIs are available.",
+    )
+
+
+@extend_schema(request=None, responses=OpenApiTypes.OBJECT)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def sync_pihole_now(request):
+    try:
+        result = sync_pihole()
+    except PiHoleError as exc:
+        return error_response(
+            "Pi-hole sync failed",
+            str(exc),
+            response_status=status.HTTP_502_BAD_GATEWAY,
+        )
+    return success_response(
+        result,
+        "Pi-hole synced",
+        (
+            f"Matched {result.get('matched', 0)} queries and processed "
+            f"{result.get('leases', 0)} DHCP leases."
+        ),
+    )
+
+
+def dns_integration_payload(config, *, include_web_url=False):
+    if config.pihole_enabled:
+        payload = {
+            "provider": "pihole",
+            "provider_name": "Pi-hole",
+            "enabled": True,
+            "configured": bool(config.pihole_url and config.pihole_password),
+            "last_sync_at": utc_isoformat(config.pihole_last_sync_at),
+            "last_error": config.pihole_last_error,
+        }
+        if include_web_url:
+            payload["web_url"] = config.pihole_url
+        return payload
+    payload = {
+        "provider": "adguard",
+        "provider_name": "AdGuard Home",
+        "enabled": config.adguard_enabled,
+        "configured": bool(
+            config.adguard_url
+            and (not config.adguard_username or config.adguard_password)
+        ),
+        "last_sync_at": utc_isoformat(config.adguard_last_sync_at),
+        "last_error": config.adguard_last_error,
+    }
+    if include_web_url:
+        payload["web_url"] = config.adguard_url
+    return payload
+
+
 @extend_schema(request=SpeedtestTrackerConnectionSerializer, responses=OpenApiTypes.OBJECT)
 @api_view(["POST"])
 @permission_classes([permissions.IsAdminUser])
@@ -1379,7 +1456,9 @@ def device_dns_activity(request):
         raise ValidationError({"id": "Device id is required."})
 
     target = get_object_or_404(Device, pk=id_)
-    base_queryset = DeviceDNSActivity.objects.filter(device=target)
+    config = AppSettings.load()
+    provider = "pihole" if config.pihole_enabled else "adguard"
+    base_queryset = DeviceDNSActivity.objects.filter(device=target, provider=provider)
     queryset = base_queryset
     search = str(request.query_params.get("search") or "").strip()
     blocked = parse_bool_param(request.query_params, "blocked")
@@ -1415,7 +1494,6 @@ def device_dns_activity(request):
         default_limit=100,
         max_limit=500,
     )
-    config = AppSettings.load()
     return Response(
         {
             **payload,
@@ -1429,15 +1507,7 @@ def device_dns_activity(request):
                     .first()
                 ),
             },
-            "integration": {
-                "enabled": config.adguard_enabled,
-                "configured": bool(
-                    config.adguard_url
-                    and (not config.adguard_username or config.adguard_password)
-                ),
-                "last_sync_at": utc_isoformat(config.adguard_last_sync_at),
-                "last_error": config.adguard_last_error,
-            },
+            "integration": dns_integration_payload(config),
         },
         status=status.HTTP_200_OK,
     )
@@ -1447,7 +1517,9 @@ def device_dns_activity(request):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def dns_activity(request):
-    base_queryset = DeviceDNSActivity.objects.select_related("device")
+    config = AppSettings.load()
+    provider = "pihole" if config.pihole_enabled else "adguard"
+    base_queryset = DeviceDNSActivity.objects.filter(provider=provider).select_related("device")
     queryset = base_queryset
     search = str(request.query_params.get("search") or "").strip()
     blocked = parse_bool_param(request.query_params, "blocked")
@@ -1490,7 +1562,6 @@ def dns_activity(request):
         default_limit=100,
         max_limit=500,
     )
-    config = AppSettings.load()
     return Response(
         {
             **payload,
@@ -1505,16 +1576,7 @@ def dns_activity(request):
                     .first()
                 ),
             },
-            "integration": {
-                "enabled": config.adguard_enabled,
-                "configured": bool(
-                    config.adguard_url
-                    and (not config.adguard_username or config.adguard_password)
-                ),
-                "web_url": config.adguard_url,
-                "last_sync_at": utc_isoformat(config.adguard_last_sync_at),
-                "last_error": config.adguard_last_error,
-            },
+            "integration": dns_integration_payload(config, include_web_url=True),
         },
         status=status.HTTP_200_OK,
     )
@@ -1524,7 +1586,9 @@ def dns_activity(request):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def dns_unmatched_clients(request):
-    base_queryset = AdGuardUnmatchedClient.objects.all()
+    config = AppSettings.load()
+    provider = "pihole" if config.pihole_enabled else "adguard"
+    base_queryset = AdGuardUnmatchedClient.objects.filter(provider=provider)
     queryset = base_queryset
     search = str(request.query_params.get("search") or "").strip()
     ordering = request.query_params.get("ordering", "-last_seen")
@@ -2601,6 +2665,12 @@ def scan_status(request):
                             not app_config.adguard_username
                             or app_config.adguard_password
                         )
+                    ),
+                },
+                "pihole": {
+                    "enabled": app_config.pihole_enabled,
+                    "configured": bool(
+                        app_config.pihole_url and app_config.pihole_password
                     ),
                 },
                 "speedtest_tracker": {

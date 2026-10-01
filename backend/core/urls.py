@@ -40,7 +40,9 @@ from .views import (
     maintenance_cleanup,
     test_notification_channel,
     sync_adguard,
+    sync_pihole_now,
     test_adguard,
+    test_pihole,
     speedtest_tracker_latest,
     test_speedtest_tracker,
     users,
@@ -80,6 +82,8 @@ urlpatterns = [
     path("settings/", app_settings, name="app-settings"),
     path("integrations/adguard/test/", test_adguard, name="test-adguard"),
     path("integrations/adguard/sync/", sync_adguard, name="sync-adguard"),
+    path("integrations/pihole/test/", test_pihole, name="test-pihole"),
+    path("integrations/pihole/sync/", sync_pihole_now, name="sync-pihole"),
     path(
         "integrations/speedtest-tracker/test/",
         test_speedtest_tracker,

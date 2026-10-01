@@ -49,6 +49,7 @@ class Device(models.Model):
         MANUF = "manuf", "Wireshark manuf"
         INFERRED = "inferred", "Inferred"
         IMPORTED = "imported", "Imported inventory"
+        PIHOLE = "pihole", "Pi-hole DHCP"
 
     class Status(models.TextChoices):
         ONLINE = "online", "Online"
@@ -361,6 +362,7 @@ class DockerContainer(models.Model):
 
 
 class DeviceDNSActivity(models.Model):
+    provider = models.CharField(max_length=16, default="adguard", db_index=True)
     device = models.ForeignKey(
         Device,
         related_name="dns_activity",
@@ -380,7 +382,7 @@ class DeviceDNSActivity(models.Model):
         ordering = ["-last_seen", "domain", "query_type"]
         constraints = [
             models.UniqueConstraint(
-                fields=["device", "domain", "query_type"],
+                fields=["provider", "device", "domain", "query_type"],
                 name="unique_device_dns_domain_type",
             )
         ]
@@ -400,7 +402,8 @@ class DeviceDNSActivity(models.Model):
 
 
 class AdGuardUnmatchedClient(models.Model):
-    client = models.CharField(max_length=255, unique=True)
+    provider = models.CharField(max_length=16, default="adguard", db_index=True)
+    client = models.CharField(max_length=255)
     query_count = models.PositiveBigIntegerField(default=0)
     blocked_count = models.PositiveBigIntegerField(default=0)
     first_seen = models.DateTimeField()
@@ -411,6 +414,12 @@ class AdGuardUnmatchedClient(models.Model):
 
     class Meta:
         ordering = ["-last_seen", "client"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["provider", "client"],
+                name="unique_dns_provider_unmatched_client",
+            )
+        ]
         indexes = [
             models.Index(fields=["-last_seen"], name="core_ag_unmatched_seen_idx"),
             models.Index(fields=["-query_count"], name="core_ag_unmatched_query_idx"),
@@ -702,6 +711,14 @@ class AppSettings(models.Model):
     adguard_retention_days = models.PositiveIntegerField(default=90)
     adguard_last_sync_at = models.DateTimeField(blank=True, null=True)
     adguard_last_error = models.TextField(blank=True, default="")
+    pihole_enabled = models.BooleanField(default=False)
+    pihole_url = models.URLField(max_length=2048, blank=True, default="")
+    pihole_password = models.CharField(max_length=255, blank=True, default="")
+    pihole_sync_interval = models.PositiveIntegerField(default=5)
+    pihole_retention_days = models.PositiveIntegerField(default=90)
+    pihole_last_sync_at = models.DateTimeField(blank=True, null=True)
+    pihole_last_query_id = models.PositiveBigIntegerField(blank=True, null=True)
+    pihole_last_error = models.TextField(blank=True, default="")
     speedtest_tracker_enabled = models.BooleanField(default=False)
     homebox_enabled = models.BooleanField(default=False)
     homebox_url = models.URLField(max_length=2048, blank=True, default="")
@@ -785,6 +802,14 @@ class AppSettings(models.Model):
             "adguard_retention_days": 90,
             "adguard_last_sync_at": None,
             "adguard_last_error": "",
+            "pihole_enabled": False,
+            "pihole_url": "",
+            "pihole_password": "",
+            "pihole_sync_interval": 5,
+            "pihole_retention_days": 90,
+            "pihole_last_sync_at": None,
+            "pihole_last_query_id": None,
+            "pihole_last_error": "",
             "speedtest_tracker_enabled": False,
             "speedtest_tracker_url": "",
             "speedtest_tracker_api_token": "",

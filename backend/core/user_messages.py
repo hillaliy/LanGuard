@@ -66,6 +66,7 @@ def stored_error_message(kind, value):
         return ""
     messages = {
         "adguard": "The last AdGuard Home synchronization failed. Test the connection and try again.",
+        "pihole": "The last Pi-hole synchronization failed. Test the connection and try again.",
         "notification": "The notification could not be delivered. Check the channel configuration.",
         "scan": "The network scan could not be completed. Check the scanner container.",
     }
