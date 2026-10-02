@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Split the frontend application into focused route, shell, authentication, controller, component, and utility modules while preserving existing navigation and behavior.
+- Fixed the device inventory appearing below the Dashboard after the frontend module split.
+- Displayed Archived instead of Known for archived devices in inventory and device-detail status badges.
 - Added a read-only Pi-hole v6 integration with application-password authentication, scheduled DNS activity synchronization, DHCP client discovery, protected known-device identity, and shared network-wide and per-device DNS views.
 - Moved Docker container inventory from individual device pages to a dedicated responsive Docker page, with centralized search, host summaries, clearer port mappings, neutral reachability confirmation, and navigation shown only after configuration.
 - Removed duplicate global settings actions, hide them on screens whose local actions save immediately, and automatically save the scheduled activity-retention period.
