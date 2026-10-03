@@ -3,8 +3,13 @@
 ## Unreleased
 
 - Split the frontend application into focused route, shell, authentication, controller, component, and utility modules while preserving existing navigation and behavior.
-- Split Settings into focused tab components with scoped controllers while preserving the existing loading and save behavior.
-- Split device details into focused header, overview/edit, history, DNS activity, field, and modal components without changing device workflows.
+- Split Settings into focused tab components and domain-specific state hooks while preserving the existing loading and save behavior.
+- Split device details into focused header, overview/edit, history, DNS activity, port-scan, field, modal, and state-management modules without changing device workflows.
+- Split Home Map presentation, room rendering, drag-and-drop layout state, and persistence into focused modules without changing layout behavior.
+- Split the application shell into focused header, navigation, route-content, and shared-modal components while preserving desktop and mobile navigation.
+- Split the Dashboard into focused status, summary, insight, and scan-detail components while preserving its calculations and navigation actions.
+- Split authentication and user management into focused login, account-form, state, and modal modules while preserving permission and account workflows.
+- Split integration services and notification channels into focused settings components while preserving their existing save, test, and sync behavior.
 - Split the main frontend controller into focused inventory, navigation, activity, and session hooks while preserving its public interface.
 - Split the device inventory into focused filter, role, toolbar, desktop, mobile, and pagination components while preserving its responsive workflows.
 - Unified the Devices navigation and inventory heading icons for clearer visual consistency.

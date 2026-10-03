@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { getStoredUser } from './api';
-import { AuthScreen } from './auth/AuthViews';
+import AuthScreen from './auth/AuthScreen';
 import AppShell from './shell/AppShell';
 
 export function LanGuardApplication({
