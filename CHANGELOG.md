@@ -5,6 +5,7 @@
 - Split the frontend application into focused route, shell, authentication, controller, component, and utility modules while preserving existing navigation and behavior.
 - Split Settings into focused tab components with scoped controllers while preserving the existing loading and save behavior.
 - Split device details into focused header, overview/edit, history, DNS activity, field, and modal components without changing device workflows.
+- Split the main frontend controller into focused inventory, navigation, activity, and session hooks while preserving its public interface.
 - Fixed the device inventory appearing below the Dashboard after the frontend module split.
 - Displayed Archived instead of Known for archived devices in inventory and device-detail status badges.
 - Added a read-only Pi-hole v6 integration with application-password authentication, scheduled DNS activity synchronization, DHCP client discovery, protected known-device identity, and shared network-wide and per-device DNS views.
