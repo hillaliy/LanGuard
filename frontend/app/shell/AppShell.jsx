@@ -1,5 +1,5 @@
 import { ActionIcon, Alert, Box, Burger, Button, Container, Divider, Drawer, Group, Image, LoadingOverlay, Modal, Stack, Text, Title, Tooltip, UnstyledButton } from '@mantine/core';
-import { IconAlertCircle, IconBell, IconBrandDocker, IconBrandGithub, IconClock, IconDeviceDesktop, IconHistory, IconLayoutDashboard, IconLogout, IconRefresh, IconSettings, IconShieldLock, IconSmartHome, IconWorldSearch } from '@tabler/icons-react';
+import { IconAlertCircle, IconBell, IconBrandDocker, IconBrandGithub, IconClock, IconHistory, IconLayoutDashboard, IconLogout, IconNetwork, IconRefresh, IconSettings, IconShieldLock, IconSmartHome, IconWorldSearch } from '@tabler/icons-react';
 import { getAdminUrl } from "../api";
 import { UserManagementModal } from "../auth/AuthViews";
 import { userDisplayName, userInitials } from "../auth/user";
@@ -49,7 +49,7 @@ function PrimaryNavigation({
         className="sidebar-nav-button"
         variant={!devicePageId && mainView === 'devices' ? 'filled' : 'subtle'}
         justify="flex-start"
-        leftSection={<IconDeviceDesktop size={18} />}
+        leftSection={<IconNetwork size={18} />}
         onClick={() => navigate('devices')}
         fullWidth
       >
