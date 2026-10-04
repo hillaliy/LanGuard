@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 
 from core.models import AppSettings, ScanRun
-from core.scan import scan
+from core.scanning.orchestration import scan
 
 
 class Command(BaseCommand):

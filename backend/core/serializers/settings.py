@@ -277,7 +277,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             )
         normalized_submitted_labels = {}
         if submitted_labels is not None:
-            from ..scan import validate_ip_range
+            from ..scanning.ranges import validate_ip_range
 
             for network_range, label in submitted_labels.items():
                 try:
@@ -473,7 +473,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return value
 
     def validate_ip_range(self, value):
-        from ..scan import validate_ip_range
+        from ..scanning.ranges import validate_ip_range
 
         try:
             return validate_ip_range(value)
@@ -481,7 +481,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(str(exc)) from exc
 
     def validate_scan_ranges(self, value):
-        from ..scan import validate_ip_ranges
+        from ..scanning.ranges import validate_ip_ranges
 
         try:
             return validate_ip_ranges(value)
@@ -577,4 +577,3 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         except ValueError as exc:
             raise serializers.ValidationError("Enter time in HH:MM format.") from exc
         return value
-

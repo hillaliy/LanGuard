@@ -17,7 +17,7 @@ from ..access_control import CanEditDevices, CanRunScans
 from ..api import paginated_payload, parse_bool_param, parse_int_param
 from ..datetime_utils import utc_isoformat
 from ..models import AppSettings, Device, DevicePort, NetworkEvent
-from ..scan import detect_web_interface
+from ..scanning.discovery import detect_web_interface
 from ..serializers.devices import (
     DeviceBulkUpdateSerializer,
     DeviceSerializer,

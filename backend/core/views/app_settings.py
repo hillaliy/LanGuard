@@ -6,7 +6,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from ..models import AppSettings
-from ..scan import mark_devices_outside_scan_ranges_offline
+from ..scanning.presence import mark_devices_outside_scan_ranges_offline
 from ..serializers.settings import AppSettingsSerializer
 from ..user_messages import success_response
 from ..versioning import fetch_latest_version

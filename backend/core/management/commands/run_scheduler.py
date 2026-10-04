@@ -9,7 +9,8 @@ from django.core.management.base import BaseCommand
 from core.maintenance import cleanup_all_activity
 from core.models import AppSettings, ScanRun
 from core.notifications import retry_failed_notifications
-from core.scan import ScanAlreadyRunning, scan
+from core.scanning.lifecycle import ScanAlreadyRunning
+from core.scanning.orchestration import scan
 from core.integrations.adguard import sync_adguard_query_log
 from core.integrations.pihole import sync_pihole
 from core.versioning import check_for_version_update

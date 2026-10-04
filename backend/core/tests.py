@@ -48,50 +48,55 @@ from .port_guidance import PORT_CATALOG, port_guidance
 from .serializers.devices import device_attention_reasons, device_identity
 from .views.inventory import parse_inventory_datetime
 from .versioning import check_for_version_update, is_newer_version
-from .scan import (
+from .scanning.discovery import (
+    MDNS_SERVICE_HOSTNAME_CACHE,
+    detect_web_interface,
+    dns_encode_name,
+    dns_ptr_names,
+    dns_server_reverse_hostname,
+    get_hostname,
+    hostname_from_device_description,
+    llmnr_reverse_hostname,
+    mdns_multicast_responses,
+    mdns_query_responses,
+    mdns_reverse_hostname,
+    mdns_service_hostname,
+    mdns_service_hostname_map,
+    mdns_service_hostnames_from_response,
+    mdns_service_hostnames_from_responses,
+    mdns_service_types_from_response,
+    ssdp_hostname_from_response,
+    ssdp_metadata_from_response,
+    web_interface_candidates,
+)
+from .scanning.events import create_event
+from .scanning.identity import (
+    clean_hostname,
+    guess_device_identity,
+    mismatched_default_haa_hostname,
+    preferred_vendor,
+)
+from .scanning.lifecycle import (
     STALE_SCAN_ERROR,
     ScanAlreadyRunning,
     active_scan_run,
     claim_scan_run,
-    clear_stale_gateways,
-    create_event,
-    clean_hostname,
+    scan_failure_diagnostics,
+)
+from .scanning.network import (
     default_gateway_from_proc_route,
     discover_devices,
-    detect_web_interface,
-    dns_server_reverse_hostname,
-    dns_encode_name,
-    dns_ptr_names,
-    guess_device_identity,
-    get_hostname,
-    hostname_from_device_description,
-    llmnr_reverse_hostname,
     local_scanner_interface,
-    ManufVendorDB,
-    mark_missing_devices_offline,
-    mdns_service_hostname,
-    mdns_service_hostname_map,
-    MDNS_SERVICE_HOSTNAME_CACHE,
-    mdns_query_responses,
-    mdns_reverse_hostname,
-    mdns_service_hostnames_from_response,
-    mdns_service_hostnames_from_responses,
-    mdns_service_types_from_response,
-    mdns_multicast_responses,
-    mismatched_default_haa_hostname,
-    manuf_vendor,
-    normalize_scan_ports,
-    preferred_vendor,
-    scan,
-    scan_failure_diagnostics,
-    ssdp_hostname_from_response,
-    ssdp_metadata_from_response,
-    sync_discovered_device,
-    sync_device_ports,
-    validate_ip_range,
-    validate_ip_ranges,
-    web_interface_candidates,
 )
+from .scanning.orchestration import scan
+from .scanning.ports import normalize_scan_ports, sync_device_ports
+from .scanning.presence import (
+    clear_stale_gateways,
+    mark_missing_devices_offline,
+)
+from .scanning.ranges import validate_ip_range, validate_ip_ranges
+from .scanning.reconciliation import sync_discovered_device
+from .scanning.vendor import ManufVendorDB, manuf_vendor
 
 
 class ProductionSettingsTests(SimpleTestCase):
@@ -151,8 +156,8 @@ class HostnameResolutionTests(SimpleTestCase):
         self.assertEqual(clean_hostname("_gateway"), "")
         self.assertEqual(clean_hostname("gateway.local"), "")
 
-    @patch("core.scan.dns_ptr_names", return_value=["deco-x60.local."])
-    @patch("core.scan.udp_exchange", return_value=b"dns response")
+    @patch("core.scanning.discovery.dns_ptr_names", return_value=["deco-x60.local."])
+    @patch("core.scanning.discovery.udp_exchange", return_value=b"dns response")
     def test_gateway_dns_reverse_lookup_uses_router_ptr_record(self, exchange, _ptr_names):
         self.assertEqual(
             dns_server_reverse_hostname("192.168.1.110", "192.168.1.1"),
@@ -160,21 +165,21 @@ class HostnameResolutionTests(SimpleTestCase):
         )
         self.assertEqual(exchange.call_args.args[1:3], ("192.168.1.1", 53))
 
-    @patch("core.scan.netbios_hostname", return_value="")
-    @patch("core.scan.ssdp_hostname", return_value="")
-    @patch("core.scan.llmnr_reverse_hostname", return_value="")
-    @patch("core.scan.mdns_service_hostname", return_value="")
-    @patch("core.scan.mdns_reverse_hostname", return_value="")
-    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    @patch("core.scanning.discovery.netbios_hostname", return_value="")
+    @patch("core.scanning.discovery.ssdp_hostname", return_value="")
+    @patch("core.scanning.discovery.llmnr_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.mdns_service_hostname", return_value="")
+    @patch("core.scanning.discovery.mdns_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_returns_blank_when_reverse_dns_is_unavailable(self, *_):
         self.assertEqual(get_hostname("192.168.1.10"), "")
 
-    @patch("core.scan.netbios_hostname", return_value="")
-    @patch("core.scan.ssdp_hostname", return_value="")
-    @patch("core.scan.llmnr_reverse_hostname", return_value="")
-    @patch("core.scan.mdns_service_hostname", return_value="")
-    @patch("core.scan.mdns_reverse_hostname", return_value="haa switch")
-    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    @patch("core.scanning.discovery.netbios_hostname", return_value="")
+    @patch("core.scanning.discovery.ssdp_hostname", return_value="")
+    @patch("core.scanning.discovery.llmnr_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.mdns_service_hostname", return_value="")
+    @patch("core.scanning.discovery.mdns_reverse_hostname", return_value="haa switch")
+    @patch("core.scanning.discovery.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_mdns_fallback(self, *_):
         self.assertEqual(get_hostname("192.168.1.21"), "haa switch")
         self.assertEqual(
@@ -182,21 +187,21 @@ class HostnameResolutionTests(SimpleTestCase):
             ("haa switch", Device.IdentitySource.MDNS),
         )
 
-    @patch("core.scan.netbios_hostname", return_value="")
-    @patch("core.scan.ssdp_hostname", return_value="")
-    @patch("core.scan.llmnr_reverse_hostname", return_value="")
-    @patch("core.scan.mdns_service_hostname", return_value="HAA 123456")
-    @patch("core.scan.mdns_reverse_hostname", return_value="")
-    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    @patch("core.scanning.discovery.netbios_hostname", return_value="")
+    @patch("core.scanning.discovery.ssdp_hostname", return_value="")
+    @patch("core.scanning.discovery.llmnr_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.mdns_service_hostname", return_value="HAA 123456")
+    @patch("core.scanning.discovery.mdns_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_mdns_service_fallback(self, *_):
         self.assertEqual(get_hostname("192.168.1.42"), "HAA 123456")
 
-    @patch("core.scan.netbios_hostname", return_value="")
-    @patch("core.scan.ssdp_hostname", return_value="")
-    @patch("core.scan.llmnr_reverse_hostname", return_value="")
-    @patch("core.scan.mdns_service_hostname", return_value="living room speaker")
-    @patch("core.scan.mdns_reverse_hostname", return_value="")
-    @patch("core.scan.socket.gethostbyaddr", return_value=("iphone.local", [], ["192.168.1.30"]))
+    @patch("core.scanning.discovery.netbios_hostname", return_value="")
+    @patch("core.scanning.discovery.ssdp_hostname", return_value="")
+    @patch("core.scanning.discovery.llmnr_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.mdns_service_hostname", return_value="living room speaker")
+    @patch("core.scanning.discovery.mdns_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.socket.gethostbyaddr", return_value=("iphone.local", [], ["192.168.1.30"]))
     def test_get_hostname_keeps_direct_hostname_before_metadata_hostname(
         self,
         _reverse_dns,
@@ -212,28 +217,28 @@ class HostnameResolutionTests(SimpleTestCase):
         ssdp.assert_not_called()
         netbios.assert_not_called()
 
-    @patch("core.scan.netbios_hostname", return_value="")
-    @patch("core.scan.ssdp_hostname", return_value="")
-    @patch("core.scan.llmnr_reverse_hostname", return_value="office pc")
-    @patch("core.scan.mdns_service_hostname", return_value="")
-    @patch("core.scan.mdns_reverse_hostname", return_value="")
-    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    @patch("core.scanning.discovery.netbios_hostname", return_value="")
+    @patch("core.scanning.discovery.ssdp_hostname", return_value="")
+    @patch("core.scanning.discovery.llmnr_reverse_hostname", return_value="office pc")
+    @patch("core.scanning.discovery.mdns_service_hostname", return_value="")
+    @patch("core.scanning.discovery.mdns_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_llmnr_fallback(self, *_):
         self.assertEqual(get_hostname("192.168.1.22"), "office pc")
 
-    @patch("core.scan.netbios_hostname", return_value="")
-    @patch("core.scan.ssdp_hostname", return_value="Archer BE550")
-    @patch("core.scan.llmnr_reverse_hostname", return_value="")
-    @patch("core.scan.mdns_service_hostname", return_value="")
-    @patch("core.scan.mdns_reverse_hostname", return_value="")
-    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    @patch("core.scanning.discovery.netbios_hostname", return_value="")
+    @patch("core.scanning.discovery.ssdp_hostname", return_value="Archer BE550")
+    @patch("core.scanning.discovery.llmnr_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.mdns_service_hostname", return_value="")
+    @patch("core.scanning.discovery.mdns_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_ssdp_fallback(self, *_):
         self.assertEqual(get_hostname("192.168.1.1"), "Archer BE550")
 
-    @patch("core.scan.netbios_hostname", return_value="")
-    @patch("core.scan.llmnr_reverse_hostname", return_value="")
-    @patch("core.scan.mdns_reverse_hostname", return_value="")
-    @patch("core.scan.socket.gethostbyaddr", side_effect=socket.herror)
+    @patch("core.scanning.discovery.netbios_hostname", return_value="")
+    @patch("core.scanning.discovery.llmnr_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.mdns_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.socket.gethostbyaddr", side_effect=socket.herror)
     def test_get_hostname_uses_preloaded_network_hint(self, *_):
         self.assertEqual(
             get_hostname("192.168.1.42", hostname_hints={"192.168.1.42": "HAA 123456"}),
@@ -279,8 +284,8 @@ class HostnameResolutionTests(SimpleTestCase):
             [],
         )
 
-    @patch("core.scan.udp_exchange", side_effect=OSError("timeout"))
-    @patch("core.scan.mdns_legacy_responses")
+    @patch("core.scanning.discovery.udp_exchange", side_effect=OSError("timeout"))
+    @patch("core.scanning.discovery.mdns_legacy_responses")
     def test_mdns_reverse_hostname_checks_all_one_shot_responses(self, legacy_responses, _):
         unrelated = (
             b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
@@ -303,7 +308,7 @@ class HostnameResolutionTests(SimpleTestCase):
 
         self.assertEqual(mdns_reverse_hostname("192.168.1.21"), "HAA 123456")
 
-    @patch("core.scan.udp_exchange")
+    @patch("core.scanning.discovery.udp_exchange")
     def test_llmnr_reverse_hostname_uses_matching_ptr(self, udp_exchange):
         packet = (
             b"\x4c\x47\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
@@ -377,7 +382,7 @@ class HostnameResolutionTests(SimpleTestCase):
             {"192.168.1.60": "Kitchen Sensor"},
         )
 
-    @patch("core.scan.mdns_query_responses")
+    @patch("core.scanning.discovery.mdns_query_responses")
     def test_mdns_service_hostname_does_not_trust_ptr_response_source_ip(self, mdns_responses):
         packet = (
             b"\x00\x00\x84\x00\x00\x00\x00\x01\x00\x00\x00\x00"
@@ -390,8 +395,8 @@ class HostnameResolutionTests(SimpleTestCase):
 
         self.assertEqual(mdns_service_hostname("192.168.1.42"), "")
 
-    @patch("core.scan.time.sleep")
-    @patch("core.scan.mdns_query_responses")
+    @patch("core.scanning.discovery.time.sleep")
+    @patch("core.scanning.discovery.mdns_query_responses")
     def test_mdns_service_hostname_retries_and_caches_service_map(self, mdns_responses, sleep):
         packet = (
             b"\x00\x00\x84\x00\x00\x00\x00\x02\x00\x00\x00\x00"
@@ -411,8 +416,8 @@ class HostnameResolutionTests(SimpleTestCase):
         self.assertEqual(mdns_responses.call_count, 3)
         self.assertEqual(sleep.call_count, 2)
 
-    @patch("core.scan.mdns_multicast_responses", side_effect=OSError("bind failed"))
-    @patch("core.scan.mdns_legacy_responses", return_value=[(b"response", "192.168.1.56")])
+    @patch("core.scanning.discovery.mdns_multicast_responses", side_effect=OSError("bind failed"))
+    @patch("core.scanning.discovery.mdns_legacy_responses", return_value=[(b"response", "192.168.1.56")])
     def test_mdns_query_uses_one_shot_responses_when_multicast_bind_fails(
         self,
         legacy_responses,
@@ -424,7 +429,7 @@ class HostnameResolutionTests(SimpleTestCase):
         )
         legacy_responses.assert_called_once()
 
-    @patch("core.scan.requests.get")
+    @patch("core.scanning.discovery.requests.get")
     def test_ssdp_hostname_from_response_fetches_device_description(self, get):
         get.return_value.text = "<root><friendlyName>Archer BE550</friendlyName></root>"
         response = (
@@ -435,7 +440,7 @@ class HostnameResolutionTests(SimpleTestCase):
 
         self.assertEqual(ssdp_hostname_from_response(response, "192.168.1.1"), "Archer BE550")
 
-    @patch("core.scan.requests.get")
+    @patch("core.scanning.discovery.requests.get")
     def test_ssdp_metadata_reads_vendor_and_model_from_device_description(self, get):
         get.return_value.text = (
             "<root><manufacturer>TP-Link Systems Inc.</manufacturer>"
@@ -451,7 +456,7 @@ class HostnameResolutionTests(SimpleTestCase):
             {"vendor": "TP-Link Systems Inc.", "hostname": "Deco X60"},
         )
 
-    @patch("core.scan.requests.get")
+    @patch("core.scanning.discovery.requests.get")
     def test_ssdp_hostname_from_response_ignores_other_device_location(self, get):
         response = (
             b"HTTP/1.1 200 OK\r\n"
@@ -469,7 +474,7 @@ class HostnameResolutionTests(SimpleTestCase):
         )
         self.assertEqual(web_interface_candidates("8.8.8.8", [80, 443]), [])
 
-    @patch("core.scan.requests.get")
+    @patch("core.scanning.discovery.requests.get")
     def test_detect_web_interface_tries_candidates_until_one_responds(self, get):
         response = Mock()
         get.side_effect = [requests.ConnectionError("closed"), response]
@@ -487,7 +492,7 @@ class HostnameResolutionTests(SimpleTestCase):
 
         self.assertEqual(entry, (0x70B3D50D0, 36, "ProHound Controles Eirelli"))
 
-    @patch("core.scan.ManufVendorDB.entries", return_value=[
+    @patch("core.scanning.vendor.ManufVendorDB.entries", return_value=[
         (0x70B3D5, 24, "Generic 24-bit Vendor"),
         (0x70B3D50D0, 36, "Specific 36-bit Vendor"),
     ])
@@ -1080,8 +1085,8 @@ class ScanLockTests(TestCase):
         self.assertNotIn("private-device-name", str(details))
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_default_gateway_ip", return_value="192.168.1.1")
-    @patch("core.scan.discover_devices", side_effect=RuntimeError("scanner stopped"))
+    @patch("core.scanning.orchestration.get_default_gateway_ip", return_value="192.168.1.1")
+    @patch("core.scanning.orchestration.discover_devices", side_effect=RuntimeError("scanner stopped"))
     def test_failed_scan_releases_lock(self, _, __):
         with self.assertRaisesRegex(RuntimeError, "scanner stopped"):
             scan(["192.168.1.0/24"], source=ScanRun.Source.MANUAL)
@@ -1269,7 +1274,7 @@ class ScanStabilityTests(TestCase):
 
     @override_settings(PORT_SCAN_ENABLED=False)
     @patch(
-        "core.scan.get_hostname",
+        "core.scanning.reconciliation.get_hostname",
         return_value=("HAA 826353", Device.IdentitySource.MDNS),
     )
     def test_mismatched_haa_hostname_is_silently_ignored(self, _):
@@ -1286,7 +1291,7 @@ class ScanStabilityTests(TestCase):
 
     @override_settings(PORT_SCAN_ENABLED=False)
     @patch(
-        "core.scan.get_hostname",
+        "core.scanning.reconciliation.get_hostname",
         return_value=("HAA 826353", Device.IdentitySource.MDNS),
     )
     def test_recent_ip_mac_conflict_blocks_ip_identity_and_marks_both_devices(
@@ -1334,7 +1339,7 @@ class ScanStabilityTests(TestCase):
         get_hostname.assert_not_called()
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname", return_value=("", ""))
+    @patch("core.scanning.reconciliation.get_hostname", return_value=("", ""))
     def test_ip_mac_conflict_remains_while_recent_conflict_is_still_detected(self, _):
         observed_at = timezone.now()
         original, duplicate = self.create_ip_mac_conflict(observed_at)
@@ -1355,7 +1360,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(duplicate.identity_conflict_reason, conflict_reason)
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname", return_value=("", ""))
+    @patch("core.scanning.reconciliation.get_hostname", return_value=("", ""))
     def test_resolved_ip_mac_conflict_is_cleared_for_all_affected_devices(self, _):
         observed_at = timezone.now()
         original, duplicate = self.create_ip_mac_conflict(observed_at)
@@ -1382,7 +1387,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(active_assignment.device, duplicate)
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname", return_value=("", ""))
+    @patch("core.scanning.reconciliation.get_hostname", return_value=("", ""))
     def test_resolved_ip_mac_conflict_returns_when_detected_again(self, _):
         observed_at = timezone.now()
         original, duplicate = self.create_ip_mac_conflict(observed_at)
@@ -1411,7 +1416,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(original.identity_conflict_reason, duplicate.identity_conflict_reason)
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname", return_value=("", ""))
+    @patch("core.scanning.reconciliation.get_hostname", return_value=("", ""))
     def test_resolving_ip_mac_conflict_keeps_other_attention_reasons(self, _):
         observed_at = timezone.now()
         _, duplicate = self.create_ip_mac_conflict(observed_at)
@@ -1435,7 +1440,7 @@ class ScanStabilityTests(TestCase):
 
     @override_settings(PORT_SCAN_ENABLED=False)
     @patch(
-        "core.scan.get_hostname",
+        "core.scanning.reconciliation.get_hostname",
         return_value=("Office printer", Device.IdentitySource.MDNS),
     )
     def test_stale_device_with_reused_ip_does_not_trigger_conflict(self, _):
@@ -1536,8 +1541,8 @@ class ScanStabilityTests(TestCase):
         )
 
     @override_settings(SCAN_ARP_RETRIES=2, SCAN_ARP_TIMEOUT=2)
-    @patch("core.scan.scapy.conf.route.route", return_value=("eth0", "192.168.1.20", "0.0.0.0"))
-    @patch("core.scan.scapy.srp")
+    @patch("core.scanning.network.scapy.conf.route.route", return_value=("eth0", "192.168.1.20", "0.0.0.0"))
+    @patch("core.scanning.network.scapy.srp")
     def test_discover_devices_retries_and_deduplicates_by_mac(self, srp, route):
         first = self.scan_element("192.168.1.10", "AA:BB:CC:DD:EE:01")
         second = self.scan_element("192.168.1.11", "AA:BB:CC:DD:EE:02")
@@ -1552,8 +1557,8 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(srp.call_args.kwargs["iface"], "eth0")
 
     @override_settings(SCAN_ARP_RETRIES=1, SCAN_ARP_TIMEOUT=2)
-    @patch("core.scan.scapy.conf.route.route")
-    @patch("core.scan.scapy.srp")
+    @patch("core.scanning.network.scapy.conf.route.route")
+    @patch("core.scanning.network.scapy.srp")
     def test_discover_devices_uses_route_interface_for_each_network(self, srp, route):
         first = self.scan_element("192.168.1.10", "aa:bb:cc:dd:ee:01")
         second = self.scan_element("192.168.20.10", "aa:bb:cc:dd:ee:02")
@@ -1575,8 +1580,8 @@ class ScanStabilityTests(TestCase):
             ["eth0", "eth0.20"],
         )
 
-    @patch("core.scan.scapy.get_if_hwaddr", return_value="AA:BB:CC:DD:EE:FF")
-    @patch("core.scan.scapy.conf.route.route")
+    @patch("core.scanning.network.scapy.get_if_hwaddr", return_value="AA:BB:CC:DD:EE:FF")
+    @patch("core.scanning.network.scapy.conf.route.route")
     def test_local_scanner_interface_uses_route_for_scanned_network(self, route, _):
         route.return_value = ("eth0", "192.168.1.20", "192.168.1.1")
 
@@ -1591,15 +1596,15 @@ class ScanStabilityTests(TestCase):
             {"ip": "192.168.1.20", "mac": "aa:bb:cc:dd:ee:ff"},
         )
 
-    @patch("core.scan.scapy.get_if_hwaddr", return_value="AA:BB:CC:DD:EE:FF")
-    @patch("core.scan.scapy.conf.route.route")
+    @patch("core.scanning.network.scapy.get_if_hwaddr", return_value="AA:BB:CC:DD:EE:FF")
+    @patch("core.scanning.network.scapy.conf.route.route")
     def test_local_scanner_interface_ignores_source_outside_scan_range(self, route, _):
         route.return_value = ("eth0", "10.0.0.20", "10.0.0.1")
 
         self.assertIsNone(local_scanner_interface("192.168.1.0/24"))
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname", return_value="server")
+    @patch("core.scanning.reconciliation.get_hostname", return_value="server")
     def test_local_scanner_updates_imported_device_without_duplicate(self, _):
         device = Device.objects.create(
             name="Server",
@@ -1627,14 +1632,14 @@ class ScanStabilityTests(TestCase):
         )
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.mark_missing_devices_offline")
-    @patch("core.scan.clear_stale_gateways")
-    @patch("core.scan.sync_discovered_device")
-    @patch("core.scan.ssdp_metadata_map", return_value={})
-    @patch("core.scan.discover_hostname_hints", return_value={})
-    @patch("core.scan.local_scanner_interface")
-    @patch("core.scan.discover_devices")
-    @patch("core.scan.get_default_gateway_ip", return_value="192.168.1.1")
+    @patch("core.scanning.orchestration.mark_missing_devices_offline")
+    @patch("core.scanning.orchestration.clear_stale_gateways")
+    @patch("core.scanning.orchestration.sync_discovered_device")
+    @patch("core.scanning.orchestration.ssdp_metadata_map", return_value={})
+    @patch("core.scanning.orchestration.discover_hostname_hints", return_value={})
+    @patch("core.scanning.orchestration.local_scanner_interface")
+    @patch("core.scanning.orchestration.discover_devices")
+    @patch("core.scanning.orchestration.get_default_gateway_ip", return_value="192.168.1.1")
     def test_scan_includes_local_interface_as_online_device(
         self,
         _,
@@ -1691,14 +1696,14 @@ class ScanStabilityTests(TestCase):
         config.save(update_fields=["scan_ranges", "scan_range_labels"])
 
         with (
-            patch("core.scan.get_default_gateway_ip", return_value="192.168.1.1"),
-            patch("core.scan.discover_devices", side_effect=[[first], [second]]) as discover,
-            patch("core.scan.local_scanner_interface", return_value=None),
-            patch("core.scan.discover_hostname_hints", return_value={}),
-            patch("core.scan.ssdp_metadata_map", return_value={}),
-            patch("core.scan.sync_discovered_device", return_value=stats) as sync_device,
-            patch("core.scan.clear_stale_gateways"),
-            patch("core.scan.mark_missing_devices_offline") as mark_missing,
+            patch("core.scanning.orchestration.get_default_gateway_ip", return_value="192.168.1.1"),
+            patch("core.scanning.orchestration.discover_devices", side_effect=[[first], [second]]) as discover,
+            patch("core.scanning.orchestration.local_scanner_interface", return_value=None),
+            patch("core.scanning.orchestration.discover_hostname_hints", return_value={}),
+            patch("core.scanning.orchestration.ssdp_metadata_map", return_value={}),
+            patch("core.scanning.orchestration.sync_discovered_device", return_value=stats) as sync_device,
+            patch("core.scanning.orchestration.clear_stale_gateways"),
+            patch("core.scanning.orchestration.mark_missing_devices_offline") as mark_missing,
         ):
             scan_run = scan(["192.168.1.0/24", "192.168.20.0/24"])
 
@@ -1834,7 +1839,7 @@ class ScanStabilityTests(TestCase):
         SCAN_CONFIRM_OFFLINE_WITH_PORTS=True,
         PORT_SCAN_PORTS=[22],
     )
-    @patch("core.scan.scan_open_ports")
+    @patch("core.scanning.presence.scan_open_ports")
     def test_missing_device_stays_online_when_ports_respond(self, scan_open_ports):
         scan_open_ports.return_value = [{"port": 22, "protocol": "tcp", "service": "ssh"}]
         device = Device.objects.create(
@@ -1869,7 +1874,7 @@ class ScanStabilityTests(TestCase):
         SCAN_CONFIRM_OFFLINE_WITH_PORTS=True,
         PORT_SCAN_PORTS=[22],
     )
-    @patch("core.scan.scan_open_ports")
+    @patch("core.scanning.presence.scan_open_ports")
     def test_missing_device_confirms_with_previously_open_ports(self, scan_open_ports):
         scan_open_ports.return_value = [{"port": 32400, "protocol": "tcp", "service": ""}]
         device = Device.objects.create(
@@ -1903,7 +1908,7 @@ class ScanStabilityTests(TestCase):
         PORT_SCAN_ENABLED=False,
         SCAN_CONFIRM_OFFLINE_WITH_ICMP=True,
     )
-    @patch("core.scan.scapy.sr1")
+    @patch("core.scanning.presence.scapy.sr1")
     def test_missing_device_stays_online_when_icmp_responds(self, sr1):
         sr1.return_value = object()
         device = Device.objects.create(
@@ -1971,7 +1976,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.status, Device.Status.OFFLINE)
 
     @override_settings(PORT_SCAN_ENABLED=True, PORT_SCAN_INTERVAL=30)
-    @patch("core.scan.scan_open_ports")
+    @patch("core.scanning.reconciliation.scan_open_ports")
     def test_recently_port_scanned_device_skips_port_scan(self, scan_open_ports):
         device = Device.objects.create(
             name="Camera",
@@ -1990,7 +1995,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.missed_scans, 0)
 
     @override_settings(PORT_SCAN_ENABLED=True, PORT_SCAN_INTERVAL=30)
-    @patch("core.scan.scan_open_ports")
+    @patch("core.scanning.reconciliation.scan_open_ports")
     def test_stale_port_scan_runs_and_updates_timestamp(self, scan_open_ports):
         scan_open_ports.return_value = []
         device = Device.objects.create(
@@ -2049,7 +2054,7 @@ class ScanStabilityTests(TestCase):
             known=True,
         )
 
-        with patch("core.scan.ManufDA.lookup", return_value=("aa:bb:cc", "Texas Instruments")):
+        with patch("core.scanning.reconciliation.ManufDA.lookup", return_value=("aa:bb:cc", "Texas Instruments")):
             sync_discovered_device(
                 self.scan_element(device.ip, device.mac),
                 oui=object(),
@@ -2081,7 +2086,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.name, "Bedroom AC")
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname", return_value="")
+    @patch("core.scanning.reconciliation.get_hostname", return_value="")
     def test_existing_device_hostname_is_cleared_when_current_scan_has_no_hostname(self, _):
         device = Device.objects.create(
             name="Bedroom AC",
@@ -2102,7 +2107,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.name, "Bedroom AC")
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname", return_value="office-laptop")
+    @patch("core.scanning.reconciliation.get_hostname", return_value="office-laptop")
     def test_existing_device_preserves_user_selected_desktop_icon(self, _):
         device = Device.objects.create(
             name="Basement Desktop",
@@ -2122,7 +2127,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.icon, "desktop")
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname", return_value="office-laptop")
+    @patch("core.scanning.reconciliation.get_hostname", return_value="office-laptop")
     def test_known_device_preserves_user_selected_unknown_icon(self, _):
         device = Device.objects.create(
             name="Office computer",
@@ -2142,7 +2147,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.icon, "unknown")
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname", return_value="office-laptop")
+    @patch("core.scanning.reconciliation.get_hostname", return_value="office-laptop")
     def test_unknown_device_icon_continues_to_follow_identity_detection(self, _):
         device = Device.objects.create(
             name="Unreviewed device",
@@ -2162,7 +2167,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.icon, "laptop")
 
     @override_settings(PORT_SCAN_ENABLED=True, PORT_SCAN_INTERVAL=30)
-    @patch("core.scan.scan_open_ports")
+    @patch("core.scanning.reconciliation.scan_open_ports")
     def test_existing_device_port_enrichment_preserves_selected_icon(self, scan_open_ports):
         scan_open_ports.return_value = [{"port": 554, "protocol": "tcp", "service": "rtsp"}]
         device = Device.objects.create(
@@ -2184,7 +2189,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.icon, "desktop")
 
     @override_settings(PORT_SCAN_ENABLED=True, PORT_SCAN_INTERVAL=30)
-    @patch("core.scan.scan_open_ports")
+    @patch("core.scanning.reconciliation.scan_open_ports")
     def test_unknown_device_icon_continues_to_follow_port_detection(self, scan_open_ports):
         scan_open_ports.return_value = [{"port": 554, "protocol": "tcp", "service": "rtsp"}]
         device = Device.objects.create(
@@ -2217,7 +2222,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(default_gateway_from_proc_route(), "192.168.0.1")
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname")
+    @patch("core.scanning.reconciliation.get_hostname")
     def test_discovered_gateway_is_marked_known_router(self, get_hostname):
         get_hostname.return_value = "Device"
 
@@ -2235,7 +2240,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.icon, "router")
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname")
+    @patch("core.scanning.reconciliation.get_hostname")
     def test_existing_gateway_preserves_user_selected_role(self, get_hostname):
         get_hostname.return_value = "Deco X60"
         device = Device.objects.create(
@@ -2262,7 +2267,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(device.vendor, "TP-Link Systems Inc.")
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname", return_value="gateway.local")
+    @patch("core.scanning.reconciliation.get_hostname", return_value="gateway.local")
     def test_existing_gateway_preserves_user_selected_icon(self, _):
         device = Device.objects.create(
             name="Main gateway",
@@ -2350,7 +2355,7 @@ class ScanStabilityTests(TestCase):
         self.assertEqual(identity["name"], "Private Device DAF0")
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch("core.scan.get_hostname")
+    @patch("core.scanning.reconciliation.get_hostname")
     def test_new_discovered_device_gets_guessed_name_and_icon(self, get_hostname):
         get_hostname.return_value = "livingroom-camera"
 
@@ -3132,7 +3137,7 @@ class ScanNotificationTests(TestCase):
     def setUp(self):
         self.scan_run = ScanRun.objects.create(ip_range="192.168.1.0/24")
 
-    @patch("core.scan.notify_event")
+    @patch("core.scanning.events.notify_event")
     def test_known_device_events_are_recorded_without_external_notification(
         self, notify_event_mock
     ):
@@ -3157,7 +3162,7 @@ class ScanNotificationTests(TestCase):
         self.assertEqual(event.metadata["notification_skipped"], "known_device")
         notify_event_mock.assert_not_called()
 
-    @patch("core.scan.notify_event")
+    @patch("core.scanning.events.notify_event")
     def test_known_device_presence_event_uses_notification_rules(self, notify_event_mock):
         device = Device.objects.create(
             name="Known Camera",
