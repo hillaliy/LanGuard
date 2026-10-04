@@ -5,16 +5,23 @@ from rest_framework import permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
-from ..adguard import AdGuardError, sync_adguard_query_log, test_adguard_connection
+from ..integrations.adguard import (
+    AdGuardError,
+    sync_adguard_query_log,
+    test_adguard_connection,
+)
 from ..api import parse_bool_param
 from ..models import AppSettings
-from ..pihole import PiHoleError, sync_pihole, test_pihole_connection
+from ..integrations.pihole import PiHoleError, sync_pihole, test_pihole_connection
 from ..serializers.integrations import (
     AdGuardConnectionSerializer,
     PiHoleConnectionSerializer,
     SpeedtestTrackerConnectionSerializer,
 )
-from ..speedtest_tracker import SpeedtestTrackerError, latest_speedtest_result
+from ..integrations.speedtest_tracker import (
+    SpeedtestTrackerError,
+    latest_speedtest_result,
+)
 from ..user_messages import error_response, success_response
 
 LOGGER = logging.getLogger(__name__)

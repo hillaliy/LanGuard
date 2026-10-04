@@ -302,7 +302,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     def validate_homebox_item_id(self, value):
         if not value or (self.instance and value == self.instance.homebox_item_id):
             return value
-        from ..homebox import HomeBoxClient, HomeBoxError
+        from ..integrations.homebox import HomeBoxClient, HomeBoxError
         config = self.homebox_config()
         if not config.homebox_enabled:
             raise serializers.ValidationError("Enable HomeBox before linking an item.")
@@ -561,5 +561,4 @@ class DeviceBulkUpdateSerializer(serializers.Serializer):
                 {"is_visitor": "Visitor devices must be known devices."}
             )
         return attrs
-
 

@@ -12,14 +12,14 @@ from django.db.models import F
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import (
+from ..models import (
     AdGuardUnmatchedClient,
     AppSettings,
     Device,
     DeviceDNSActivity,
     DeviceIPAddressAssignment,
 )
-from .user_messages import stored_error_message
+from ..user_messages import stored_error_message
 
 
 LOGGER = logging.getLogger(__name__)

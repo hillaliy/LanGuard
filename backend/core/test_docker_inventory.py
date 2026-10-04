@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .docker_inventory import (
+from .integrations.docker_inventory import (
     DockerInventoryError,
     apply_docker_inventory,
     collect_local_inventory,
@@ -41,7 +41,7 @@ def inventory_payload(*, network_mode="bridge", addresses=None, ports=None):
 
 
 class DockerCollectorTests(TestCase):
-    @patch("core.docker_inventory._docker_get")
+    @patch("core.integrations.docker_inventory._docker_get")
     def test_collects_local_engine_inventory(self, docker_get):
         docker_get.side_effect = [
             {
@@ -67,7 +67,7 @@ class DockerCollectorTests(TestCase):
         self.assertEqual(payload["host"]["name"], "docker-one")
         self.assertEqual(payload["containers"][0]["name"], "web")
 
-    @patch("core.docker_inventory._docker_get")
+    @patch("core.integrations.docker_inventory._docker_get")
     def test_rejects_invalid_docker_inventory(self, docker_get):
         docker_get.side_effect = [{}, {}]
         with self.assertRaises(DockerInventoryError):
@@ -153,7 +153,7 @@ class DockerInventoryTests(TestCase):
         apply_docker_inventory(self.host, empty)
         self.assertFalse(DockerContainer.objects.get().active)
 
-    @patch("core.docker_inventory.collect_local_inventory")
+    @patch("core.integrations.docker_inventory.collect_local_inventory")
     def test_requested_sync_runs_before_interval_and_clears_queue(self, collect):
         collect.return_value = inventory_payload()
         apply_docker_inventory(self.host, inventory_payload())

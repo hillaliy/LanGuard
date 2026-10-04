@@ -6,8 +6,8 @@ import requests
 from django.core.cache import cache
 from django.db import transaction
 
-from .models import AppSettings, NetworkEvent
-from .notifications import notify_event
+from ..models import AppSettings, NetworkEvent
+from ..notifications import notify_event
 
 
 CACHE_SECONDS = 5 * 60

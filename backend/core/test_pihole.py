@@ -7,11 +7,11 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from .models import AppSettings, Device, DeviceDNSActivity
-from .pihole import PiHoleClient, PiHoleError, sync_pihole
+from .integrations.pihole import PiHoleClient, PiHoleError, sync_pihole
 
 
 class PiHoleClientTests(SimpleTestCase):
-    @patch("core.pihole.requests.request")
+    @patch("core.integrations.pihole.requests.request")
     def test_client_authenticates_with_application_password_and_session_header(self, request):
         auth_response = Mock(status_code=200)
         auth_response.raise_for_status.return_value = None
@@ -65,7 +65,7 @@ class PiHoleIntegrationTests(TestCase):
             "client": {"ip": self.device.ip, "name": self.device.hostname},
         }
 
-    @patch("core.pihole.PiHoleClient")
+    @patch("core.integrations.pihole.PiHoleClient")
     def test_sync_aggregates_queries_and_does_not_count_cursor_twice(self, client_class):
         entries = [
             self.query(query_id=12, seconds_ago=1),
@@ -88,7 +88,7 @@ class PiHoleIntegrationTests(TestCase):
         self.assertEqual(activity.query_count, 2)
         self.assertEqual(client.close.call_count, 2)
 
-    @patch("core.pihole.PiHoleClient")
+    @patch("core.integrations.pihole.PiHoleClient")
     def test_dhcp_updates_ip_but_protects_known_device_identity(self, client_class):
         self.device.known = True
         self.device.icon = "desktop"
@@ -114,7 +114,7 @@ class PiHoleIntegrationTests(TestCase):
         self.assertEqual(self.device.hostname, "laptop")
         self.assertEqual(self.device.icon, "desktop")
 
-    @patch("core.pihole.PiHoleClient")
+    @patch("core.integrations.pihole.PiHoleClient")
     def test_dhcp_discovers_device_without_marking_existing_devices_offline(self, client_class):
         self.device.online = True
         self.device.save(update_fields=["online"])
