@@ -4,8 +4,8 @@ from django.contrib.auth.models import User
 from django.test import SimpleTestCase, TestCase
 from rest_framework.test import APIClient
 
-from .models import AppSettings, Device, UserAccess
-from .wake_on_lan import magic_packet, send_magic_packet, wake_broadcast_address
+from ..models import AppSettings, Device, UserAccess
+from ..wake_on_lan import magic_packet, send_magic_packet, wake_broadcast_address
 
 
 class WakeOnLanPacketTests(SimpleTestCase):

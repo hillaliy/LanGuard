@@ -2,10 +2,10 @@ from unittest.mock import Mock, patch
 
 from django.test import TestCase
 
-from .models import AppSettings, NetworkEvent
-from .notifications import format_discord_payload, notification_event_allowed
-from .serializers.settings import AppSettingsSerializer
-from .integrations.speedtest_tracker import (
+from ..models import AppSettings, NetworkEvent
+from ..notifications import format_discord_payload, notification_event_allowed
+from ..serializers.settings import AppSettingsSerializer
+from ..integrations.speedtest_tracker import (
     SpeedtestTrackerError,
     check_speedtest_health_change,
 )

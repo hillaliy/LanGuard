@@ -6,11 +6,11 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .integrations.homebox import HomeBoxClient, HomeBoxError
-from .models import AppSettings, Device, UserAccess
-from .serializers.devices import DeviceSerializer
-from .serializers.settings import AppSettingsSerializer
-from .views.inventory import import_inventory_devices
+from ..integrations.homebox import HomeBoxClient, HomeBoxError
+from ..models import AppSettings, Device, UserAccess
+from ..serializers.devices import DeviceSerializer
+from ..serializers.settings import AppSettingsSerializer
+from ..views.inventory import import_inventory_devices
 
 
 ITEM_ID = "39e038fb-a217-4528-b138-162291b36aca"
