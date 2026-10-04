@@ -4,7 +4,7 @@ from django.test import TestCase
 
 from .models import AppSettings, NetworkEvent
 from .notifications import format_discord_payload, notification_event_allowed
-from .serializers import AppSettingsSerializer
+from .serializers.settings import AppSettingsSerializer
 from .speedtest_tracker import SpeedtestTrackerError, check_speedtest_health_change
 
 

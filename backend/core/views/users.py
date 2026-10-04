@@ -13,7 +13,7 @@ from rest_framework.views import APIView
 
 from ..access_control import ACCESS_FIELDS, user_capabilities
 from ..api import parse_int_param
-from ..serializers import UserManagementSerializer, UserSerializer
+from ..serializers.users import UserManagementSerializer, UserSerializer
 from ..user_messages import success_response
 
 LOGGER = logging.getLogger(__name__)

@@ -5,7 +5,7 @@ from rest_framework.response import Response
 
 from ..access_control import CanEditHomeMap
 from ..models import AppSettings
-from ..serializers import HomeMapLayoutSerializer
+from ..serializers.home_map import HomeMapLayoutSerializer
 from ..user_messages import success_response
 
 

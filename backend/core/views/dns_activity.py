@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from ..api import paginated_payload, parse_bool_param
 from ..datetime_utils import utc_isoformat
 from ..models import AdGuardUnmatchedClient, AppSettings, Device, DeviceDNSActivity
-from ..serializers import (
+from ..serializers.dns import (
     AdGuardUnmatchedClientSerializer,
     DeviceDNSActivitySerializer,
     GlobalDNSActivitySerializer,

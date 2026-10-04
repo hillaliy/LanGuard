@@ -11,7 +11,7 @@ from ..access_control import CanRunScans, user_capabilities
 from ..datetime_utils import utc_isoformat
 from ..models import AppSettings, DockerHost, NetworkEvent, ScanRun
 from ..scan import ScanAlreadyRunning, active_scan_run, scan, validate_ip_ranges
-from ..serializers import ScanRunSerializer
+from ..serializers.scans import ScanRunSerializer
 from ..user_messages import error_response, scan_error_message, success_response
 from .devices import active_device_counters
 

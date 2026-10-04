@@ -9,7 +9,7 @@ from ..adguard import AdGuardError, sync_adguard_query_log, test_adguard_connect
 from ..api import parse_bool_param
 from ..models import AppSettings
 from ..pihole import PiHoleError, sync_pihole, test_pihole_connection
-from ..serializers import (
+from ..serializers.integrations import (
     AdGuardConnectionSerializer,
     PiHoleConnectionSerializer,
     SpeedtestTrackerConnectionSerializer,

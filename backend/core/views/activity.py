@@ -5,7 +5,8 @@ from rest_framework.exceptions import ValidationError
 
 from ..api import paginated_response, parse_bool_param, parse_datetime_param, parse_int_param
 from ..models import NetworkEvent, ScanRun
-from ..serializers import NetworkEventSerializer, ScanRunSerializer
+from ..serializers.activity import NetworkEventSerializer
+from ..serializers.scans import ScanRunSerializer
 
 
 @extend_schema(responses=ScanRunSerializer(many=True))

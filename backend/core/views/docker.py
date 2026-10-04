@@ -5,7 +5,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 
 from ..models import Device, DevicePort, DockerContainer, DockerHost
-from ..serializers import (
+from ..serializers.docker import (
     DockerContainerSerializer,
     DockerHostSerializer,
     DockerHostSummarySerializer,

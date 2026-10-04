@@ -22,6 +22,7 @@
 - Moved detailed port scan queueing, status, and cancellation endpoints into a focused backend port scans view module.
 - Moved health, home map, maintenance, and diagnostics endpoints into focused backend view modules.
 - Moved device inventory import and export endpoints and parsers into a focused backend inventory view module, leaving the views package initializer empty.
+- Split the monolithic backend serializers into focused activity, device, DNS, Docker, home map, integration, notification, scan, settings, and user modules with an empty package initializer.
 - Split the main frontend controller into focused inventory, navigation, activity, and session hooks while preserving its public interface.
 - Split the device inventory into focused filter, role, toolbar, desktop, mobile, and pagination components while preserving its responsive workflows.
 - Unified the Devices navigation and inventory heading icons for clearer visual consistency.

@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from ..access_control import CanEditDevicesOrRunScans
 from ..detailed_port_scans import parse_port_specification
 from ..models import DetailedPortScan, Device
-from ..serializers import DetailedPortScanSerializer
+from ..serializers.scans import DetailedPortScanSerializer
 from ..user_messages import error_response, success_response
 
 
