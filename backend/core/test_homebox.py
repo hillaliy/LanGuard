@@ -8,7 +8,8 @@ from rest_framework.test import APIClient
 
 from .homebox import HomeBoxClient, HomeBoxError
 from .models import AppSettings, Device, UserAccess
-from .serializers import AppSettingsSerializer, DeviceSerializer
+from .serializers.devices import DeviceSerializer
+from .serializers.settings import AppSettingsSerializer
 from .views.inventory import import_inventory_devices
 
 

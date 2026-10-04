@@ -14,7 +14,10 @@ from ..notifications import (
     send_telegram_test,
     send_webhook_test,
 )
-from ..serializers import NotificationDeliverySerializer, NotificationTestSerializer
+from ..serializers.notifications import (
+    NotificationDeliverySerializer,
+    NotificationTestSerializer,
+)
 from ..user_messages import error_response, success_response
 
 LOGGER = logging.getLogger(__name__)

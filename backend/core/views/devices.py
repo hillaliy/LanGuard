@@ -18,7 +18,7 @@ from ..api import paginated_payload, parse_bool_param, parse_int_param
 from ..datetime_utils import utc_isoformat
 from ..models import AppSettings, Device, DevicePort, NetworkEvent
 from ..scan import detect_web_interface
-from ..serializers import (
+from ..serializers.devices import (
     DeviceBulkUpdateSerializer,
     DeviceSerializer,
     device_needs_attention,

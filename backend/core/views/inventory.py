@@ -18,7 +18,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 
 from ..datetime_utils import utc_isoformat
-from ..serializers import (
+from ..serializers.devices import (
     device_attention_acknowledged,
     device_risk,
     device_risk_signature,

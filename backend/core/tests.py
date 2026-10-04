@@ -45,7 +45,7 @@ from .notifications import (
     send_webhook_test,
 )
 from .port_guidance import PORT_CATALOG, port_guidance
-from .serializers import device_attention_reasons, device_identity
+from .serializers.devices import device_attention_reasons, device_identity
 from .views.inventory import parse_inventory_datetime
 from .versioning import check_for_version_update, is_newer_version
 from .scan import (
