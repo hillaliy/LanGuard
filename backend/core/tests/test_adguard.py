@@ -20,7 +20,6 @@ from ..models import (
     AppSettings,
     Device,
     DeviceDNSActivity,
-    DeviceIPAddressAssignment,
 )
 
 
