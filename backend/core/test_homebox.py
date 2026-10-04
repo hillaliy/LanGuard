@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .homebox import HomeBoxClient, HomeBoxError
+from .integrations.homebox import HomeBoxClient, HomeBoxError
 from .models import AppSettings, Device, UserAccess
 from .serializers.devices import DeviceSerializer
 from .serializers.settings import AppSettingsSerializer
@@ -45,7 +45,7 @@ class HomeBoxTests(TestCase):
         self.assertFalse(serializer.is_valid())
         self.assertIn("homebox_api_token", serializer.errors)
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_search_and_pagination(self, get):
         get.return_value = self.response({"items": [
             {"id": ITEM_ID, "name": "Router", "assetId": "NET-0042"},
@@ -59,7 +59,7 @@ class HomeBoxTests(TestCase):
         self.assertFalse(get.call_args.kwargs["allow_redirects"])
         self.assertEqual(get.call_args.kwargs["headers"]["Authorization"], "Bearer secret-key")
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_search_adds_homebox_asset_id_prefix(self, get):
         get.return_value = self.response({"items": []})
 
@@ -70,7 +70,7 @@ class HomeBoxTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(get.call_args.kwargs["params"]["q"], f"#{query}")
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_search_preserves_homebox_asset_id_prefix(self, get):
         get.return_value = self.response({"items": []})
 
@@ -81,7 +81,7 @@ class HomeBoxTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(get.call_args.kwargs["params"]["q"], "#000-123")
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_search_preserves_partial_description(self, get):
         get.return_value = self.response({"items": []})
 
@@ -92,27 +92,27 @@ class HomeBoxTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(get.call_args.kwargs["params"]["q"], "living room")
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_search_uses_name_when_asset_id_is_missing(self, get):
         get.return_value = self.response({"items": [{"id": ITEM_ID, "name": "Router"}]})
         response = self.client.get("/api/v1/integrations/homebox/items/")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["data"]["items"], [{"value": ITEM_ID, "label": "Router"}])
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_connection_uses_saved_key(self, get):
         get.return_value = self.response({"items": []})
         response = self.client.post("/api/v1/integrations/homebox/test/", {"url": self.config.homebox_url}, format="json")
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("secret-key", str(response.data))
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_different_host_does_not_receive_saved_key(self, get):
         response = self.client.post("/api/v1/integrations/homebox/test/", {"url": "https://other.example"}, format="json")
         self.assertEqual(response.status_code, 400)
         get.assert_not_called()
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_link_validate_and_unlink(self, get):
         get.return_value = self.response({"id": ITEM_ID, "name": "Router"})
         serializer = DeviceSerializer(self.device, data={"homebox_item_id": ITEM_ID}, partial=True)
@@ -126,7 +126,7 @@ class HomeBoxTests(TestCase):
         self.assertEqual(serializer.data["homebox_link"], "")
         get.assert_not_called()
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_missing_item_rejected_but_existing_link_can_be_saved_offline(self, get):
         get.return_value = self.response({}, 404)
         serializer = DeviceSerializer(self.device, data={"homebox_item_id": ITEM_ID}, partial=True)
@@ -176,7 +176,7 @@ class HomeBoxTests(TestCase):
         self.assertNotIn("homebox.example", str(response.data))
         self.assertNotIn("secret-key", str(response.data))
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_access_control(self, get):
         user = User.objects.create_user("homebox-reader")
         UserAccess.objects.create(user=user, can_edit_devices=False)
@@ -187,7 +187,7 @@ class HomeBoxTests(TestCase):
         self.assertIn(self.client.get("/api/v1/integrations/homebox/items/").status_code, (401, 403))
         get.assert_not_called()
 
-    @patch("core.homebox.requests.get")
+    @patch("core.integrations.homebox.requests.get")
     def test_failures_are_sanitized(self, get):
         for response in (self.response({}, 401), self.response({}, 302), self.response([]), self.response({"items": "bad"})):
             get.return_value = response

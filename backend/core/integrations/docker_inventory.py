@@ -11,7 +11,7 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from .models import Device, DockerContainer, DockerHost, NetworkEvent
+from ..models import Device, DockerContainer, DockerHost, NetworkEvent
 
 
 DOCKER_SOCKET = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")

@@ -18,14 +18,14 @@ from .adguard import (
     normalize_client_ipv4,
     normalize_domain,
 )
-from .models import AppSettings, Device
-from .scan import (
+from ..models import AppSettings, Device
+from ..scan import (
     IP_IDENTITY_CONFLICT_MARKER,
     IP_IDENTITY_CONFLICT_WINDOW,
     guess_device_identity,
     validated_hostname,
 )
-from .user_messages import stored_error_message
+from ..user_messages import stored_error_message
 
 
 LOGGER = logging.getLogger(__name__)

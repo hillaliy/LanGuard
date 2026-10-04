@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiTypes
 
 from ..access_control import user_capabilities
-from ..homebox import HomeBoxClient, HomeBoxError, normalize_url
+from ..integrations.homebox import HomeBoxClient, HomeBoxError, normalize_url
 from ..models import AppSettings
 
 

@@ -5,7 +5,10 @@ from django.test import TestCase
 from .models import AppSettings, NetworkEvent
 from .notifications import format_discord_payload, notification_event_allowed
 from .serializers.settings import AppSettingsSerializer
-from .speedtest_tracker import SpeedtestTrackerError, check_speedtest_health_change
+from .integrations.speedtest_tracker import (
+    SpeedtestTrackerError,
+    check_speedtest_health_change,
+)
 
 
 class SpeedtestHealthNotificationTests(TestCase):
@@ -29,8 +32,8 @@ class SpeedtestHealthNotificationTests(TestCase):
             "service_url": "http://speedtest.example:8080",
         }
 
-    @patch("core.speedtest_tracker.notify_event")
-    @patch("core.speedtest_tracker.latest_speedtest_result")
+    @patch("core.integrations.speedtest_tracker.notify_event")
+    @patch("core.integrations.speedtest_tracker.latest_speedtest_result")
     def test_first_scored_result_establishes_baseline(self, latest, notify):
         latest.return_value = (self.result(10, True), False)
 
@@ -43,8 +46,8 @@ class SpeedtestHealthNotificationTests(TestCase):
         notify.assert_not_called()
         self.assertFalse(NetworkEvent.objects.exists())
 
-    @patch("core.speedtest_tracker.notify_event", return_value=[Mock()])
-    @patch("core.speedtest_tracker.latest_speedtest_result")
+    @patch("core.integrations.speedtest_tracker.notify_event", return_value=[Mock()])
+    @patch("core.integrations.speedtest_tracker.latest_speedtest_result")
     def test_health_change_creates_event_and_notification(self, latest, notify):
         self.config.speedtest_last_result_id = "10"
         self.config.speedtest_last_healthy = True
@@ -66,8 +69,8 @@ class SpeedtestHealthNotificationTests(TestCase):
         self.assertEqual(event.metadata["download_mbps"], 700.5)
         notify.assert_called_once_with(event)
 
-    @patch("core.speedtest_tracker.notify_event", return_value=[])
-    @patch("core.speedtest_tracker.latest_speedtest_result")
+    @patch("core.integrations.speedtest_tracker.notify_event", return_value=[])
+    @patch("core.integrations.speedtest_tracker.latest_speedtest_result")
     def test_recovery_uses_healthy_state(self, latest, notify):
         self.config.speedtest_last_result_id = "11"
         self.config.speedtest_last_healthy = False
@@ -84,8 +87,8 @@ class SpeedtestHealthNotificationTests(TestCase):
         self.assertEqual(format_discord_payload(event)["embeds"][0]["color"], 0x12B886)
         notify.assert_called_once_with(event)
 
-    @patch("core.speedtest_tracker.notify_event")
-    @patch("core.speedtest_tracker.latest_speedtest_result")
+    @patch("core.integrations.speedtest_tracker.notify_event")
+    @patch("core.integrations.speedtest_tracker.latest_speedtest_result")
     def test_same_result_is_not_processed_twice(self, latest, notify):
         self.config.speedtest_last_result_id = "12"
         self.config.speedtest_last_healthy = True
@@ -100,8 +103,8 @@ class SpeedtestHealthNotificationTests(TestCase):
         notify.assert_not_called()
         self.assertFalse(NetworkEvent.objects.exists())
 
-    @patch("core.speedtest_tracker.notify_event")
-    @patch("core.speedtest_tracker.latest_speedtest_result")
+    @patch("core.integrations.speedtest_tracker.notify_event")
+    @patch("core.integrations.speedtest_tracker.latest_speedtest_result")
     def test_new_result_with_same_health_only_advances_baseline(self, latest, notify):
         self.config.speedtest_last_result_id = "12"
         self.config.speedtest_last_healthy = True
@@ -119,8 +122,8 @@ class SpeedtestHealthNotificationTests(TestCase):
         notify.assert_not_called()
         self.assertFalse(NetworkEvent.objects.exists())
 
-    @patch("core.speedtest_tracker.notify_event")
-    @patch("core.speedtest_tracker.latest_speedtest_result")
+    @patch("core.integrations.speedtest_tracker.notify_event")
+    @patch("core.integrations.speedtest_tracker.latest_speedtest_result")
     def test_unscored_result_does_not_replace_baseline(self, latest, notify):
         self.config.speedtest_last_result_id = "12"
         self.config.speedtest_last_healthy = True
@@ -137,7 +140,7 @@ class SpeedtestHealthNotificationTests(TestCase):
         self.assertTrue(self.config.speedtest_last_healthy)
         notify.assert_not_called()
 
-    @patch("core.speedtest_tracker.latest_speedtest_result")
+    @patch("core.integrations.speedtest_tracker.latest_speedtest_result")
     def test_connection_failure_does_not_change_state(self, latest):
         self.config.speedtest_last_result_id = "12"
         self.config.speedtest_last_healthy = True
@@ -153,7 +156,7 @@ class SpeedtestHealthNotificationTests(TestCase):
         self.assertEqual(self.config.speedtest_last_result_id, "12")
         self.assertTrue(self.config.speedtest_last_healthy)
 
-    @patch("core.speedtest_tracker.latest_speedtest_result")
+    @patch("core.integrations.speedtest_tracker.latest_speedtest_result")
     def test_disabled_rule_does_not_fetch_result(self, latest):
         self.config.notify_speedtest_changes = False
         self.config.save(update_fields=["notify_speedtest_changes"])

@@ -6,7 +6,7 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .adguard import (
+from .integrations.adguard import (
     AdGuardClient,
     AdGuardError,
     device_for_client_at,
@@ -25,7 +25,7 @@ from .models import (
 
 
 class AdGuardClientTests(SimpleTestCase):
-    @patch("core.adguard.requests.get")
+    @patch("core.integrations.adguard.requests.get")
     def test_client_uses_control_api_and_basic_auth(self, get):
         response = Mock()
         response.raise_for_status.return_value = None
@@ -51,7 +51,7 @@ class AdGuardClientTests(SimpleTestCase):
         with self.assertRaises(AdGuardError):
             AdGuardClient("adguard.local:3000")
 
-    @patch("core.adguard.AdGuardClient")
+    @patch("core.integrations.adguard.AdGuardClient")
     def test_connection_requires_query_log(self, client_class):
         client_class.return_value.status.return_value = {"running": True}
         client_class.return_value.query_log_config.return_value = {"enabled": False}
@@ -108,7 +108,7 @@ class AdGuardIntegrationTests(TestCase):
             "service_name": "",
         }
 
-    @patch("core.adguard.AdGuardClient")
+    @patch("core.integrations.adguard.AdGuardClient")
     def test_sync_aggregates_queries_and_does_not_count_cursor_twice(self, client_class):
         entries = [
             self.query(seconds_ago=1, domain="Example.COM."),
@@ -150,7 +150,7 @@ class AdGuardIntegrationTests(TestCase):
         ipv4.refresh_from_db()
         self.assertEqual(ipv4.query_count, 2)
 
-    @patch("core.adguard.AdGuardClient")
+    @patch("core.integrations.adguard.AdGuardClient")
     def test_sync_uses_ip_owner_at_query_time_after_dhcp_reuse(self, client_class):
         now = timezone.now()
         original_ip = self.device.ip
@@ -243,7 +243,7 @@ class AdGuardIntegrationTests(TestCase):
             self.device,
         )
 
-    @patch("core.adguard.AdGuardClient")
+    @patch("core.integrations.adguard.AdGuardClient")
     def test_ambiguous_ip_assignment_remains_unmatched(self, client_class):
         now = timezone.now()
         competing = Device(
@@ -268,7 +268,7 @@ class AdGuardIntegrationTests(TestCase):
             AdGuardUnmatchedClient.objects.filter(client=self.device.ip).exists()
         )
 
-    @patch("core.adguard.AdGuardClient")
+    @patch("core.integrations.adguard.AdGuardClient")
     def test_prior_activity_stays_with_device_after_ip_change(self, client_class):
         first_seen = timezone.now() - timedelta(minutes=10)
         client_class.return_value.query_log_config.return_value = {"enabled": True}
@@ -287,7 +287,7 @@ class AdGuardIntegrationTests(TestCase):
         self.assertEqual(activity.device, self.device)
         self.assertEqual(activity.query_count, 1)
 
-    @patch("core.adguard.AdGuardClient")
+    @patch("core.integrations.adguard.AdGuardClient")
     def test_unmatched_diagnostic_is_only_resolved_by_covering_assignment(self, client_class):
         now = timezone.now()
         unmatched = AdGuardUnmatchedClient.objects.create(
@@ -507,7 +507,7 @@ class AdGuardIntegrationTests(TestCase):
             last_seen=old,
         )
 
-        with patch("core.adguard.AdGuardClient") as client_class:
+        with patch("core.integrations.adguard.AdGuardClient") as client_class:
             client_class.return_value.query_log_config.return_value = {"enabled": True}
             client_class.return_value.query_log.return_value = {"data": []}
             result = sync_adguard_query_log(self.config)

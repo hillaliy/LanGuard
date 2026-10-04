@@ -10,10 +10,10 @@ from core.maintenance import cleanup_all_activity
 from core.models import AppSettings, ScanRun
 from core.notifications import retry_failed_notifications
 from core.scan import ScanAlreadyRunning, scan
-from core.adguard import sync_adguard_query_log
-from core.pihole import sync_pihole
+from core.integrations.adguard import sync_adguard_query_log
+from core.integrations.pihole import sync_pihole
 from core.versioning import check_for_version_update
-from core.speedtest_tracker import (
+from core.integrations.speedtest_tracker import (
     HEALTH_CHECK_INTERVAL_SECONDS,
     check_speedtest_health_change,
 )
@@ -21,7 +21,7 @@ from core.detailed_port_scans import (
     process_next_detailed_port_scan,
     recover_interrupted_detailed_port_scans,
 )
-from core.docker_inventory import sync_enabled_docker_hosts
+from core.integrations.docker_inventory import sync_enabled_docker_hosts
 
 
 LOGGER = logging.getLogger(__name__)

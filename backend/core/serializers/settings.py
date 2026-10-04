@@ -53,7 +53,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return bool(obj.homebox_url and obj.homebox_api_token)
 
     def validate_homebox_url(self, value):
-        from ..homebox import normalize_url, HomeBoxError
+        from ..integrations.homebox import HomeBoxError, normalize_url
         if not value:
             return ""
         try:
@@ -577,5 +577,4 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         except ValueError as exc:
             raise serializers.ValidationError("Enter time in HH:MM format.") from exc
         return value
-
 

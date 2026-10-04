@@ -4596,7 +4596,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("speedtest_tracker_url", response.data)
 
-    @patch("core.speedtest_tracker.requests.get")
+    @patch("core.integrations.speedtest_tracker.requests.get")
     def test_speedtest_tracker_latest_result_is_normalized_and_cached(self, get):
         cache.clear()
         get.return_value = Mock(
@@ -4635,7 +4635,7 @@ class ScanApiTests(TestCase):
         self.assertNotIn("private-api-token", str(first.data))
         get.assert_called_once()
 
-    @patch("core.speedtest_tracker.requests.get")
+    @patch("core.integrations.speedtest_tracker.requests.get")
     def test_speedtest_tracker_refresh_bypasses_cache(self, get):
         cache.clear()
         get.return_value = Mock(
@@ -4658,7 +4658,7 @@ class ScanApiTests(TestCase):
         self.assertFalse(response.data["integration"]["cached"])
         self.assertEqual(get.call_count, 2)
 
-    @patch("core.speedtest_tracker.requests.get")
+    @patch("core.integrations.speedtest_tracker.requests.get")
     def test_speedtest_tracker_unavailable_does_not_fail_dashboard_request(self, get):
         cache.clear()
         get.side_effect = requests.Timeout("private upstream detail")
@@ -4675,7 +4675,7 @@ class ScanApiTests(TestCase):
         self.assertFalse(response.data["integration"]["available"])
         self.assertNotIn("private", str(response.data))
 
-    @patch("core.speedtest_tracker.requests.get")
+    @patch("core.integrations.speedtest_tracker.requests.get")
     def test_speedtest_tracker_connection_test_uses_saved_token(self, get):
         cache.clear()
         get.return_value = Mock(
