@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import DetailedPortScan, Device
-from .scan import scan_open_ports, sync_device_ports
+from .scanning.ports import scan_open_ports, sync_device_ports
 
 
 LOGGER = logging.getLogger(__name__)

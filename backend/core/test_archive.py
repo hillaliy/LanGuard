@@ -7,7 +7,8 @@ from rest_framework.test import APIClient
 
 from .models import Device, DevicePort, NetworkEvent, UserAccess
 from .notifications import notification_event_allowed
-from .scan import sync_discovered_device, mark_missing_devices_offline
+from .scanning.presence import mark_missing_devices_offline
+from .scanning.reconciliation import sync_discovered_device
 from .views.inventory import import_inventory_devices
 
 
@@ -50,9 +51,9 @@ class DeviceArchiveTests(TestCase):
         self.assertEqual(len(self.client.get('/api/v1/device/').data['data']), 1)
 
     @override_settings(PORT_SCAN_ENABLED=False)
-    @patch('core.scan.get_hostname', return_value=('', ''))
-    @patch('core.scan.manuf_vendor', return_value='')
-    @patch('core.scan.notify_event')
+    @patch('core.scanning.reconciliation.get_hostname', return_value=('', ''))
+    @patch('core.scanning.reconciliation.manuf_vendor', return_value='')
+    @patch('core.scanning.events.notify_event')
     def test_rediscovery_restores_same_device(self, notify, vendor, hostname):
         self.device.archived = True
         self.device.online = False
@@ -70,7 +71,7 @@ class DeviceArchiveTests(TestCase):
         self.device.online = True
         self.device.offline_notification_preference = 'always'
         self.device.save()
-        with patch('core.scan.keep_online_if_ports_respond') as probe:
+        with patch('core.scanning.presence.keep_online_if_ports_respond') as probe:
             mark_missing_devices_offline([])
         probe.assert_not_called()
         self.event.refresh_from_db()

@@ -19,11 +19,10 @@ from .adguard import (
     normalize_domain,
 )
 from ..models import AppSettings, Device
-from ..scan import (
+from ..scanning.identity import guess_device_identity, validated_hostname
+from ..scanning.reconciliation import (
     IP_IDENTITY_CONFLICT_MARKER,
     IP_IDENTITY_CONFLICT_WINDOW,
-    guess_device_identity,
-    validated_hostname,
 )
 from ..user_messages import stored_error_message
 
