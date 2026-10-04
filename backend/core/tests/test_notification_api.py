@@ -1,0 +1,349 @@
+from datetime import datetime, timedelta, timezone as datetime_timezone
+import hashlib
+import hmac
+import importlib
+import json
+import socket
+from io import StringIO
+from types import SimpleNamespace
+from unittest.mock import Mock, call, patch
+
+from django.contrib.auth.models import User
+from rest_framework.authtoken.models import Token
+from django.core.exceptions import ImproperlyConfigured
+from django.core.management import call_command
+from django.core.cache import cache
+from django.db import DatabaseError, OperationalError
+from django.test import SimpleTestCase, TestCase, override_settings
+from django.utils import timezone
+import requests
+from rest_framework.test import APIClient
+
+from backend.settings import include_internal_hosts, validate_production_settings
+from ..datetime_utils import utc_isoformat
+from ..management.commands.run_scheduler import load_scan_schedule
+from ..models import (
+    AppSettings,
+    Device,
+    DeviceIPAddressAssignment,
+    DevicePort,
+    NetworkEvent,
+    NotificationDelivery,
+    ScanRun,
+    UserAccess,
+)
+from ..notifications import (
+    format_discord_payload,
+    format_webhook_payload,
+    notify_event,
+    quiet_hours_active,
+    retry_failed_notifications,
+    send_discord_test,
+    send_ntfy_test,
+    send_telegram,
+    send_telegram_test,
+    send_webhook_test,
+)
+from ..port_guidance import PORT_CATALOG, port_guidance
+from ..serializers.devices import device_attention_reasons, device_identity
+from ..views.inventory import parse_inventory_datetime
+from ..versioning import check_for_version_update, is_newer_version
+from ..scanning.discovery import (
+    MDNS_SERVICE_HOSTNAME_CACHE,
+    detect_web_interface,
+    dns_encode_name,
+    dns_ptr_names,
+    dns_server_reverse_hostname,
+    get_hostname,
+    hostname_from_device_description,
+    llmnr_reverse_hostname,
+    mdns_multicast_responses,
+    mdns_query_responses,
+    mdns_reverse_hostname,
+    mdns_service_hostname,
+    mdns_service_hostname_map,
+    mdns_service_hostnames_from_response,
+    mdns_service_hostnames_from_responses,
+    mdns_service_types_from_response,
+    ssdp_hostname_from_response,
+    ssdp_metadata_from_response,
+    web_interface_candidates,
+)
+from ..scanning.events import create_event
+from ..scanning.identity import (
+    clean_hostname,
+    guess_device_identity,
+    mismatched_default_haa_hostname,
+    preferred_vendor,
+)
+from ..scanning.lifecycle import (
+    STALE_SCAN_ERROR,
+    ScanAlreadyRunning,
+    active_scan_run,
+    claim_scan_run,
+    scan_failure_diagnostics,
+)
+from ..scanning.network import (
+    default_gateway_from_proc_route,
+    discover_devices,
+    local_scanner_interface,
+)
+from ..scanning.orchestration import scan
+from ..scanning.ports import normalize_scan_ports, sync_device_ports
+from ..scanning.presence import (
+    clear_stale_gateways,
+    mark_missing_devices_offline,
+)
+from ..scanning.ranges import validate_ip_range, validate_ip_ranges
+from ..scanning.reconciliation import sync_discovered_device
+from ..scanning.vendor import ManufVendorDB, manuf_vendor
+
+class NotificationApiTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="admin",
+            password="password",
+            is_staff=True,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+        self.device = Device.objects.create(
+            name="Laptop",
+            ip="192.168.1.20",
+            mac="aa:aa:aa:aa:aa:aa",
+        )
+        self.scan_run = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            status=ScanRun.Status.SUCCESS,
+            devices_seen=1,
+            online_devices=1,
+        )
+        self.event = NetworkEvent.objects.create(
+            scan_run=self.scan_run,
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Laptop came online",
+        )
+        self.delivery = NotificationDelivery.objects.create(
+            event=self.event,
+            channel=NotificationDelivery.Channel.DISCORD,
+            status=NotificationDelivery.Status.FAILED,
+            attempts=1,
+        )
+
+    def test_notification_test_endpoint_requires_admin_user(self):
+        regular_user = User.objects.create_user(username="viewer", password="password")
+        regular_client = APIClient()
+        regular_client.force_authenticate(regular_user)
+
+        response = regular_client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "discord",
+                "discord_webhook": "https://discord.example/webhook",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    @patch("core.views.notifications.send_discord_test")
+    def test_notification_test_endpoint_sends_discord_without_history(self, send_test):
+        delivery_count = NotificationDelivery.objects.count()
+        event_count = NetworkEvent.objects.count()
+
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "discord",
+                "discord_webhook": "https://discord.example/webhook",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["channel"], "discord")
+        send_test.assert_called_once_with("https://discord.example/webhook")
+        self.assertEqual(NotificationDelivery.objects.count(), delivery_count)
+        self.assertEqual(NetworkEvent.objects.count(), event_count)
+
+    @patch("core.views.notifications.send_discord_test")
+    def test_notification_test_endpoint_uses_saved_discord_webhook(self, send_test):
+        config = AppSettings.load()
+        config.discord_webhook = "https://discord.example/saved-webhook"
+        config.save(update_fields=["discord_webhook"])
+
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {"channel": "discord"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        send_test.assert_called_once_with("https://discord.example/saved-webhook")
+
+    @patch("core.views.notifications.send_telegram_test")
+    def test_notification_test_endpoint_sends_telegram(self, send_test):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "telegram",
+                "telegram_api_url": "https://relay.example/telegram/",
+                "telegram_token": "bot-token",
+                "telegram_user_id": "123456",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        send_test.assert_called_once_with(
+            "bot-token",
+            "123456",
+            "https://relay.example/telegram",
+        )
+
+    @patch("core.views.notifications.send_telegram_test")
+    def test_notification_test_endpoint_uses_saved_telegram_token(self, send_test):
+        config = AppSettings.load()
+        config.telegram_api_url = "http://telegram-relay:8081"
+        config.telegram_token = "saved-bot-token"
+        config.save(update_fields=["telegram_api_url", "telegram_token"])
+
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "telegram",
+                "telegram_user_id": "123456",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        send_test.assert_called_once_with(
+            "saved-bot-token",
+            "123456",
+            "http://telegram-relay:8081",
+        )
+
+    @patch("core.views.notifications.send_ntfy_test")
+    def test_notification_test_endpoint_sends_ntfy(self, send_test):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "ntfy",
+                "ntfy_server_url": "https://ntfy.example",
+                "ntfy_topic": "languard",
+                "ntfy_priority": 5,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["channel"], "ntfy")
+        send_test.assert_called_once_with("https://ntfy.example", "languard", 5)
+
+    def test_notification_test_endpoint_rejects_incomplete_ntfy_settings(self):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "ntfy",
+                "ntfy_server_url": "https://ntfy.example",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("ntfy_topic", response.data)
+
+    @patch("core.views.notifications.send_webhook_test")
+    def test_notification_test_endpoint_sends_webhook(self, send_test):
+        config = AppSettings.load()
+        config.webhook_secret = "saved-secret"
+        config.save(update_fields=["webhook_secret"])
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "webhook",
+                "webhook_url": "https://automation.example/webhook/languard",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["channel"], "webhook")
+        send_test.assert_called_once_with(
+            "https://automation.example/webhook/languard",
+            "saved-secret",
+        )
+
+    def test_notification_test_endpoint_rejects_missing_webhook_url(self):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {"channel": "webhook"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("webhook_url", response.data)
+
+    def test_notification_test_endpoint_rejects_incomplete_credentials(self):
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {"channel": "telegram", "telegram_token": "bot-token"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("telegram", response.data)
+
+    @patch("core.views.notifications.send_discord_test")
+    def test_notification_test_endpoint_sanitizes_upstream_error(self, send_test):
+        upstream_response = Mock(status_code=401)
+        send_test.side_effect = requests.HTTPError(
+            "https://discord.example/secret-webhook failed",
+            response=upstream_response,
+        )
+
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "discord",
+                "discord_webhook": "https://discord.example/secret-webhook",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(
+            response.data["detail"],
+            "Discord rejected the test notification. HTTP 401.",
+        )
+        self.assertNotIn("secret-webhook", response.data["detail"])
+
+    @patch("core.views.notifications.send_telegram_test")
+    def test_notification_test_endpoint_explains_missing_telegram_chat(self, send_test):
+        upstream_response = Mock(status_code=400)
+        send_test.side_effect = requests.HTTPError(
+            "Telegram request failed with a secret bot token",
+            response=upstream_response,
+        )
+
+        response = self.client.post(
+            "/api/v1/notifications/test/",
+            {
+                "channel": "telegram",
+                "telegram_token": "secret-bot-token",
+                "telegram_user_id": "123456",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertEqual(
+            response.data["detail"],
+            (
+                "Telegram rejected the chat. Check the chat ID and send /start "
+                "to the bot before testing. HTTP 400."
+            ),
+        )
+        self.assertNotIn("secret-bot-token", response.data["detail"])

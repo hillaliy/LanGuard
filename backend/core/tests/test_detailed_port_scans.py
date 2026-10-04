@@ -4,13 +4,13 @@ from django.contrib.auth.models import User
 from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 
-from .detailed_port_scans import (
+from ..detailed_port_scans import (
     claim_next_detailed_port_scan,
     parse_port_specification,
     process_next_detailed_port_scan,
     run_detailed_port_scan,
 )
-from .models import DetailedPortScan, Device, DevicePort, UserAccess
+from ..models import DetailedPortScan, Device, DevicePort, UserAccess
 
 
 class DetailedPortSpecificationTests(SimpleTestCase):

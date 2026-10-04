@@ -6,8 +6,8 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .models import AppSettings, Device, DeviceDNSActivity
-from .integrations.pihole import PiHoleClient, PiHoleError, sync_pihole
+from ..models import AppSettings, Device, DeviceDNSActivity
+from ..integrations.pihole import PiHoleClient, PiHoleError, sync_pihole
 
 
 class PiHoleClientTests(SimpleTestCase):

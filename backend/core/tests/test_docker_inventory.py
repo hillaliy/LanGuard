@@ -4,13 +4,13 @@ from django.contrib.auth.models import User
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from .integrations.docker_inventory import (
+from ..integrations.docker_inventory import (
     DockerInventoryError,
     apply_docker_inventory,
     collect_local_inventory,
     sync_enabled_docker_hosts,
 )
-from .models import Device, DevicePort, DockerContainer, DockerHost, NetworkEvent
+from ..models import Device, DevicePort, DockerContainer, DockerHost, NetworkEvent
 
 
 def inventory_payload(*, network_mode="bridge", addresses=None, ports=None):

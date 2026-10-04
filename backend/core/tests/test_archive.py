@@ -5,11 +5,11 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from .models import Device, DevicePort, NetworkEvent, UserAccess
-from .notifications import notification_event_allowed
-from .scanning.presence import mark_missing_devices_offline
-from .scanning.reconciliation import sync_discovered_device
-from .views.inventory import import_inventory_devices
+from ..models import Device, DevicePort, NetworkEvent, UserAccess
+from ..notifications import notification_event_allowed
+from ..scanning.presence import mark_missing_devices_offline
+from ..scanning.reconciliation import sync_discovered_device
+from ..views.inventory import import_inventory_devices
 
 
 class DeviceArchiveTests(TestCase):

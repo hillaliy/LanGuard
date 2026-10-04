@@ -6,7 +6,7 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from .integrations.adguard import (
+from ..integrations.adguard import (
     AdGuardClient,
     AdGuardError,
     device_for_client_at,
@@ -14,8 +14,8 @@ from .integrations.adguard import (
     sync_adguard_query_log,
     test_adguard_connection,
 )
-from .maintenance import cleanup_all_activity
-from .models import (
+from ..maintenance import cleanup_all_activity
+from ..models import (
     AdGuardUnmatchedClient,
     AppSettings,
     Device,
