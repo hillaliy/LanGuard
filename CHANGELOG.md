@@ -10,6 +10,18 @@
 - Split the Dashboard into focused status, summary, insight, and scan-detail components while preserving its calculations and navigation actions.
 - Split authentication and user management into focused login, account-form, state, and modal modules while preserving permission and account workflows.
 - Split integration services and notification channels into focused settings components while preserving their existing save, test, and sync behavior.
+- Established a domain-ready backend views package and moved the existing Docker and HomeBox views into it without changing API routes or behavior.
+- Moved setup, authentication, session, and user-management endpoints into a focused backend users view module.
+- Moved application settings and public version-status endpoints into a focused backend settings view module.
+- Moved AdGuard Home, Pi-hole, and Speedtest Tracker endpoints into a focused backend integrations view module.
+- Moved device, global, and unmatched-client DNS activity endpoints into a focused backend DNS activity view module.
+- Moved notification delivery history and channel-test endpoints into a focused backend notifications view module.
+- Moved network event and scan-run history endpoints into a focused backend activity view module.
+- Moved manual scan execution and scanner-status endpoints into a focused backend scans view module.
+- Moved device listing, editing, bulk actions, availability, web access, and Wake-on-LAN endpoints into a focused backend devices view module.
+- Moved detailed port scan queueing, status, and cancellation endpoints into a focused backend port scans view module.
+- Moved health, home map, maintenance, and diagnostics endpoints into focused backend view modules.
+- Moved device inventory import and export endpoints and parsers into a focused backend inventory view module, leaving the views package initializer empty.
 - Split the main frontend controller into focused inventory, navigation, activity, and session hooks while preserving its public interface.
 - Split the device inventory into focused filter, role, toolbar, desktop, mobile, and pagination components while preserving its responsive workflows.
 - Unified the Devices navigation and inventory heading icons for clearer visual consistency.

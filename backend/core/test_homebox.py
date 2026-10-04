@@ -9,7 +9,7 @@ from rest_framework.test import APIClient
 from .homebox import HomeBoxClient, HomeBoxError
 from .models import AppSettings, Device, UserAccess
 from .serializers import AppSettingsSerializer, DeviceSerializer
-from .views import import_inventory_devices
+from .views.inventory import import_inventory_devices
 
 
 ITEM_ID = "39e038fb-a217-4528-b138-162291b36aca"

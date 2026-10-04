@@ -64,7 +64,7 @@ class WakeDeviceApiTests(TestCase):
             scan_ranges=["192.168.1.0/24"],
         )
 
-    @patch("core.views.send_magic_packet")
+    @patch("core.views.devices.send_magic_packet")
     def test_wake_device_sends_packet_to_network_broadcast(self, send_mock):
         response = self.client.post(
             "/api/v1/device/wake/",
@@ -114,7 +114,7 @@ class WakeDeviceApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("valid MAC", response.data["device"])
 
-    @patch("core.views.send_magic_packet", side_effect=OSError("network unavailable"))
+    @patch("core.views.devices.send_magic_packet", side_effect=OSError("network unavailable"))
     def test_wake_device_returns_safe_error_when_send_fails(self, _send_mock):
         response = self.client.post(
             "/api/v1/device/wake/",
@@ -126,7 +126,7 @@ class WakeDeviceApiTests(TestCase):
         self.assertEqual(response.data["notification"]["title"], "Wake request failed")
         self.assertNotIn("network unavailable", str(response.data))
 
-    @patch("core.views.send_magic_packet")
+    @patch("core.views.devices.send_magic_packet")
     def test_wake_device_does_not_wake_archived_devices(self, send_mock):
         self.device.archived = True
         self.device.save(update_fields=["archived"])

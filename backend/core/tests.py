@@ -46,7 +46,7 @@ from .notifications import (
 )
 from .port_guidance import PORT_CATALOG, port_guidance
 from .serializers import device_attention_reasons, device_identity
-from .views import parse_inventory_datetime
+from .views.inventory import parse_inventory_datetime
 from .versioning import check_for_version_update, is_newer_version
 from .scan import (
     STALE_SCAN_ERROR,
@@ -800,7 +800,7 @@ class HealthStatusTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, {"status": "ok"})
 
-    @patch("core.views.connection.cursor", side_effect=DatabaseError("unavailable"))
+    @patch("core.views.health.connection.cursor", side_effect=DatabaseError("unavailable"))
     def test_health_endpoint_reports_database_failure(self, cursor):
         response = self.client.get("/api/v1/health/")
 
@@ -3396,7 +3396,7 @@ class ScanApiTests(TestCase):
                 device=self.device, event_type=event_type,
                 message="Presence", created_at=now - timedelta(hours=hours),
             )
-        with patch("core.views.timezone.now", return_value=now):
+        with patch("core.views.devices.timezone.now", return_value=now):
             response = self.client.get("/api/v1/device/availability/", {"device": self.device.id, "period": "day"})
         self.assertEqual(response.status_code, 200)
         data = response.data["data"]
@@ -3988,7 +3988,7 @@ class ScanApiTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
-    @patch("core.views.send_discord_test")
+    @patch("core.views.notifications.send_discord_test")
     def test_notification_test_endpoint_sends_discord_without_history(self, send_test):
         delivery_count = NotificationDelivery.objects.count()
         event_count = NetworkEvent.objects.count()
@@ -4008,7 +4008,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(NotificationDelivery.objects.count(), delivery_count)
         self.assertEqual(NetworkEvent.objects.count(), event_count)
 
-    @patch("core.views.send_discord_test")
+    @patch("core.views.notifications.send_discord_test")
     def test_notification_test_endpoint_uses_saved_discord_webhook(self, send_test):
         config = AppSettings.load()
         config.discord_webhook = "https://discord.example/saved-webhook"
@@ -4023,7 +4023,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         send_test.assert_called_once_with("https://discord.example/saved-webhook")
 
-    @patch("core.views.send_telegram_test")
+    @patch("core.views.notifications.send_telegram_test")
     def test_notification_test_endpoint_sends_telegram(self, send_test):
         response = self.client.post(
             "/api/v1/notifications/test/",
@@ -4043,7 +4043,7 @@ class ScanApiTests(TestCase):
             "https://relay.example/telegram",
         )
 
-    @patch("core.views.send_telegram_test")
+    @patch("core.views.notifications.send_telegram_test")
     def test_notification_test_endpoint_uses_saved_telegram_token(self, send_test):
         config = AppSettings.load()
         config.telegram_api_url = "http://telegram-relay:8081"
@@ -4066,7 +4066,7 @@ class ScanApiTests(TestCase):
             "http://telegram-relay:8081",
         )
 
-    @patch("core.views.send_ntfy_test")
+    @patch("core.views.notifications.send_ntfy_test")
     def test_notification_test_endpoint_sends_ntfy(self, send_test):
         response = self.client.post(
             "/api/v1/notifications/test/",
@@ -4096,7 +4096,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("ntfy_topic", response.data)
 
-    @patch("core.views.send_webhook_test")
+    @patch("core.views.notifications.send_webhook_test")
     def test_notification_test_endpoint_sends_webhook(self, send_test):
         config = AppSettings.load()
         config.webhook_secret = "saved-secret"
@@ -4137,7 +4137,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("telegram", response.data)
 
-    @patch("core.views.send_discord_test")
+    @patch("core.views.notifications.send_discord_test")
     def test_notification_test_endpoint_sanitizes_upstream_error(self, send_test):
         upstream_response = Mock(status_code=401)
         send_test.side_effect = requests.HTTPError(
@@ -4161,7 +4161,7 @@ class ScanApiTests(TestCase):
         )
         self.assertNotIn("secret-webhook", response.data["detail"])
 
-    @patch("core.views.send_telegram_test")
+    @patch("core.views.notifications.send_telegram_test")
     def test_notification_test_endpoint_explains_missing_telegram_chat(self, send_test):
         upstream_response = Mock(status_code=400)
         send_test.side_effect = requests.HTTPError(
@@ -5252,7 +5252,7 @@ class ScanApiTests(TestCase):
         )
 
         with patch(
-            "core.views.timezone.now",
+            "core.views.devices.timezone.now",
             return_value=datetime(2026, 9, 10, 22, 30),
         ):
             response = self.client.get("/api/v1/device/", {"first_seen": "today"})
@@ -6058,7 +6058,7 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("external_url", response.data["info"])
 
-    @patch("core.views.detect_web_interface", return_value="http://192.168.1.10")
+    @patch("core.views.devices.detect_web_interface", return_value="http://192.168.1.10")
     def test_device_web_interface_endpoint_probes_saved_device(self, detect):
         DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
 
@@ -7017,7 +7017,7 @@ class ScanApiTests(TestCase):
         self.assertIn("ip_range", response.data)
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
-    @patch("core.views.scan")
+    @patch("core.views.scans.scan")
     def test_scan_now_uses_saved_default_range(self, scan_mock):
         AppSettings.objects.create(ip_range="192.168.1.0/24", scan_interval=10)
         scan_mock.return_value = self.scan_run
@@ -7031,7 +7031,7 @@ class ScanApiTests(TestCase):
         )
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
-    @patch("core.views.scan")
+    @patch("core.views.scans.scan")
     def test_scan_now_uses_saved_network_ranges(self, scan_mock):
         config = AppSettings.load()
         config.ip_range = "192.168.1.0/24"
@@ -7063,7 +7063,7 @@ class ScanApiTests(TestCase):
         self.assertIn("scheduled scan is already running", response.data["detail"])
 
     @override_settings(SCAN_MAX_HOSTS=256, SCAN_ALLOW_PUBLIC_RANGES=False)
-    @patch("core.views.scan")
+    @patch("core.views.scans.scan")
     def test_scan_now_returns_json_when_scanner_lacks_permissions(self, scan_mock):
         scan_mock.side_effect = Exception(
             "Permission denied: could not open /dev/bpf0. Make sure to be running Scapy as root ! (sudo)"

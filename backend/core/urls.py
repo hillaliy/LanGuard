@@ -1,51 +1,54 @@
 from django.urls import path
-from .homebox_views import test_homebox, search_homebox
-from .docker_views import (
+from .views.homebox import test_homebox, search_homebox
+from .views.docker import (
     docker_device_context,
     docker_host_detail,
     docker_hosts,
     docker_inventory_overview,
     sync_docker_host_view,
 )
-
-from .views import (
-    UserRegistrationView,
-    app_settings,
-    device_dns_activity,
-    dns_activity,
-    dns_unmatched_clients,
+from .views.users import (
     UserLoginView,
     UserLogoutView,
+    UserRegistrationView,
     setup_status,
-    version_status,
-    device,
-    device_availability,
-    bulk_update_devices,
-    device_web_interface,
-    detailed_port_scan,
-    cancel_detailed_port_scan,
-    wake_device,
-    events,
-    scan_now,
-    scan_runs,
-    scan_status,
-    notifications,
-    export_devices,
-    export_diagnostics,
-    health_status,
-    home_map_layout,
-    import_devices,
-    import_netalertx_devices,
-    import_watchyourlan_devices,
-    maintenance_cleanup,
-    test_notification_channel,
+    users,
+)
+from .views.app_settings import app_settings, version_status
+from .views.integrations import (
+    speedtest_tracker_latest,
     sync_adguard,
     sync_pihole_now,
     test_adguard,
     test_pihole,
-    speedtest_tracker_latest,
     test_speedtest_tracker,
-    users,
+)
+from .views.dns_activity import (
+    device_dns_activity,
+    dns_activity,
+    dns_unmatched_clients,
+)
+from .views.notifications import notifications, test_notification_channel
+from .views.activity import events, scan_runs
+from .views.scans import scan_now, scan_status
+from .views.port_scans import cancel_detailed_port_scan, detailed_port_scan
+from .views.health import health_status
+from .views.home_map import home_map_layout
+from .views.maintenance import maintenance_cleanup
+from .views.diagnostics import export_diagnostics
+from .views.devices import (
+    bulk_update_devices,
+    device,
+    device_availability,
+    device_web_interface,
+    wake_device,
+)
+
+from .views.inventory import (
+    export_devices,
+    import_devices,
+    import_netalertx_devices,
+    import_watchyourlan_devices,
 )
 
 urlpatterns = [
