@@ -3,9 +3,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema, OpenApiTypes
 
-from .access_control import user_capabilities
-from .homebox import HomeBoxClient, HomeBoxError, normalize_url
-from .models import AppSettings
+from ..access_control import user_capabilities
+from ..homebox import HomeBoxClient, HomeBoxError, normalize_url
+from ..models import AppSettings
 
 
 class HomeBoxConnectionSerializer(serializers.Serializer):

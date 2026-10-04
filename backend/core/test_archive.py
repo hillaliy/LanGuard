@@ -8,7 +8,7 @@ from rest_framework.test import APIClient
 from .models import Device, DevicePort, NetworkEvent, UserAccess
 from .notifications import notification_event_allowed
 from .scan import sync_discovered_device, mark_missing_devices_offline
-from .views import import_inventory_devices
+from .views.inventory import import_inventory_devices
 
 
 class DeviceArchiveTests(TestCase):

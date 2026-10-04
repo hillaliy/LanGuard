@@ -424,7 +424,7 @@ class AdGuardIntegrationTests(TestCase):
         self.assertEqual(invalid.status_code, 400)
         self.assertIn("adguard_retention_days", invalid.data)
 
-    @patch("core.views.test_adguard_connection")
+    @patch("core.views.integrations.test_adguard_connection")
     def test_admin_can_test_saved_connection_without_resending_password(self, test_connection):
         test_connection.return_value = {
             "version": "0.107.60",
