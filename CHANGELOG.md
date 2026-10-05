@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.22.0 - 2026-10-05
+
 - Split the frontend application into focused route, shell, authentication, controller, component, and utility modules while preserving existing navigation and behavior.
 - Split Settings into focused tab components and domain-specific state hooks while preserving the existing loading and save behavior.
 - Split device details into focused header, overview/edit, history, DNS activity, port-scan, field, modal, and state-management modules without changing device workflows.
@@ -27,6 +29,7 @@
 - Split network scanning into focused lifecycle, discovery, identity, vendor, port, presence, reconciliation, and orchestration modules while preserving scanner behavior.
 - Organized backend tests in a dedicated package and split the monolithic test suite into focused configuration, scanner, device, settings, integration, notification, inventory, maintenance, activity, authentication, and user modules without changing coverage.
 - Added Ruff linting for backend Python code in local development and continuous integration.
+- Updated backend and frontend dependencies through Dependabot, including security fixes in Next.js 16.3.8.
 - Split the main frontend controller into focused inventory, navigation, activity, and session hooks while preserving its public interface.
 - Split the device inventory into focused filter, role, toolbar, desktop, mobile, and pagination components while preserving its responsive workflows.
 - Unified the Devices navigation and inventory heading icons for clearer visual consistency.
