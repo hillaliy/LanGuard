@@ -16,7 +16,7 @@ Create and start the backend environment:
 ```bash
 python3.14 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 python backend/manage.py migrate
 python backend/manage.py runserver 127.0.0.1:8000
 ```
@@ -39,6 +39,7 @@ For native macOS development and packaging, see
 Run the relevant checks before opening a pull request:
 
 ```bash
+.venv/bin/ruff check backend
 .venv/bin/python backend/manage.py test core
 node --test scripts/changelog.test.mjs
 node scripts/changelog.mjs --check
