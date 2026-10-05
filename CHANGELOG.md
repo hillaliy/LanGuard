@@ -26,6 +26,7 @@
 - Grouped AdGuard Home, Pi-hole, HomeBox, Speedtest Tracker, and Docker inventory adapters in a focused backend integrations package.
 - Split network scanning into focused lifecycle, discovery, identity, vendor, port, presence, reconciliation, and orchestration modules while preserving scanner behavior.
 - Organized backend tests in a dedicated package and split the monolithic test suite into focused configuration, scanner, device, settings, integration, notification, inventory, maintenance, activity, authentication, and user modules without changing coverage.
+- Added Ruff linting for backend Python code in local development and continuous integration.
 - Split the main frontend controller into focused inventory, navigation, activity, and session hooks while preserving its public interface.
 - Split the device inventory into focused filter, role, toolbar, desktop, mobile, and pagination components while preserving its responsive workflows.
 - Unified the Devices navigation and inventory heading icons for clearer visual consistency.

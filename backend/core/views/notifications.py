@@ -1,7 +1,7 @@
 import logging
 
 import requests
-from drf_spectacular.utils import OpenApiTypes, extend_schema, inline_serializer
+from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import permissions, serializers, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import ValidationError

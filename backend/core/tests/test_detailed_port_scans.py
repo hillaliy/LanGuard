@@ -158,7 +158,7 @@ class DetailedPortScanApiTests(TestCase):
             port=81,
             open=True,
         )
-        job = DetailedPortScan.objects.create(
+        DetailedPortScan.objects.create(
             device=self.device,
             requested_by=self.user,
             ports=[22, 81],
