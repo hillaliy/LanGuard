@@ -3,6 +3,7 @@ set -e
 
 LOCK_DIR="${MIGRATION_LOCK_DIR:-/data/.startup-lock}"
 mkdir -p "$(dirname "$LOCK_DIR")"
+mkdir -p "${LOG_DIRECTORY:-/app}"
 
 cleanup_lock() {
     rmdir "$LOCK_DIR" 2>/dev/null || true

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Expanded diagnostics with rotating backend and scheduler logs, sanitized warning/error traceback metadata, dedicated recent scan failures, and grouped failure summaries.
+
+- Added a dedicated temperature and humidity sensor icon to device icon selection in the web and macOS applications, including inventory import/export compatibility and sleeping-device presence handling.
+- Fixed intermittent blank Speedtest dashboard metrics by requesting the latest completed result, supporting nested Ookla measurements, and rejecting incomplete results instead of caching them as available.
+- Tightened the Docker inventory table with balanced column widths, single-line container and network values, aligned headers and status content, distinct state and health colors, and non-duplicated health status text.
+- Aligned device-list metadata labels and values, prevented port-overflow and last-seen clipping, and widened the First seen filter so its label and controls remain readable.
+
 ## 1.22.0 - 2026-10-05
 
 - Split the frontend application into focused route, shell, authentication, controller, component, and utility modules while preserving existing navigation and behavior.

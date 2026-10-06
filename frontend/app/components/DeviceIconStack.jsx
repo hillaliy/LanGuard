@@ -14,6 +14,7 @@ import {
   IconDeviceTablet,
   IconDeviceTv,
   IconDeviceWatch,
+  IconDropletHalf2,
   IconLamp,
   IconLine,
   IconLock,
@@ -32,6 +33,21 @@ import {
   IconWindmill,
   IconWindow,
 } from '@tabler/icons-react';
+
+function TemperatureHumiditySensorIcon({ size = 18, stroke = 1.8 }) {
+  const dropletSize = Math.max(9, Math.round(size * 0.58));
+
+  return (
+    <span
+      className="temperature-humidity-sensor-icon"
+      style={{ height: size, width: size }}
+      aria-hidden="true"
+    >
+      <IconTemperature size={size} stroke={stroke} />
+      <IconDropletHalf2 size={dropletSize} stroke={stroke} />
+    </span>
+  );
+}
 
 export const deviceIconOptions = [
   { value: 'unknown', label: 'Unknown', icon: IconQuestionMark },
@@ -57,6 +73,11 @@ export const deviceIconOptions = [
   { value: 'fan', label: 'Fan', icon: IconPropeller },
   { value: 'ceiling-fan', label: 'Ceiling fan', icon: IconWindmill },
   { value: 'thermostat', label: 'Thermostat', icon: IconTemperature },
+  {
+    value: 'temperature-humidity-sensor',
+    label: 'Temperature & humidity sensor',
+    icon: TemperatureHumiditySensorIcon,
+  },
   { value: 'speaker', label: 'Speaker', icon: IconDeviceSpeaker },
   { value: 'printer', label: 'Printer', icon: IconPrinter },
   { value: 'lock', label: 'Lock', icon: IconLock },
@@ -154,6 +175,11 @@ export function normalizeDeviceIcon(value) {
     'thermometer.medium': 'thermostat',
     'thermometer-snow': 'thermostat',
     temperature: 'thermostat',
+    humidity: 'temperature-humidity-sensor',
+    'humidity-sensor': 'temperature-humidity-sensor',
+    'temperature-humidity': 'temperature-humidity-sensor',
+    'temperature-humidity-sensor': 'temperature-humidity-sensor',
+    'temperature-sensor': 'temperature-humidity-sensor',
     audio: 'speaker',
     hifispeaker: 'speaker',
     homepod: 'speaker',

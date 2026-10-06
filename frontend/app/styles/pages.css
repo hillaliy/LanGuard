@@ -98,6 +98,48 @@
   border-top: 1px solid var(--border-color);
 }
 
+.docker-inventory-table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.docker-inventory-table th,
+.docker-inventory-table td {
+  vertical-align: middle;
+}
+
+.docker-column-container {
+  width: 34%;
+}
+
+.docker-column-state {
+  width: 16%;
+}
+
+.docker-column-network {
+  width: 17%;
+}
+
+.docker-column-ports {
+  width: 25%;
+}
+
+.docker-column-restarts {
+  width: 8%;
+}
+
+.docker-container-identity {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.docker-container-state,
+.docker-container-network,
+.docker-linked-device {
+  min-width: 0;
+  width: 100%;
+}
+
 .docker-container-mobile-list {
   display: none;
 }

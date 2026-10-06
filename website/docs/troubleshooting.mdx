@@ -10,9 +10,11 @@ Start with the smallest safe diagnostic: service status, the relevant Settings t
 
 ## Export support diagnostics
 
-Administrators can open **Settings > Maintenance** and select **Export diagnostics**. The JSON report includes version, runtime and database health, configuration state, aggregate counts, and recent scan outcomes.
+Administrators can open **Settings > Maintenance** and select **Export diagnostics**. The JSON report includes version, runtime and database health, configuration state, aggregate counts, recent scan outcomes, the 25 most recent scan failures, grouped failure codes and stages, and up to 120 recent warning, error, or critical log events from the backend and scheduler.
 
-It intentionally omits credentials, service URLs, usernames, device names, IP and MAC addresses, network ranges, and raw exception text. Attach it to a GitHub issue. Share container logs only when requested and review them for private network details first.
+Diagnostic log events include their component, timestamp, sanitized message, exception type, and safe source file and line locations when available. Rotating logs are retained in the shared LanGuard data volume, so the backend can include scheduler failures in the export. Events that occurred before upgrading to a version with persisted diagnostic logs are not available retroactively.
+
+The export intentionally omits credentials, service URLs, usernames, device names, IP and MAC addresses, network ranges, raw exception text, and absolute paths. Attach it to a GitHub issue. Share raw container logs only when requested and review them for private network details first.
 
 ## The interface does not open
 

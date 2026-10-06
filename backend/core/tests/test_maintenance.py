@@ -1,7 +1,9 @@
 from datetime import timedelta
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from django.contrib.auth.models import User
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -12,6 +14,7 @@ from ..models import (
     NotificationDelivery,
     ScanRun,
 )
+
 
 class MaintenanceApiTests(TestCase):
     def setUp(self):
@@ -73,6 +76,7 @@ class MaintenanceApiTests(TestCase):
         config.speedtest_tracker_api_token = "super-secret-speedtest-token"
         config.save()
         self.scan_run.error = "Failed on 192.168.1.20 with aa:aa:aa:aa:aa:aa"
+        self.scan_run.status = ScanRun.Status.FAILED
         self.scan_run.failure_code = "database_locked"
         self.scan_run.failure_type = "OperationalError"
         self.scan_run.failure_stage = "device_sync"
@@ -80,6 +84,7 @@ class MaintenanceApiTests(TestCase):
         self.scan_run.save(
             update_fields=[
                 "error",
+                "status",
                 "failure_code",
                 "failure_type",
                 "failure_stage",
@@ -91,7 +96,13 @@ class MaintenanceApiTests(TestCase):
         )
         self.delivery.save(update_fields=["error"])
 
-        response = self.client.get("/api/v1/diagnostics/export/")
+        with TemporaryDirectory() as temporary_directory:
+            missing_log = Path(temporary_directory) / "missing.log"
+            with override_settings(
+                DIAGNOSTIC_LOG_FILES={"backend": missing_log},
+                LOG_BACKUP_COUNT=0,
+            ):
+                response = self.client.get("/api/v1/diagnostics/export/")
 
         self.assertEqual(response.status_code, 200)
         serialized = str(response.data)
@@ -115,16 +126,77 @@ class MaintenanceApiTests(TestCase):
             "languard-diagnostics",
         )
         diagnostics = response.data["data"]["report"]
-        self.assertEqual(diagnostics["report"]["format_version"], 2)
+        self.assertEqual(diagnostics["report"]["format_version"], 3)
         latest_scan = diagnostics["latest_scans"][0]
         self.assertEqual(latest_scan["failure_code"], "database_locked")
         self.assertEqual(latest_scan["failure_type"], "OperationalError")
         self.assertEqual(latest_scan["failure_stage"], "device_sync")
         self.assertEqual(latest_scan["failure_fingerprint"], "0123456789abcdef")
+        recent_failure = diagnostics["recent_scan_failures"][0]
+        self.assertEqual(recent_failure["failure_code"], "database_locked")
+        self.assertEqual(
+            diagnostics["scan_failure_summary"]["by_stage"],
+            [{"value": "device_sync", "count": 1}],
+        )
+        self.assertFalse(diagnostics["logs"]["sources"][0]["available"])
         configuration = response.data["data"]["report"]["configuration"]
         self.assertTrue(configuration["speedtest_tracker_enabled"])
         self.assertTrue(configuration["speedtest_tracker_configured"])
         self.assertIn("notification", response.data)
+
+    def test_diagnostics_export_includes_sanitized_failure_logs(self):
+        with TemporaryDirectory() as temporary_directory:
+            log_path = Path(temporary_directory) / "scheduler.log"
+            log_path.write_text(
+                "\n".join(
+                    [
+                        "2026-10-06 08:00:00 : INFO - Starting scan for 192.168.1.0/24",
+                        "2026-10-06 08:00:01 : ERROR - Admin failed Laptop scan at "
+                        "https://private.example/run?token=secret on 192.168.1.20",
+                        "Traceback (most recent call last):",
+                        '  File "/app/core/scanning/orchestration.py", line 144, in scan',
+                        '    raise TimeoutError("aa:aa:aa:aa:aa:aa")',
+                        "requests.exceptions.Timeout: token=secret 192.168.1.20",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            with override_settings(
+                DIAGNOSTIC_LOG_FILES={"scheduler": log_path},
+                LOG_BACKUP_COUNT=0,
+            ):
+                response = self.client.get("/api/v1/diagnostics/export/")
+
+        self.assertEqual(response.status_code, 200)
+        logs = response.data["data"]["report"]["logs"]
+        self.assertEqual(len(logs["events"]), 1)
+        event = logs["events"][0]
+        self.assertEqual(event["component"], "scheduler")
+        self.assertEqual(event["level"], "ERROR")
+        self.assertIn("[url]", event["message"])
+        self.assertIn("[ip]", event["message"])
+        self.assertEqual(event["exception_type"], "requests.exceptions.Timeout")
+        self.assertEqual(
+            event["traceback"],
+            [
+                {
+                    "file": "core/scanning/orchestration.py",
+                    "line": 144,
+                    "function": "scan",
+                }
+            ],
+        )
+        serialized = str(logs)
+        for private_value in (
+            "private.example",
+            "token=secret",
+            "192.168.1.20",
+            "aa:aa:aa:aa:aa:aa",
+            "/app/",
+            "Laptop",
+            "Admin",
+        ):
+            self.assertNotIn(private_value, serialized)
 
     def test_old_raw_errors_are_sanitized_in_api_responses(self):
         self.scan_run.error = "Internal path /private/app and 192.168.1.20"

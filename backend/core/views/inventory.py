@@ -51,6 +51,7 @@ DOCKER_TO_MAC_ICON_ALIASES = {
     "fan": "fan",
     "ceiling-fan": "fan.ceiling",
     "thermostat": "thermometer.medium",
+    "temperature-humidity-sensor": "humidity",
     "speaker": "homepod",
     "printer": "printer",
     "lock": "lock",

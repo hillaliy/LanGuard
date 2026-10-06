@@ -4,9 +4,12 @@ from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.db import connection
+from django.db.models import Count
 from django.utils import timezone
 
+from .diagnostic_logs import collect_diagnostic_logs
 from .datetime_utils import utc_isoformat
 from .models import (
     AdGuardUnmatchedClient,
@@ -49,33 +52,83 @@ def _database_runtime():
     }
 
 
+def _scan_run_payload(scan_run):
+    duration_seconds = None
+    if scan_run.finished_at:
+        duration_seconds = max(
+            0,
+            int((scan_run.finished_at - scan_run.started_at).total_seconds()),
+        )
+    return {
+        "status": scan_run.status,
+        "source": scan_run.source,
+        "started_at": utc_isoformat(scan_run.started_at),
+        "finished_at": utc_isoformat(scan_run.finished_at),
+        "duration_seconds": duration_seconds,
+        "devices_seen": scan_run.devices_seen,
+        "new_devices": scan_run.new_devices,
+        "error": stored_error_message("scan", scan_run.error),
+        "failure_code": scan_run.failure_code,
+        "failure_type": scan_run.failure_type,
+        "failure_stage": scan_run.failure_stage,
+        "failure_fingerprint": scan_run.failure_fingerprint,
+    }
+
+
+def _failure_counts(field):
+    rows = (
+        ScanRun.objects.filter(status=ScanRun.Status.FAILED)
+        .values(field)
+        .annotate(count=Count("id"))
+        .order_by("-count", field)
+    )
+    return [
+        {"value": row[field] or "not_recorded", "count": row["count"]} for row in rows
+    ]
+
+
+def _failure_fingerprints():
+    rows = (
+        ScanRun.objects.filter(
+            status=ScanRun.Status.FAILED,
+            failure_fingerprint__gt="",
+        )
+        .values("failure_fingerprint", "failure_code", "failure_stage")
+        .annotate(count=Count("id"))
+        .order_by("-count", "failure_fingerprint")[:20]
+    )
+    return [
+        {
+            "fingerprint": row["failure_fingerprint"],
+            "code": row["failure_code"] or "not_recorded",
+            "stage": row["failure_stage"] or "not_recorded",
+            "count": row["count"],
+        }
+        for row in rows
+    ]
+
+
 def build_diagnostics_report():
     config = AppSettings.load()
     generated_at = timezone.now()
-    latest_scans = []
-    for scan_run in ScanRun.objects.order_by("-started_at")[:10]:
-        duration_seconds = None
-        if scan_run.finished_at:
-            duration_seconds = max(
-                0,
-                int((scan_run.finished_at - scan_run.started_at).total_seconds()),
-            )
-        latest_scans.append(
-            {
-                "status": scan_run.status,
-                "source": scan_run.source,
-                "started_at": utc_isoformat(scan_run.started_at),
-                "finished_at": utc_isoformat(scan_run.finished_at),
-                "duration_seconds": duration_seconds,
-                "devices_seen": scan_run.devices_seen,
-                "new_devices": scan_run.new_devices,
-                "error": stored_error_message("scan", scan_run.error),
-                "failure_code": scan_run.failure_code,
-                "failure_type": scan_run.failure_type,
-                "failure_stage": scan_run.failure_stage,
-                "failure_fingerprint": scan_run.failure_fingerprint,
-            }
-        )
+    private_log_values = [
+        value
+        for pair in Device.objects.values_list("name", "hostname")
+        for value in pair
+    ]
+    private_log_values.extend(
+        get_user_model().objects.values_list("username", flat=True)
+    )
+    latest_scans = [
+        _scan_run_payload(scan_run)
+        for scan_run in ScanRun.objects.order_by("-started_at")[:10]
+    ]
+    recent_scan_failures = [
+        _scan_run_payload(scan_run)
+        for scan_run in ScanRun.objects.filter(status=ScanRun.Status.FAILED).order_by(
+            "-started_at"
+        )[:25]
+    ]
 
     delivery_counts = {
         value: NotificationDelivery.objects.filter(status=value).count()
@@ -101,11 +154,13 @@ def build_diagnostics_report():
     return {
         "report": {
             "format": "languard-diagnostics",
-            "format_version": 2,
+            "format_version": 3,
             "generated_at": utc_isoformat(generated_at),
             "privacy": (
                 "Credentials, URLs, usernames, device names, IP addresses, MAC addresses, "
-                "network ranges, and raw exception text are intentionally omitted."
+                "network ranges, raw exception text, and absolute paths are intentionally "
+                "omitted. Sanitized warning and error metadata and safe traceback locations "
+                "are included for troubleshooting."
             ),
         },
         "application": {
@@ -178,4 +233,12 @@ def build_diagnostics_report():
             "device_ip_assignments": DeviceIPAddressAssignment.objects.count(),
         },
         "latest_scans": latest_scans,
+        "recent_scan_failures": recent_scan_failures,
+        "scan_failure_summary": {
+            "total": ScanRun.objects.filter(status=ScanRun.Status.FAILED).count(),
+            "by_code": _failure_counts("failure_code"),
+            "by_stage": _failure_counts("failure_stage"),
+            "repeated_fingerprints": _failure_fingerprints(),
+        },
+        "logs": collect_diagnostic_logs(redacted_values=private_log_values),
     }

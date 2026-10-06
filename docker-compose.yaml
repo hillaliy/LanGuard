@@ -9,6 +9,7 @@ services:
       ALLOWED_HOSTS: 192.168.1.10,languard.local,127.0.0.1
       BACKEND_LISTEN_PORT: ${BACKEND_LISTEN_PORT:-8000}
       DB_PATH: /data/db.sqlite3
+      LOG_DIRECTORY: /data/logs
       STATIC_ROOT: /static
     volumes:
       - languard_database:/data
@@ -31,6 +32,7 @@ services:
       SECRET_KEY: change-this-to-a-long-random-secret
       ALLOWED_HOSTS: 192.168.1.10,languard.local,127.0.0.1
       DB_PATH: /data/db.sqlite3
+      LOG_DIRECTORY: /data/logs
       STATIC_ROOT: /static
     volumes:
       - languard_database:/data

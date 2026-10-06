@@ -36,12 +36,30 @@ def _number(value):
         return None
 
 
-def _speed_mbps(payload, name):
+def _speed_mbps(payload, details, name):
     bits = _number(payload.get(f"{name}_bits"))
     if bits is not None:
         return round(bits / 1_000_000, 2)
     value = _number(payload.get(name))
-    return round(value, 2) if value is not None else None
+    if value is not None:
+        return round(value, 2)
+
+    raw_measurement = details.get(name)
+    if isinstance(raw_measurement, dict):
+        bandwidth = _number(raw_measurement.get("bandwidth"))
+        if bandwidth is not None:
+            return round((bandwidth * 8) / 1_000_000, 2)
+    return None
+
+
+def _ping_ms(result, details):
+    ping = _number(result.get("ping"))
+    if ping is not None:
+        return ping
+    raw_ping = details.get("ping")
+    if isinstance(raw_ping, dict):
+        return _number(raw_ping.get("latency"))
+    return _number(raw_ping)
 
 
 def normalize_latest_result(payload, service_url):
@@ -60,11 +78,11 @@ def normalize_latest_result(payload, service_url):
 
     return {
         "id": result.get("id"),
-        "download_mbps": _speed_mbps(result, "download"),
-        "upload_mbps": _speed_mbps(result, "upload"),
+        "download_mbps": _speed_mbps(result, details, "download"),
+        "upload_mbps": _speed_mbps(result, details, "upload"),
         "download_display": str(result.get("download_bits_human") or ""),
         "upload_display": str(result.get("upload_bits_human") or ""),
-        "ping_ms": _number(result.get("ping")),
+        "ping_ms": _ping_ms(result, details),
         "packet_loss_percent": _number(packet_loss),
         "healthy": result.get("healthy") if isinstance(result.get("healthy"), bool) else None,
         "status": str(result.get("status") or ""),
@@ -86,6 +104,7 @@ class SpeedtestTrackerClient:
             response = requests.get(
                 f"{self.base_url}/api/v1/results/latest",
                 timeout=self.timeout,
+                params={"filter[status]": "completed"},
                 headers={
                     "Accept": "application/json",
                     "Authorization": f"Bearer {self.api_token}",
@@ -121,7 +140,15 @@ class SpeedtestTrackerClient:
             raise SpeedtestTrackerError(
                 "Speedtest Tracker returned an unexpected response."
             )
-        return normalize_latest_result(payload, self.base_url)
+        result = normalize_latest_result(payload, self.base_url)
+        if all(
+            result.get(field) is None
+            for field in ("download_mbps", "upload_mbps", "ping_ms")
+        ):
+            raise SpeedtestTrackerError(
+                "Speedtest Tracker returned a result without completed measurements."
+            )
+        return result
 
 
 def latest_speedtest_result(base_url, api_token, *, force_refresh=False):

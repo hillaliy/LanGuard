@@ -103,7 +103,7 @@ export default function DeviceInventoryFilters({
         />
         <Select
           className="device-first-seen-filter"
-          w={compactFilterWidth(firstSeenPeriodOptions, firstSeenPeriod, 'First seen')}
+          w={compactFilterWidth(firstSeenPeriodOptions, firstSeenPeriod, 'First seen', 140, 190)}
           placeholder="First seen"
           clearable
           data={firstSeenPeriodOptions}

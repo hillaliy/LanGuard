@@ -381,7 +381,7 @@
       minmax(160px, 1.25fr)
       minmax(110px, 0.75fr)
       minmax(170px, 1.3fr)
-      minmax(120px, 0.8fr);
+      minmax(140px, 0.9fr);
   }
 
   .devices-content-panel .devices-panel-controls.with-homebox {
@@ -391,7 +391,7 @@
       minmax(100px, 0.7fr)
       minmax(125px, 0.85fr)
       minmax(155px, 1.2fr)
-      minmax(110px, 0.8fr);
+      minmax(140px, 0.9fr);
   }
 
   .devices-content-panel .devices-panel-controls .mantine-Input-input {
@@ -484,7 +484,7 @@
       minmax(150px, 1.2fr)
       minmax(105px, 0.75fr)
       minmax(170px, 1.3fr)
-      minmax(115px, 0.8fr);
+      minmax(140px, 0.9fr);
   }
 
   .devices-content-panel .devices-panel-controls.with-homebox {
@@ -494,7 +494,7 @@
       minmax(90px, 0.7fr)
       minmax(125px, 0.9fr)
       minmax(145px, 1.2fr)
-      minmax(105px, 0.8fr);
+      minmax(140px, 0.9fr);
   }
 
   .devices-content-panel .devices-panel-controls .mantine-Input-input {

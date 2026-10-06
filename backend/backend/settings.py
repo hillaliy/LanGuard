@@ -8,8 +8,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/stable/ref/settings/
 """
 
-from pathlib import Path
 import os
+import re
+import tempfile
+from pathlib import Path
+
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
@@ -290,7 +293,25 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # Logger settings
-LOG_FILE = os.path.join(BASE_DIR, "log.log")
+LOG_COMPONENT = (
+    re.sub(
+        r"[^a-z0-9_-]",
+        "-",
+        os.getenv("APP_COMPONENT", "backend").strip().lower(),
+    )
+    or "backend"
+)
+LOG_DIRECTORY = Path(
+    os.getenv("LOG_DIRECTORY", Path(tempfile.gettempdir()) / "languard-logs")
+)
+LOG_DIRECTORY.mkdir(parents=True, exist_ok=True)
+LOG_FILE = os.getenv("LOG_FILE", str(LOG_DIRECTORY / f"{LOG_COMPONENT}.log"))
+LOG_MAX_BYTES = int(os.getenv("LOG_MAX_BYTES", str(2 * 1024 * 1024)))
+LOG_BACKUP_COUNT = int(os.getenv("LOG_BACKUP_COUNT", "3"))
+DIAGNOSTIC_LOG_FILES = {
+    "backend": str(LOG_DIRECTORY / "backend.log"),
+    "scheduler": str(LOG_DIRECTORY / "scheduler.log"),
+}
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -300,9 +321,12 @@ LOGGING = {
             "formatter": "simple",
         },
         "file": {
-            "class": "logging.FileHandler",
+            "class": "logging.handlers.RotatingFileHandler",
             "filename": LOG_FILE,
             "formatter": "verbose",
+            "maxBytes": LOG_MAX_BYTES,
+            "backupCount": LOG_BACKUP_COUNT,
+            "encoding": "utf-8",
         },
     },
     "formatters": {

@@ -56,41 +56,62 @@ function DockerPortMapping({ port, hostName }) {
   );
 }
 function DockerContainerState({ container }) {
+  const state = String(container.state || 'unknown').toLowerCase();
+  const health = String(container.health || '').toLowerCase();
+  const stateColor = {
+    running: 'teal',
+    restarting: 'blue',
+    paused: 'yellow',
+    exited: 'red',
+    stopped: 'red',
+    dead: 'red',
+    created: 'gray',
+  }[state] || 'gray';
+  const healthColor = {
+    healthy: 'teal',
+    unhealthy: 'red',
+    starting: 'yellow',
+  }[health] || 'gray';
+  const status = String(container.status || '').replace(
+    /\s*\((?:healthy|unhealthy|starting)\)\s*$/i,
+    ''
+  );
+
   return (
-    <>
-      <Group gap={6} wrap="wrap">
-        <Badge color={container.state === 'running' ? 'teal' : 'gray'} variant="light">
-          {container.state || 'Unknown'}
+    <Stack className="docker-container-state" gap={4} align="center">
+      <Group gap={6} wrap="nowrap" justify="center">
+        <Badge color={stateColor} variant="light">
+          {state}
         </Badge>
         {container.health && (
           <Badge
-            color={container.health === 'healthy' ? 'teal' : container.health === 'unhealthy' ? 'red' : 'yellow'}
+            color={healthColor}
             variant="light"
           >
             {container.health}
           </Badge>
         )}
       </Group>
-      {container.status && <Text size="xs" c="dimmed" mt={4}>{container.status}</Text>}
-    </>
+      {status && <Text size="xs" c="dimmed" ta="center">{status}</Text>}
+    </Stack>
   );
 }
 
 function DockerContainerNetwork({ container, onSelectDevice }) {
   return (
-    <>
-      <Text size="sm">{container.network_mode || '-'}</Text>
+    <Box className="docker-container-network">
+      <Text size="sm" truncate="end">{container.network_mode || '-'}</Text>
       {(container.addresses || []).map((address) => (
-        <Text key={`${address.network}-${address.ip}`} size="xs" c="dimmed">
+        <Text key={`${address.network}-${address.ip}`} size="xs" c="dimmed" truncate="end">
           {address.network}: {address.ip}
         </Text>
       ))}
       {container.linked_device_name && (
-        <UnstyledButton onClick={() => onSelectDevice({ id: container.linked_device })}>
-          <Text size="xs" c="blue" fw={600}>Linked to {container.linked_device_name}</Text>
+        <UnstyledButton className="docker-linked-device" onClick={() => onSelectDevice({ id: container.linked_device })}>
+          <Text size="xs" c="blue" fw={600} truncate="end">Linked to {container.linked_device_name}</Text>
         </UnstyledButton>
       )}
-    </>
+    </Box>
   );
 }
 
@@ -254,25 +275,44 @@ export default function DockerView({ timeZone, canManageUsers, onSelectDevice, o
 
               <div className="docker-container-table">
                 <Table.ScrollContainer minWidth={900}>
-                  <Table striped highlightOnHover verticalSpacing="sm">
+                  <Table className="docker-inventory-table" striped highlightOnHover verticalSpacing="sm">
+                    <colgroup>
+                      <col className="docker-column-container" />
+                      <col className="docker-column-state" />
+                      <col className="docker-column-network" />
+                      <col className="docker-column-ports" />
+                      <col className="docker-column-restarts" />
+                    </colgroup>
                     <Table.Thead>
                       <Table.Tr>
                         <Table.Th>Container</Table.Th>
-                        <Table.Th>State</Table.Th>
+                        <Table.Th ta="center">State</Table.Th>
                         <Table.Th>Network</Table.Th>
                         <Table.Th>Published ports</Table.Th>
-                        <Table.Th>Restarts</Table.Th>
+                        <Table.Th ta="center">Restarts</Table.Th>
                       </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>
                       {host.containers.map((container) => (
                         <Table.Tr key={container.id}>
-                          <Table.Td>
-                            <Text size="sm" fw={700}>{container.name}</Text>
-                            <Text size="xs" c="dimmed" className="wrap-text">{container.image || container.image_id || '-'}</Text>
-                            {container.started_at && <Text size="xs" c="dimmed">Started {formatDate(container.started_at, timeZone)}</Text>}
+                          <Table.Td className="docker-container-identity">
+                            <Text size="sm" fw={700} truncate="end">
+                              {container.name}
+                            </Text>
+                            <Text
+                              size="xs"
+                              c="dimmed"
+                              truncate="end"
+                            >
+                              {container.image || container.image_id || '-'}
+                            </Text>
+                            {container.started_at && (
+                              <Text size="xs" c="dimmed" truncate="end">
+                                Started {formatDate(container.started_at, timeZone)}
+                              </Text>
+                            )}
                           </Table.Td>
-                          <Table.Td><DockerContainerState container={container} /></Table.Td>
+                          <Table.Td ta="center"><DockerContainerState container={container} /></Table.Td>
                           <Table.Td><DockerContainerNetwork container={container} onSelectDevice={onSelectDevice} /></Table.Td>
                           <Table.Td>
                             <Stack gap={5} align="flex-start">
@@ -287,7 +327,7 @@ export default function DockerView({ timeZone, canManageUsers, onSelectDevice, o
                                 : <Text size="sm">-</Text>}
                             </Stack>
                           </Table.Td>
-                          <Table.Td>{container.restart_count ?? 0}</Table.Td>
+                          <Table.Td ta="center">{container.restart_count ?? 0}</Table.Td>
                         </Table.Tr>
                       ))}
                     </Table.Tbody>
@@ -300,8 +340,14 @@ export default function DockerView({ timeZone, canManageUsers, onSelectDevice, o
                   <Box key={container.id} className="docker-container-mobile-card">
                     <Group justify="space-between" align="flex-start" gap="sm">
                       <Box className="docker-container-mobile-title">
-                        <Text fw={700}>{container.name}</Text>
-                        <Text size="xs" c="dimmed" className="wrap-text">{container.image || container.image_id || '-'}</Text>
+                        <Text fw={700} truncate="end">{container.name}</Text>
+                        <Text
+                          size="xs"
+                          c="dimmed"
+                          truncate="end"
+                        >
+                          {container.image || container.image_id || '-'}
+                        </Text>
                       </Box>
                       <DockerContainerState container={container} />
                     </Group>

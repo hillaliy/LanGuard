@@ -116,6 +116,22 @@
   gap: 2px;
 }
 
+.temperature-humidity-sensor-icon {
+  display: inline-block;
+  position: relative;
+}
+
+.temperature-humidity-sensor-icon > svg:first-child {
+  inset: 0 auto auto 0;
+  position: absolute;
+}
+
+.temperature-humidity-sensor-icon > svg:last-child {
+  bottom: -1px;
+  position: absolute;
+  right: -2px;
+}
+
 .device-list-meta {
   align-items: center;
   display: grid;
@@ -125,15 +141,22 @@
     minmax(132px, 0.85fr)
     minmax(70px, 0.65fr)
     minmax(82px, 0.75fr)
-    minmax(146px, 0.9fr)
+    minmax(176px, 1fr)
     minmax(64px, 0.55fr)
-    minmax(136px, 1.2fr);
+    minmax(150px, 1.2fr);
   min-width: 0;
 }
 
 .device-list-meta > * {
+  align-content: center;
+  display: grid;
+  gap: 3px;
   min-width: 0;
   overflow: hidden;
+}
+
+.device-list-meta > * > .mantine-Text-root:first-child {
+  line-height: 1.2;
 }
 
 .device-list-meta-value {
@@ -163,7 +186,9 @@
 .device-list-last-seen-value {
   line-height: 1.25;
   overflow-wrap: normal;
-  white-space: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @container (max-width: 1100px) {
@@ -225,6 +250,7 @@
 
   .devices-content-panel .device-first-seen-filter {
     grid-area: first-seen;
+    min-width: 140px;
   }
 
   .devices-content-panel .device-homebox-filter {
