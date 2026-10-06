@@ -60,6 +60,7 @@ class InventoryApiTests(TestCase):
     def test_device_inventory_export_returns_shared_format(self):
         self.device.known = True
         self.device.is_visitor = True
+        self.device.icon = "temperature-humidity-sensor"
         self.device.comments = "Demo note"
         self.device.external_url = "https://192.168.1.10"
         self.device.external_url_follow_device_ip = True
@@ -71,6 +72,7 @@ class InventoryApiTests(TestCase):
             update_fields=[
                 "known",
                 "is_visitor",
+                "icon",
                 "comments",
                 "external_url",
                 "external_url_follow_device_ip",
@@ -94,6 +96,7 @@ class InventoryApiTests(TestCase):
         exported_device = response.json()["devices"][0]
         self.assertEqual(exported_device["name"], "Laptop")
         self.assertEqual(exported_device["mac"], "aa:aa:aa:aa:aa:aa")
+        self.assertEqual(exported_device["icon"], "humidity")
         self.assertEqual(exported_device["open_ports"], [80])
         self.assertEqual(exported_device["comments"], "Demo note")
         self.assertEqual(exported_device["external_url"], "https://192.168.1.10")
@@ -808,6 +811,13 @@ class InventoryApiTests(TestCase):
                         "icon": "not.a.real.symbol",
                         "known": True,
                     },
+                    {
+                        "name": "Climate Sensor",
+                        "ip": "192.168.1.75",
+                        "mac": "aa:bb:cc:dd:ee:05",
+                        "icon": "humidity",
+                        "known": True,
+                    },
                 ],
             },
             format="json",
@@ -820,3 +830,7 @@ class InventoryApiTests(TestCase):
         self.assertEqual(switch.secondary_icon, "power-strip")
         self.assertEqual(Device.objects.get(mac="aa:bb:cc:dd:ee:03").icon, "smart-hub")
         self.assertEqual(Device.objects.get(mac="aa:bb:cc:dd:ee:04").icon, "unknown")
+        self.assertEqual(
+            Device.objects.get(mac="aa:bb:cc:dd:ee:05").icon,
+            "temperature-humidity-sensor",
+        )

@@ -85,13 +85,87 @@ class IntegrationApiTests(TestCase):
         self.assertTrue(second.data["integration"]["cached"])
         self.assertNotIn("private-api-token", str(first.data))
         get.assert_called_once()
+        self.assertEqual(
+            get.call_args.kwargs["params"],
+            {"filter[status]": "completed"},
+        )
+
+    @patch("core.integrations.speedtest_tracker.requests.get")
+    def test_speedtest_tracker_normalizes_nested_ookla_measurements(self, get):
+        cache.clear()
+        get.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(
+                return_value={
+                    "id": 43,
+                    "healthy": True,
+                    "status": "completed",
+                    "data": {
+                        "download": {"bandwidth": 62_500_000},
+                        "upload": {"bandwidth": 12_500_000},
+                        "ping": {"latency": 8.4},
+                        "packetLoss": 0,
+                        "timestamp": "2026-10-05T16:00:00Z",
+                    },
+                }
+            ),
+        )
+        config = AppSettings.load()
+        config.speedtest_tracker_enabled = True
+        config.speedtest_tracker_url = "http://192.168.1.5:8080"
+        config.speedtest_tracker_api_token = "private-api-token"
+        config.save()
+
+        response = self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["data"]["download_mbps"], 500.0)
+        self.assertEqual(response.data["data"]["upload_mbps"], 100.0)
+        self.assertEqual(response.data["data"]["ping_ms"], 8.4)
+        self.assertEqual(response.data["data"]["packet_loss_percent"], 0.0)
+        self.assertEqual(response.data["data"]["tested_at"], "2026-10-05T16:00:00Z")
+
+    @patch("core.integrations.speedtest_tracker.requests.get")
+    def test_speedtest_tracker_incomplete_result_is_unavailable_and_not_cached(self, get):
+        cache.clear()
+        get.return_value = Mock(
+            raise_for_status=Mock(),
+            json=Mock(
+                return_value={
+                    "id": 44,
+                    "status": "completed",
+                    "data": {"timestamp": "2026-10-05T16:05:00Z"},
+                }
+            ),
+        )
+        config = AppSettings.load()
+        config.speedtest_tracker_enabled = True
+        config.speedtest_tracker_url = "http://192.168.1.5:8080"
+        config.speedtest_tracker_api_token = "private-api-token"
+        config.save()
+
+        first = self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+        second = self.client.get("/api/v1/integrations/speedtest-tracker/latest/")
+
+        self.assertIsNone(first.data["data"])
+        self.assertFalse(first.data["integration"]["available"])
+        self.assertIsNone(second.data["data"])
+        self.assertEqual(get.call_count, 2)
 
     @patch("core.integrations.speedtest_tracker.requests.get")
     def test_speedtest_tracker_refresh_bypasses_cache(self, get):
         cache.clear()
         get.return_value = Mock(
             raise_for_status=Mock(),
-            json=Mock(return_value={"id": 1, "status": "completed"}),
+            json=Mock(
+                return_value={
+                    "id": 1,
+                    "status": "completed",
+                    "download": 500,
+                    "upload": 100,
+                    "ping": 8,
+                }
+            ),
         )
         config = AppSettings.load()
         config.speedtest_tracker_enabled = True
@@ -131,7 +205,15 @@ class IntegrationApiTests(TestCase):
         cache.clear()
         get.return_value = Mock(
             raise_for_status=Mock(),
-            json=Mock(return_value={"id": 1, "status": "completed"}),
+            json=Mock(
+                return_value={
+                    "id": 1,
+                    "status": "completed",
+                    "download": 500,
+                    "upload": 100,
+                    "ping": 8,
+                }
+            ),
         )
         config = AppSettings.load()
         config.speedtest_tracker_api_token = "saved-api-token"

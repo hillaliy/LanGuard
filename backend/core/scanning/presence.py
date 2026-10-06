@@ -106,6 +106,7 @@ def is_sleeping_device(device):
         "led-strip",
         "light",
         "shutter",
+        "temperature-humidity-sensor",
         "thermostat",
     }
 

@@ -49,6 +49,7 @@ enum DeviceIconCatalog {
         DeviceIconOption(id: "hifispeaker", title: "Speaker", systemImage: "hifispeaker"),
         DeviceIconOption(id: "airplayvideo", title: "Streamer", systemImage: "airplayvideo"),
         DeviceIconOption(id: "ipad", title: "Tablet", systemImage: "ipad"),
+        DeviceIconOption(id: "humidity", title: "Temperature & Humidity Sensor", systemImage: "humidity"),
         DeviceIconOption(id: "thermometer.medium", title: "Thermostat", systemImage: "thermometer.medium"),
         DeviceIconOption(id: "tv", title: "TV", systemImage: "tv"),
         DeviceIconOption(id: "applewatch", title: "Watch", systemImage: "applewatch"),
