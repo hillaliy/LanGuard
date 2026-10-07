@@ -40,6 +40,7 @@ application or locally as a native macOS scanner.
 ## Highlights
 
 - Discover IPv4 devices, names, vendors, MAC addresses, services, and common open ports.
+- Optionally inventory managed switches, access points, printers, interfaces, and LLDP neighbor hints through read-only SNMP v2c.
 - Track online state, scan history, IP changes, availability, and attention findings.
 - Organize regular, visitor, and archived devices by room, role, icon, and notes.
 - Send Discord, Telegram, ntfy, or signed automation webhook notifications.

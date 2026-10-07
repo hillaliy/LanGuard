@@ -537,7 +537,9 @@ def format_discord_payload(event):
         if device.vendor:
             fields.append({"name": "Vendor", "value": device.vendor, "inline": False})
 
-    if event.event_type == NetworkEvent.EventType.VERSION_AVAILABLE:
+    if event.event_type == NetworkEvent.EventType.DEVICE_ONLINE:
+        color = DISCORD_RECOVERY_COLOR
+    elif event.event_type == NetworkEvent.EventType.VERSION_AVAILABLE:
         color = DISCORD_TEST_COLOR
     elif (
         event.event_type == NetworkEvent.EventType.SPEEDTEST_HEALTH_CHANGED

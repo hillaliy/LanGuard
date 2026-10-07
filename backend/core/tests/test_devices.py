@@ -67,6 +67,24 @@ class DeviceApiTests(TestCase):
         self.assertEqual(hostname_response.data["data"][0]["id"], self.device.id)
         self.assertEqual(vendor_response.data["data"][0]["id"], self.device.id)
 
+    def test_snmp_inventory_is_only_in_device_detail_response(self):
+        self.device.snmp_data = {
+            "system": {"name": "office-switch"},
+            "interfaces": [{"index": 1, "name": "Gi0/1"}],
+        }
+        self.device.snmp_last_seen = timezone.now()
+        self.device.save(update_fields=["snmp_data", "snmp_last_seen"])
+
+        device_list = self.client.get("/api/v1/device/").data["data"][0]
+        device_detail = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+
+        self.assertNotIn("snmp_data", device_list)
+        self.assertNotIn("snmp_last_seen", device_list)
+        self.assertEqual(device_detail["snmp_data"], self.device.snmp_data)
+        self.assertIsNotNone(device_detail["snmp_last_seen"])
+
     def test_removing_network_range_marks_only_previously_monitored_devices_offline(self):
         removed_device = Device.objects.create(
             name="Removed VLAN device",

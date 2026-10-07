@@ -125,6 +125,27 @@ class NotificationTests(TestCase):
         self.assertEqual(embed["author"]["icon_url"], "https://example.com/languard.png?v=1.1.4")
         self.assertEqual(embed["thumbnail"]["url"], "https://example.com/languard.png?v=1.1.4")
 
+    def test_discord_presence_events_use_distinct_status_colors(self):
+        online_event = NetworkEvent.objects.create(
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+            message="Camera came online",
+        )
+        offline_event = NetworkEvent.objects.create(
+            device=self.device,
+            event_type=NetworkEvent.EventType.DEVICE_OFFLINE,
+            message="Camera went offline",
+        )
+
+        self.assertEqual(
+            format_discord_payload(online_event)["embeds"][0]["color"],
+            0x12B886,
+        )
+        self.assertEqual(
+            format_discord_payload(offline_event)["embeds"][0]["color"],
+            0xE03131,
+        )
+
     @override_settings(NOTIFICATION_TIMEOUT=1)
     @patch("core.notifications.requests.post")
     def test_version_update_notification_supports_system_events(self, post):

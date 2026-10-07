@@ -25,6 +25,7 @@ import {
   formatDevicePresenceExpectation,
   formatOfflineAttention,
 } from './DeviceDetailFields';
+import DeviceSnmpInventory from './DeviceSnmpInventory';
 
 export default function DeviceOverviewTab({
   activeUrl,
@@ -325,6 +326,8 @@ export default function DeviceOverviewTab({
               </Group>
             </section>
           </SimpleGrid>
+
+          <DeviceSnmpInventory device={device} timeZone={timeZone} />
 
           <Divider />
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">

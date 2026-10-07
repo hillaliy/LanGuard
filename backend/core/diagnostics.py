@@ -215,6 +215,8 @@ def build_diagnostics_report():
                 config.speedtest_tracker_url
                 and config.speedtest_tracker_api_token
             ),
+            "snmp_enabled": config.snmp_enabled,
+            "snmp_configured": bool(config.snmp_community),
             "docker_inventory_enabled_hosts": docker_hosts.count(),
             "docker_inventory_sync_intervals_minutes": sorted(
                 set(docker_hosts.values_list("sync_interval", flat=True))

@@ -16,6 +16,8 @@ export const deviceRoleOptions = [
   'device',
   'gateway',
   'router',
+  'accessPoint',
+  'switch',
   'meshRouter',
   'hub',
   'camera',

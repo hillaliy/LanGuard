@@ -27,6 +27,10 @@ export default function useScanningSettings() {
   const [scanMaxHosts, setScanMaxHosts] = useState(1024);
   const [scanInterval, setScanInterval] = useState(10);
   const [timeZone, setTimeZone] = useState('UTC');
+  const [snmpEnabled, setSnmpEnabled] = useState(false);
+  const [snmpConfigured, setSnmpConfigured] = useState(false);
+  const [snmpCommunity, setSnmpCommunity] = useState('');
+  const [snmpMaxDevices, setSnmpMaxDevices] = useState(64);
 
   function hydrate(data) {
     const loadedRanges =
@@ -47,6 +51,10 @@ export default function useScanningSettings() {
     setScanMaxHosts(Number(data.scan_max_hosts || 1024));
     setScanInterval(data.scan_interval || 10);
     setTimeZone(data.time_zone || 'UTC');
+    setSnmpEnabled(Boolean(data.snmp_enabled));
+    setSnmpConfigured(Boolean(data.snmp_configured));
+    setSnmpCommunity('');
+    setSnmpMaxDevices(Number(data.snmp_max_devices || 64));
   }
 
   function buildPayload() {
@@ -54,14 +62,17 @@ export default function useScanningSettings() {
       name: name.trim(),
       cidr: cidr.trim(),
     }));
-    return {
+    const payload = {
       scan_ranges: normalizedScanNetworks.map(({ cidr }) => cidr),
       scan_range_labels: Object.fromEntries(
         normalizedScanNetworks.map(({ cidr, name }) => [cidr, name])
       ),
       scan_interval: scanInterval,
       time_zone: timeZone,
+      snmp_enabled: snmpEnabled,
     };
+    if (snmpCommunity) payload.snmp_community = snmpCommunity;
+    return payload;
   }
 
   function updateScanNetwork(index, field, value) {
@@ -96,11 +107,17 @@ export default function useScanningSettings() {
       scanInterval,
       scanMaxHosts,
       scanNetworks,
+      setSnmpCommunity,
+      setSnmpEnabled,
       setScanInterval,
       setTimeZone,
       timeZone,
       timeZoneOptions,
       updateScanNetwork,
+      snmpCommunity,
+      snmpConfigured,
+      snmpEnabled,
+      snmpMaxDevices,
     },
     timeZone,
   };

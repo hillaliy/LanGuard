@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added bounded read-only SNMP v2c infrastructure inventory with protected community settings, managed-device classification, interface state, and LLDP topology hints on device pages.
+- Displayed Discord device-online notifications in green while keeping device-offline alerts red.
 - Expanded diagnostics with rotating backend and scheduler logs, sanitized warning/error traceback metadata, dedicated recent scan failures, and grouped failure summaries.
 
 - Added a dedicated temperature and humidity sensor icon to device icon selection in the web and macOS applications, including inventory import/export compatibility and sleeping-device presence handling.
