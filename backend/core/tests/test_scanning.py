@@ -535,6 +535,84 @@ class ScanStabilityTests(TestCase):
         )
 
     @override_settings(
+        PORT_SCAN_ENABLED=False,
+        SNMP_TIMEOUT=0.2,
+        SNMP_MAX_DEVICES=12,
+        SNMP_MAX_INTERFACES=24,
+        SNMP_MAX_NEIGHBORS=16,
+        SNMP_CONCURRENCY=4,
+    )
+    def test_scan_uses_enabled_snmp_inventory_as_identity_hints(self):
+        discovered_device = self.scan_element(
+            "192.168.1.10",
+            "aa:bb:cc:dd:ee:10",
+        )
+        stats = {"new_devices": 0, "ports_opened": 0, "ports_closed": 0}
+        snmp_inventory = {
+            "192.168.1.10": {
+                "device_type": "switch",
+                "vendor": "Cisco",
+                "system": {"name": "office-switch"},
+                "interfaces": [],
+                "neighbors": [],
+            }
+        }
+        config = AppSettings.load()
+        config.snmp_enabled = True
+        config.snmp_community = "readonly"
+        config.save(update_fields=["snmp_enabled", "snmp_community"])
+
+        with (
+            patch(
+                "core.scanning.orchestration.get_default_gateway_ip",
+                return_value="192.168.1.1",
+            ),
+            patch(
+                "core.scanning.orchestration.discover_devices",
+                return_value=[discovered_device],
+            ),
+            patch(
+                "core.scanning.orchestration.local_scanner_interface",
+                return_value=None,
+            ),
+            patch(
+                "core.scanning.orchestration.discover_hostname_hints",
+                return_value={},
+            ),
+            patch("core.scanning.orchestration.ssdp_metadata_map", return_value={}),
+            patch(
+                "core.scanning.orchestration.discover_snmp_inventory",
+                return_value=snmp_inventory,
+            ) as discover_snmp,
+            patch(
+                "core.scanning.orchestration.sync_discovered_device",
+                return_value=stats,
+            ) as sync_device,
+            patch("core.scanning.orchestration.clear_stale_gateways"),
+            patch("core.scanning.orchestration.mark_missing_devices_offline"),
+        ):
+            scan("192.168.1.0/24")
+
+        discover_snmp.assert_called_once_with(
+            ["192.168.1.10"],
+            "readonly",
+            timeout=0.2,
+            max_devices=12,
+            max_interfaces=24,
+            max_neighbors=16,
+            concurrency=4,
+        )
+        self.assertEqual(
+            sync_device.call_args.kwargs["hostname_hints"]["192.168.1.10"],
+            ("office-switch", Device.IdentitySource.SNMP),
+        )
+        self.assertEqual(
+            sync_device.call_args.kwargs["vendor_hints"]["192.168.1.10"],
+            ("Cisco", Device.IdentitySource.SNMP),
+        )
+        self.assertEqual(sync_device.call_args.kwargs["snmp_hints"], snmp_inventory)
+
+    @override_settings(
         SCAN_OFFLINE_AFTER_MISSES=1,
         SCAN_CONFIRM_OFFLINE_WITH_PORTS=False,
         SCAN_CONFIRM_OFFLINE_WITH_ICMP=False,

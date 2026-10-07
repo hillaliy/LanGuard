@@ -129,6 +129,8 @@ class Device(models.Model):
     lastseen = models.DateTimeField(default=timezone.now)
     last_status_check = models.DateTimeField(blank=True, null=True)
     last_port_scan = models.DateTimeField(blank=True, null=True)
+    snmp_data = models.JSONField(default=dict, blank=True)
+    snmp_last_seen = models.DateTimeField(blank=True, null=True)
     missed_scans = models.PositiveIntegerField(default=0)
     known = models.BooleanField(default=False)
     is_visitor = models.BooleanField(default=False, db_index=True)
@@ -727,6 +729,8 @@ class AppSettings(models.Model):
     speedtest_tracker_api_token = models.CharField(max_length=512, blank=True, default="")
     speedtest_last_result_id = models.CharField(max_length=64, blank=True, default="")
     speedtest_last_healthy = models.BooleanField(blank=True, null=True)
+    snmp_enabled = models.BooleanField(default=False)
+    snmp_community = models.CharField(max_length=255, blank=True, default="")
     home_map_layout = models.JSONField(default=dict, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -788,6 +792,8 @@ class AppSettings(models.Model):
             ),
             "notify_version_updates": False,
             "notify_speedtest_changes": False,
+            "snmp_enabled": False,
+            "snmp_community": "",
             "last_notified_version": "",
             "notification_quiet_hours_enabled": False,
             "notification_quiet_hours_start": "22:00",

@@ -19,6 +19,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     adguard_last_sync_at = UTCDateTimeField(read_only=True)
     pihole_last_sync_at = UTCDateTimeField(read_only=True)
     scan_max_hosts = serializers.SerializerMethodField()
+    snmp_max_devices = serializers.SerializerMethodField()
     discord_configured = serializers.SerializerMethodField()
     telegram_configured = serializers.SerializerMethodField()
     ntfy_configured = serializers.SerializerMethodField()
@@ -29,6 +30,14 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     speedtest_tracker_configured = serializers.SerializerMethodField()
     homebox_configured = serializers.SerializerMethodField()
     homebox_api_token = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=512)
+    snmp_community = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=255,
+        trim_whitespace=True,
+    )
+    snmp_configured = serializers.SerializerMethodField()
 
     @extend_schema_field(serializers.BooleanField)
     def get_homebox_configured(self, obj):
@@ -109,6 +118,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "scan_range_labels",
             "scan_max_hosts",
             "scan_interval",
+            "snmp_enabled",
+            "snmp_community",
+            "snmp_configured",
+            "snmp_max_devices",
             "time_zone",
             "version_check_interval",
             "notifications_enabled",
@@ -197,6 +210,14 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.IntegerField)
     def get_scan_max_hosts(self, obj):
         return settings.SCAN_MAX_HOSTS
+
+    @extend_schema_field(serializers.IntegerField)
+    def get_snmp_max_devices(self, obj):
+        return settings.SNMP_MAX_DEVICES
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_snmp_configured(self, obj):
+        return bool(obj.snmp_community)
 
     @extend_schema_field(serializers.BooleanField)
     def get_discord_configured(self, obj):
@@ -410,6 +431,17 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"speedtest_tracker_api_token": "Enter a Speedtest Tracker API token."}
             )
+        snmp_enabled = attrs.get(
+            "snmp_enabled",
+            self.instance.snmp_enabled if self.instance else False,
+        )
+        snmp_community = attrs.get("snmp_community") or (
+            self.instance.snmp_community if self.instance else ""
+        )
+        if snmp_enabled and not snmp_community:
+            raise serializers.ValidationError(
+                {"snmp_community": "Enter a read-only SNMP v2c community."}
+            )
         return attrs
 
     def update(self, instance, validated_data):
@@ -441,6 +473,8 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             validated_data.pop("speedtest_tracker_api_token", None)
         if not validated_data.get("homebox_api_token"):
             validated_data.pop("homebox_api_token", None)
+        if not validated_data.get("snmp_community"):
+            validated_data.pop("snmp_community", None)
         instance = super().update(instance, validated_data)
         if reset_speedtest_baseline:
             instance.speedtest_last_result_id = ""

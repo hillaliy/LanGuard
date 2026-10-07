@@ -1,4 +1,4 @@
-import { ActionIcon, Box, Button, Group, NumberInput, Select, SimpleGrid, Stack, Table, Tabs, Text, TextInput, Title, Tooltip } from '@mantine/core';
+import { ActionIcon, Badge, Box, Button, Divider, Group, NumberInput, PasswordInput, Select, SimpleGrid, Stack, Switch, Table, Tabs, Text, TextInput, Title, Tooltip } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 
 export default function ScanningSettings({ controller }) {
@@ -8,11 +8,17 @@ export default function ScanningSettings({ controller }) {
     scanInterval,
     scanMaxHosts,
     scanNetworks,
+    setSnmpCommunity,
+    setSnmpEnabled,
     setScanInterval,
     setTimeZone,
     timeZone,
     timeZoneOptions,
     updateScanNetwork,
+    snmpCommunity,
+    snmpConfigured,
+    snmpEnabled,
+    snmpMaxDevices,
   } = controller;
 
   return (
@@ -114,6 +120,34 @@ export default function ScanningSettings({ controller }) {
         <Text size="xs" c="dimmed">
           Each range can contain up to {scanMaxHosts.toLocaleString()} addresses. The interval starts after each scan completes. Network range and interval changes apply automatically on the next scheduler cycle.
         </Text>
+
+        <Divider label="SNMP inventory" labelPosition="left" />
+        <Group justify="space-between" align="flex-start" wrap="wrap">
+          <Box>
+            <Switch
+              label="Collect SNMP inventory"
+              checked={snmpEnabled}
+              onChange={(event) => setSnmpEnabled(event.currentTarget.checked)}
+            />
+            <Text size="xs" c="dimmed" mt={6} maw={680}>
+              Read system, interface, and LLDP neighbor data from up to {snmpMaxDevices} already-discovered devices per scan. SNMP v2c community strings are sent unencrypted, so use a read-only community on trusted local networks.
+            </Text>
+          </Box>
+          <Badge color={snmpConfigured ? 'teal' : 'gray'} variant="light">
+            {snmpConfigured ? 'Configured' : 'Not configured'}
+          </Badge>
+        </Group>
+        <PasswordInput
+          label="Read-only community"
+          placeholder={snmpConfigured ? 'Saved community' : 'Community string'}
+          value={snmpCommunity}
+          onChange={(event) => setSnmpCommunity(event.currentTarget.value)}
+          disabled={!snmpEnabled}
+          maw={420}
+        />
+        {snmpConfigured && (
+          <Text size="xs" c="dimmed">Leave the field blank to keep the saved community.</Text>
+        )}
         </Stack>
           </Tabs.Panel>
   );

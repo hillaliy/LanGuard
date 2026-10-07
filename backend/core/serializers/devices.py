@@ -308,6 +308,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     lastseen = UTCDateTimeField(read_only=True)
     last_status_check = UTCDateTimeField(read_only=True)
     last_port_scan = UTCDateTimeField(read_only=True)
+    snmp_last_seen = UTCDateTimeField(read_only=True)
     identity_conflict_detected_at = UTCDateTimeField(read_only=True)
     open_ports = serializers.SerializerMethodField()
     risk_level = serializers.SerializerMethodField()
@@ -344,7 +345,16 @@ class DeviceSerializer(serializers.ModelSerializer):
             "vendor_source",
             "identity_conflict_reason",
             "identity_conflict_detected_at",
+            "snmp_data",
+            "snmp_last_seen",
         )
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if not self.context.get("include_snmp_inventory"):
+            data.pop("snmp_data", None)
+            data.pop("snmp_last_seen", None)
+        return data
 
     def get_device_identity(self, obj):
         if not hasattr(obj, "_identity_data"):
@@ -548,4 +558,3 @@ class DeviceBulkUpdateSerializer(serializers.Serializer):
                 {"is_visitor": "Visitor devices must be known devices."}
             )
         return attrs
-

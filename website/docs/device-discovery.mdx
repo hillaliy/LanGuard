@@ -15,11 +15,20 @@ LanGuard combines multiple signals instead of trusting a single protocol. This i
 | ARP discovery | Active IPv4 addresses and MAC addresses on directly attached networks |
 | Name resolution | Hostnames from reverse DNS, mDNS, LLMNR, SSDP, and NetBIOS |
 | Vendor lookup | Manufacturer evidence from the bundled OUI/manuf database |
+| Optional SNMP inventory | Read-only system identity, interface state, equipment type, and LLDP neighbor hints from discovered devices |
 | Reachability confirmation | ICMP and known-port responses that prevent premature offline status |
 | Port checks | Configured TCP services and changes since earlier scans |
 | Web probing | A suggested HTTP or HTTPS management interface when one responds |
 
 The device page shows identity confidence and evidence when available. A strong hostname or vendor signal is useful context, but the stable inventory key is normally the MAC address.
+
+## SNMP infrastructure inventory
+
+Administrators can enable SNMP inventory under **Settings > Scanning** and provide a read-only SNMP v2c community. LanGuard only queries IPv4 devices already found by the normal scan. It does not use SNMP to expand the configured network ranges.
+
+For responding devices, LanGuard retains the latest bounded snapshot of system metadata, interfaces, operational state, link speed, and LLDP neighbors. It can classify common managed switches, access points, routers, and printers and use SNMP identity as hostname or vendor evidence. LLDP entries are displayed as topology hints because a device may report stale or incomplete neighbor data.
+
+SNMP collection is limited to 64 devices, 48 interfaces per device, and 32 neighbors per device by default. Requests use short timeouts, no retries, bounded concurrency, and read-only operations. SNMP v2c does not encrypt its community string on the network; use a dedicated read-only community only on trusted local networks. SNMP v3 is not supported in this release.
 
 ## Known and unknown devices
 
@@ -54,4 +63,4 @@ Common causes include:
 
 ## Limits
 
-LanGuard scans private IPv4 networks. It does not currently build an IPv6 inventory, inspect payloads, monitor arbitrary internet services, or discover containers through a container runtime API. Network segmentation and host firewall rules still determine what the scanner can observe.
+LanGuard scans private IPv4 networks. It does not currently build an IPv6 inventory, inspect payloads, or monitor arbitrary internet services. Network segmentation and host firewall rules still determine what the scanner can observe.

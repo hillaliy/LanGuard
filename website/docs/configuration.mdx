@@ -17,10 +17,13 @@ Open **Settings > Scanning** to configure:
 - A maximum of 1,024 addresses per range.
 - The delay after each completed scheduled scan.
 - Discovery methods and recurring ports available in the current release.
+- Optional read-only SNMP v2c inventory for already-discovered infrastructure.
 
 The scheduler waits for the configured interval **after** a scan completes. A scan that finishes at 20:14 with a five-minute interval schedules the next run for about 20:19.
 
 Settings are reloaded before each scheduler cycle. A change applies after the current scan or wait finishes and does not require a container restart.
+
+When SNMP inventory is enabled, leave the community field blank on later saves to keep the stored value. The API never returns the community string. Use a dedicated read-only community; SNMP v2c credentials are not encrypted in transit.
 
 ## Multiple networks and VLANs
 
@@ -59,5 +62,10 @@ Device archiving is different from cleanup: an archived device leaves active vie
 | `FRONTEND_LISTEN_ADDRESS` | Web interface listen address | `:8080` |
 | `DB_PATH` | SQLite database path inside the container | `/data/db.sqlite3` |
 | `STATIC_ROOT` | Collected backend static files | `/static` |
+| `SNMP_TIMEOUT` | Timeout in seconds for each SNMP request | `0.4` |
+| `SNMP_MAX_DEVICES` | Maximum discovered devices queried per scan | `64` |
+| `SNMP_MAX_INTERFACES` | Maximum interface rows retained per device | `48` |
+| `SNMP_MAX_NEIGHBORS` | Maximum LLDP neighbor rows retained per device | `32` |
+| `SNMP_CONCURRENCY` | Maximum concurrent SNMP device queries | `8` |
 
 You normally do not need `CORS_ALLOWED_ORIGINS`: the frontend serves the application and proxies API requests on the same origin.

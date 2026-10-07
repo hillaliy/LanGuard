@@ -376,7 +376,12 @@ def device(request):
 
         device_item = get_object_or_404(Device, pk=id_)
         return Response(
-            {"data": DeviceSerializer(device_item).data},
+            {
+                "data": DeviceSerializer(
+                    device_item,
+                    context={"include_snmp_inventory": True},
+                ).data
+            },
             status=status.HTTP_200_OK,
         )
 

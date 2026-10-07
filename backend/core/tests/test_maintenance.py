@@ -74,6 +74,8 @@ class MaintenanceApiTests(TestCase):
         config.speedtest_tracker_enabled = True
         config.speedtest_tracker_url = "http://10.20.30.50:8080"
         config.speedtest_tracker_api_token = "super-secret-speedtest-token"
+        config.snmp_enabled = True
+        config.snmp_community = "super-secret-snmp-community"
         config.save()
         self.scan_run.error = "Failed on 192.168.1.20 with aa:aa:aa:aa:aa:aa"
         self.scan_run.status = ScanRun.Status.FAILED
@@ -116,6 +118,7 @@ class MaintenanceApiTests(TestCase):
             "10.20.30.40",
             "10.20.30.50",
             "super-secret-speedtest-token",
+            "super-secret-snmp-community",
             "192.168.1.20",
             "aa:aa:aa:aa:aa:aa",
             "Laptop",
@@ -142,6 +145,8 @@ class MaintenanceApiTests(TestCase):
         configuration = response.data["data"]["report"]["configuration"]
         self.assertTrue(configuration["speedtest_tracker_enabled"])
         self.assertTrue(configuration["speedtest_tracker_configured"])
+        self.assertTrue(configuration["snmp_enabled"])
+        self.assertTrue(configuration["snmp_configured"])
         self.assertIn("notification", response.data)
 
     def test_diagnostics_export_includes_sanitized_failure_logs(self):

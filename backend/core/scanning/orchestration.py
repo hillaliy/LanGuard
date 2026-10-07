@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from django.utils import timezone
 import scapy.all as scapy
 
@@ -11,6 +12,7 @@ from .network import discover_devices, get_default_gateway_ip, local_scanner_int
 from .presence import clear_stale_gateways, mark_missing_devices_offline
 from .ranges import validate_ip_ranges
 from .reconciliation import sync_discovered_device
+from .snmp import discover_snmp_inventory
 
 
 LOGGER = logging.getLogger(__name__)
@@ -19,7 +21,8 @@ LOGGER = logging.getLogger(__name__)
 def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
     scan_ranges = validate_ip_ranges(ip_ranges)
     primary_range = scan_ranges[0]
-    configured_labels = AppSettings.load().effective_scan_range_labels
+    config = AppSettings.load()
+    configured_labels = config.effective_scan_range_labels
     scan_range_labels = {
         network_range: configured_labels[network_range]
         for network_range in scan_ranges
@@ -77,6 +80,24 @@ def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
             for ip, metadata in ssdp_metadata_map().items()
             if metadata.get("vendor")
         }
+        snmp_hints = {}
+        if config.snmp_enabled and config.snmp_community:
+            snmp_hints = discover_snmp_inventory(
+                [element[1].psrc for element in answered_list],
+                config.snmp_community,
+                timeout=settings.SNMP_TIMEOUT,
+                max_devices=settings.SNMP_MAX_DEVICES,
+                max_interfaces=settings.SNMP_MAX_INTERFACES,
+                max_neighbors=settings.SNMP_MAX_NEIGHBORS,
+                concurrency=settings.SNMP_CONCURRENCY,
+            )
+            for ip, metadata in snmp_hints.items():
+                hostname = metadata.get("system", {}).get("name")
+                vendor = metadata.get("vendor")
+                if hostname:
+                    hostname_hints[ip] = (hostname, Device.IdentitySource.SNMP)
+                if vendor:
+                    vendor_hints[ip] = (vendor, Device.IdentitySource.SNMP)
 
         failure_stage = "device_sync"
         for element in answered_list:
@@ -89,6 +110,7 @@ def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
                 gateway_ip=gateway_ip,
                 hostname_hints=hostname_hints,
                 vendor_hints=vendor_hints,
+                snmp_hints=snmp_hints,
                 status_source=(
                     Device.StatusSource.LOCAL
                     if element[1].hwsrc.lower() in local_scanner_macs

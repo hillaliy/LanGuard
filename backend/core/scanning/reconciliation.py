@@ -34,6 +34,7 @@ def sync_discovered_device(
     gateway_ip="",
     hostname_hints=None,
     vendor_hints=None,
+    snmp_hints=None,
     status_source=Device.StatusSource.ARP,
 ):
     scan_started_at = scan_started_at or timezone.now()
@@ -278,6 +279,27 @@ def sync_discovered_device(
         ports_closed += port_stats["ports_closed"]
         device.last_port_scan = scan_started_at
         device.save(update_fields=["last_port_scan"])
+
+    snmp_data = (snmp_hints or {}).get(ip)
+    if snmp_data:
+        update_fields = ["snmp_data", "snmp_last_seen"]
+        device.snmp_data = snmp_data
+        device.snmp_last_seen = scan_started_at
+        inferred = {
+            "access_point": ("accessPoint", "router"),
+            "printer": ("printer", "printer"),
+            "router": ("router", "router"),
+            "switch": ("switch", "router"),
+        }.get(snmp_data.get("device_type"))
+        if inferred and not device.known:
+            role, icon = inferred
+            if device.role in {"", "device", "unknown"} and device.role != role:
+                device.role = role
+                update_fields.append("role")
+            if device.icon in {"", "plus", "unknown"} and device.icon != icon:
+                device.icon = icon
+                update_fields.append("icon")
+        device.save(update_fields=update_fields)
 
     return {
         "new_devices": new_devices,

@@ -53,6 +53,42 @@ class SettingsApiTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_snmp_settings_keep_read_only_community_private(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {
+                "snmp_enabled": True,
+                "snmp_community": "lan-readonly",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        config = AppSettings.load()
+        self.assertTrue(config.snmp_enabled)
+        self.assertEqual(config.snmp_community, "lan-readonly")
+        self.assertTrue(response.data["data"]["snmp_configured"])
+        self.assertNotIn("snmp_community", response.data["data"])
+
+        keep_response = self.client.put(
+            "/api/v1/settings/",
+            {"snmp_enabled": True, "snmp_community": ""},
+            format="json",
+        )
+        self.assertEqual(keep_response.status_code, 200)
+        config.refresh_from_db()
+        self.assertEqual(config.snmp_community, "lan-readonly")
+
+    def test_snmp_cannot_be_enabled_without_a_community(self):
+        response = self.client.put(
+            "/api/v1/settings/",
+            {"snmp_enabled": True},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("snmp_community", response.data)
+
     def test_settings_endpoint_updates_scan_and_notification_settings(self):
         response = self.client.put(
             "/api/v1/settings/",
