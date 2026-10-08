@@ -44,7 +44,7 @@ application or locally as a native macOS scanner.
 - Track online state, scan history, IP changes, availability, and attention findings.
 - Organize regular, visitor, and archived devices by room, role, icon, and notes.
 - Send Discord, Telegram, ntfy, or signed automation webhook notifications.
-- Connect AdGuard Home or Pi-hole for DNS context, plus Speedtest Tracker and HomeBox.
+- Connect AdGuard Home, Pi-hole, or Technitium DNS Server for DNS context, plus Speedtest Tracker and HomeBox.
 - Run scheduled scans, on-demand detailed port scans, and Wake-on-LAN actions.
 - Install the Docker interface as a web app on supported phones, tablets, and computers.
 - Inventory running containers and published ports from the local Docker engine through the scheduler.

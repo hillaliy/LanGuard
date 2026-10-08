@@ -19,8 +19,10 @@ from .views.integrations import (
     speedtest_tracker_latest,
     sync_adguard,
     sync_pihole_now,
+    sync_technitium_now,
     test_adguard,
     test_pihole,
+    test_technitium,
     test_speedtest_tracker,
 )
 from .views.dns_activity import (
@@ -87,6 +89,16 @@ urlpatterns = [
     path("integrations/adguard/sync/", sync_adguard, name="sync-adguard"),
     path("integrations/pihole/test/", test_pihole, name="test-pihole"),
     path("integrations/pihole/sync/", sync_pihole_now, name="sync-pihole"),
+    path(
+        "integrations/technitium/test/",
+        test_technitium,
+        name="test-technitium",
+    ),
+    path(
+        "integrations/technitium/sync/",
+        sync_technitium_now,
+        name="sync-technitium",
+    ),
     path(
         "integrations/speedtest-tracker/test/",
         test_speedtest_tracker,

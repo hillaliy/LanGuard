@@ -7,7 +7,7 @@ export default function AdGuardIntegrationSettings({ controller }) {
     adguardConfigured, adguardEnabled, adguardLastError, adguardLastSyncAt, adguardPassword,
     adguardRetentionDays, adguardSyncInterval, adguardUrl, adguardUsername, setAdguardEnabled,
     setAdguardPassword, setAdguardRetentionDays, setAdguardSyncInterval, setAdguardUrl,
-    setAdguardUsername, setPiholeEnabled, syncAdguardNow, syncingAdguard,
+    setAdguardUsername, setPiholeEnabled, setTechnitiumEnabled, syncAdguardNow, syncingAdguard,
     testAdguardConnection, testingAdguard, timeZone,
   } = controller;
 
@@ -21,7 +21,10 @@ export default function AdGuardIntegrationSettings({ controller }) {
             <Switch label="Enabled" checked={adguardEnabled} onChange={(event) => {
               const enabled = event.currentTarget.checked;
               setAdguardEnabled(enabled);
-              if (enabled) setPiholeEnabled(false);
+              if (enabled) {
+                setPiholeEnabled(false);
+                setTechnitiumEnabled(false);
+              }
             }} />
           </Group>
           <Text size="sm" c="dimmed" mt={4}>

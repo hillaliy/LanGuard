@@ -13,10 +13,16 @@ from ..integrations.adguard import (
 from ..api import parse_bool_param
 from ..models import AppSettings
 from ..integrations.pihole import PiHoleError, sync_pihole, test_pihole_connection
+from ..integrations.technitium import (
+    TechnitiumError,
+    sync_technitium,
+    test_technitium_connection,
+)
 from ..serializers.integrations import (
     AdGuardConnectionSerializer,
     PiHoleConnectionSerializer,
     SpeedtestTrackerConnectionSerializer,
+    TechnitiumConnectionSerializer,
 )
 from ..integrations.speedtest_tracker import (
     SpeedtestTrackerError,
@@ -88,17 +94,24 @@ def test_pihole(request):
     config = AppSettings.load()
     password = data.get("password") or config.pihole_password
     try:
-        result = test_pihole_connection(data["url"], password)
+        result = test_pihole_connection(
+            data["url"],
+            password,
+            dhcp_enabled=data.get("dhcp_enabled", True),
+        )
     except PiHoleError as exc:
         return error_response(
             "Pi-hole connection failed",
             str(exc),
             response_status=status.HTTP_502_BAD_GATEWAY,
         )
+    detail = "Connection succeeded. Query API is available."
+    if data.get("dhcp_enabled", True):
+        detail += " DHCP access is available."
     return success_response(
         result,
         "Pi-hole connected",
-        "Connection succeeded. Query and DHCP APIs are available.",
+        detail,
     )
 
 
@@ -117,6 +130,55 @@ def sync_pihole_now(request):
     return success_response(
         result,
         "Pi-hole synced",
+        (
+            f"Matched {result.get('matched', 0)} queries and processed "
+            f"{result.get('leases', 0)} DHCP leases."
+        ),
+    )
+
+
+@extend_schema(request=TechnitiumConnectionSerializer, responses=OpenApiTypes.OBJECT)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def test_technitium(request):
+    serializer = TechnitiumConnectionSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    data = serializer.validated_data
+    config = AppSettings.load()
+    api_token = data.get("api_token") or config.technitium_api_token
+    try:
+        result = test_technitium_connection(
+            data["url"],
+            api_token,
+            dhcp_enabled=data.get("dhcp_enabled", False),
+        )
+    except TechnitiumError as exc:
+        return error_response(
+            "Technitium connection failed",
+            str(exc),
+            response_status=status.HTTP_502_BAD_GATEWAY,
+        )
+    detail = f"Connected to the {result['query_log_app']} query log."
+    if data.get("dhcp_enabled"):
+        detail += f" DHCP access is available with {result['active_leases']} leases."
+    return success_response(result, "Technitium connected", detail)
+
+
+@extend_schema(request=None, responses=OpenApiTypes.OBJECT)
+@api_view(["POST"])
+@permission_classes([permissions.IsAdminUser])
+def sync_technitium_now(request):
+    try:
+        result = sync_technitium()
+    except TechnitiumError as exc:
+        return error_response(
+            "Technitium sync failed",
+            str(exc),
+            response_status=status.HTTP_502_BAD_GATEWAY,
+        )
+    return success_response(
+        result,
+        "Technitium synced",
         (
             f"Matched {result.get('matched', 0)} queries and processed "
             f"{result.get('leases', 0)} DHCP leases."

@@ -165,9 +165,10 @@ def _normalized_mac(value):
     return "" if first_octet & 1 else mac
 
 
-def _sync_dhcp_leases(leases, observed_at):
+def _sync_dhcp_leases(leases, observed_at, *, create_devices=False):
     discovered = 0
     updated = 0
+    skipped = 0
     conflicts = 0
     invalid = 0
     conflict_cutoff = observed_at - IP_IDENTITY_CONFLICT_WINDOW
@@ -205,6 +206,9 @@ def _sync_dhcp_leases(leases, observed_at):
 
         device = Device.objects.filter(mac=mac).first()
         if device is None:
+            if not create_devices:
+                skipped += 1
+                continue
             identity = guess_device_identity(hostname=hostname, mac=mac)
             device = Device(
                 icon=identity["icon"],
@@ -256,24 +260,26 @@ def _sync_dhcp_leases(leases, observed_at):
         "leases": len(leases),
         "devices_discovered": discovered,
         "devices_updated": updated,
+        "devices_skipped": skipped,
         "identity_conflicts": conflicts,
         "invalid_leases": invalid,
     }
 
 
-def test_pihole_connection(base_url, password=""):
+def test_pihole_connection(base_url, password="", *, dhcp_enabled=True):
     client = PiHoleClient(base_url, password)
     try:
         client.authenticate()
         version_payload = client.version()
         query_payload = client.queries(length=1)
-        lease_payload = client.dhcp_leases()
+        lease_payload = client.dhcp_leases() if dhcp_enabled else {"leases": []}
         version = version_payload.get("version") if isinstance(version_payload, dict) else None
         if isinstance(version, dict):
             version = version.get("core", {}).get("local", {}).get("version") or version.get("ftl", {}).get("local", {}).get("version")
         return {
             "version": str(version or ""),
             "query_api": isinstance(query_payload.get("queries"), list),
+            "dhcp_available": dhcp_enabled,
             "active_leases": len(lease_payload.get("leases") or []),
         }
     finally:
@@ -298,15 +304,28 @@ def sync_pihole(config=None, max_entries=MAX_SYNC_ENTRIES):
     newest_time = cursor_time
     newest_id = cursor_id
     observed_at = timezone.now()
+    dhcp_result = {
+        "leases": 0,
+        "devices_discovered": 0,
+        "devices_updated": 0,
+        "devices_skipped": 0,
+        "identity_conflicts": 0,
+        "invalid_leases": 0,
+    }
 
     try:
         client.authenticate()
-        lease_payload = client.dhcp_leases()
-        leases = lease_payload.get("leases") if isinstance(lease_payload, dict) else None
-        if not isinstance(leases, list):
-            raise PiHoleError("Pi-hole returned an unreadable DHCP lease response.")
-        dhcp_result = _sync_dhcp_leases(leases, observed_at)
-        assignments_by_ip = ip_assignment_index()
+        if config.pihole_dhcp_enabled:
+            lease_payload = client.dhcp_leases()
+            leases = lease_payload.get("leases") if isinstance(lease_payload, dict) else None
+            if not isinstance(leases, list):
+                raise PiHoleError("Pi-hole returned an unreadable DHCP lease response.")
+            dhcp_result = _sync_dhcp_leases(
+                leases,
+                observed_at,
+                create_devices=config.pihole_dhcp_create_devices,
+            )
+            assignments_by_ip = ip_assignment_index()
 
         while processed < max_entries:
             payload = client.queries(

@@ -5,6 +5,7 @@ import DockerIntegrationSettings from './DockerIntegrationSettings';
 import HomeBoxIntegrationSettings from './HomeBoxIntegrationSettings';
 import PiHoleIntegrationSettings from './PiHoleIntegrationSettings';
 import SpeedtestTrackerIntegrationSettings from './SpeedtestTrackerIntegrationSettings';
+import TechnitiumIntegrationSettings from './TechnitiumIntegrationSettings';
 
 export default function IntegrationSettings({ controller }) {
   const { integrationCategory, onSaved, setIntegrationCategory, timeZone } = controller;
@@ -17,7 +18,7 @@ export default function IntegrationSettings({ controller }) {
             <Title order={3}>Integrations</Title>
             <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
           </Box>
-          <Badge variant="light">5 available</Badge>
+          <Badge variant="light">6 available</Badge>
         </Group>
         <Tabs
           value={integrationCategory}
@@ -40,6 +41,7 @@ export default function IntegrationSettings({ controller }) {
               </Text>
               <AdGuardIntegrationSettings controller={controller} />
               <PiHoleIntegrationSettings controller={controller} />
+              <TechnitiumIntegrationSettings controller={controller} />
               <SpeedtestTrackerIntegrationSettings controller={controller} />
               <HomeBoxIntegrationSettings controller={controller} />
             </Stack>

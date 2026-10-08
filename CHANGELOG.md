@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added read-only Technitium DNS Server v15 integration with dynamically discovered Query Logs apps, scheduled DNS activity synchronization, optional DHCP enrichment, protected API tokens, and historical IP attribution.
+- Added separate Pi-hole controls for DHCP lease enrichment and opt-in creation of Unknown devices while preserving existing configured installations.
 - Added bounded read-only SNMP v2c infrastructure inventory with protected community settings, managed-device classification, interface state, and LLDP topology hints on device pages.
 - Displayed Discord device-online notifications in green while keeping device-offline alerts red.
 - Expanded diagnostics with rotating backend and scheduler logs, sanitized warning/error traceback metadata, dedicated recent scan failures, and grouped failure summaries.

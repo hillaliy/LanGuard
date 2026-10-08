@@ -71,6 +71,14 @@ class MaintenanceApiTests(TestCase):
         config.adguard_username = "private-admin"
         config.adguard_password = "super-secret-password"
         config.adguard_last_error = "Connection failed at http://10.20.30.40/private"
+        config.technitium_enabled = True
+        config.technitium_url = "https://10.20.30.60:5380"
+        config.technitium_api_token = "super-secret-technitium-token"
+        config.technitium_last_sync_summary = {
+            "processed": 10,
+            "matched": 8,
+            "query_log_app": "Private DNS database",
+        }
         config.speedtest_tracker_enabled = True
         config.speedtest_tracker_url = "http://10.20.30.50:8080"
         config.speedtest_tracker_api_token = "super-secret-speedtest-token"
@@ -119,6 +127,9 @@ class MaintenanceApiTests(TestCase):
             "10.20.30.50",
             "super-secret-speedtest-token",
             "super-secret-snmp-community",
+            "super-secret-technitium-token",
+            "10.20.30.60",
+            "Private DNS database",
             "192.168.1.20",
             "aa:aa:aa:aa:aa:aa",
             "Laptop",
@@ -147,6 +158,12 @@ class MaintenanceApiTests(TestCase):
         self.assertTrue(configuration["speedtest_tracker_configured"])
         self.assertTrue(configuration["snmp_enabled"])
         self.assertTrue(configuration["snmp_configured"])
+        self.assertTrue(configuration["technitium_enabled"])
+        self.assertTrue(configuration["technitium_configured"])
+        self.assertEqual(
+            configuration["technitium_last_sync_summary"]["processed"],
+            10,
+        )
         self.assertIn("notification", response.data)
 
     def test_diagnostics_export_includes_sanitized_failure_logs(self):

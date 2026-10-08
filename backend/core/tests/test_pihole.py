@@ -118,6 +118,8 @@ class PiHoleIntegrationTests(TestCase):
     def test_dhcp_discovers_device_without_marking_existing_devices_offline(self, client_class):
         self.device.online = True
         self.device.save(update_fields=["online"])
+        self.config.pihole_dhcp_create_devices = True
+        self.config.save(update_fields=["pihole_dhcp_create_devices"])
         client = client_class.return_value
         client.dhcp_leases.return_value = {
             "leases": [
@@ -139,6 +141,54 @@ class PiHoleIntegrationTests(TestCase):
         self.assertFalse(discovered.online)
         self.device.refresh_from_db()
         self.assertTrue(self.device.online)
+
+    @patch("core.integrations.pihole.PiHoleClient")
+    def test_dhcp_does_not_create_devices_without_opt_in(self, client_class):
+        client = client_class.return_value
+        client.dhcp_leases.return_value = {
+            "leases": [
+                {
+                    "ip": "192.168.1.33",
+                    "hwaddr": "aa:bb:cc:dd:ee:33",
+                    "name": "tablet",
+                }
+            ]
+        }
+        client.queries.return_value = {"queries": [], "cursor": None}
+
+        result = sync_pihole(self.config)
+
+        self.assertEqual(result["devices_skipped"], 1)
+        self.assertFalse(Device.objects.filter(mac="aa:bb:cc:dd:ee:33").exists())
+
+    @patch("core.integrations.pihole.PiHoleClient")
+    def test_sync_skips_dhcp_api_when_enrichment_is_disabled(self, client_class):
+        self.config.pihole_dhcp_enabled = False
+        self.config.save(update_fields=["pihole_dhcp_enabled"])
+        client = client_class.return_value
+        client.queries.return_value = {"queries": [], "cursor": None}
+
+        result = sync_pihole(self.config)
+
+        self.assertEqual(result["leases"], 0)
+        client.dhcp_leases.assert_not_called()
+
+    def test_settings_require_dhcp_sync_before_creating_devices(self):
+        admin = User.objects.create_user("dhcp-admin", password="password", is_staff=True)
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.put(
+            "/api/v1/settings/",
+            {
+                "pihole_dhcp_enabled": False,
+                "pihole_dhcp_create_devices": True,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("pihole_dhcp_create_devices", response.data)
 
     def test_settings_prevent_two_dns_providers_and_hide_password(self):
         admin = User.objects.create_user("admin", password="password", is_staff=True)
