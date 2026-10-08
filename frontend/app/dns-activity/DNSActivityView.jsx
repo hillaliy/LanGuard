@@ -146,7 +146,7 @@ export default function DNSActivityView({ timeZone, onSelectDevice, onError }) {
       {error && <Alert color="red" icon={<IconAlertCircle size={18} />}>{error}</Alert>}
       {!integration?.enabled && !loading && (
         <Alert color="blue" icon={<IconWorldSearch size={18} />}>
-          Enable and configure AdGuard Home or Pi-hole in Settings to collect DNS activity.
+          Enable and configure AdGuard Home, Pi-hole, or Technitium in Settings to collect DNS activity.
         </Alert>
       )}
       {integration?.last_error && (
@@ -212,11 +212,11 @@ export default function DNSActivityView({ timeZone, onSelectDevice, onError }) {
       <Divider />
       <Box>
         <Group justify="space-between" align="flex-end">
-          <Box><Title order={3}>Unmatched clients</Title><Text c="dimmed" size="sm">AdGuard client identifiers that do not match a current LanGuard device IP.</Text></Box>
+          <Box><Title order={3}>Unmatched clients</Title><Text c="dimmed" size="sm">DNS client identifiers that do not match a current LanGuard device IP.</Text></Box>
           <Badge color={unmatchedSummary?.clients ? 'orange' : 'gray'} variant="light">{number(unmatchedSummary?.clients)} clients</Badge>
         </Group>
         <Alert color="blue" mt="sm" icon={<IconAlertCircle size={18} />}>
-          Check DHCP, DNS forwarding, or stale client addresses. Activity can only be assigned when AdGuard records the device IP directly.
+          Check DHCP, DNS forwarding, or stale client addresses. Activity can only be assigned when the DNS provider records the device IP directly.
         </Alert>
       </Box>
 
@@ -228,7 +228,7 @@ export default function DNSActivityView({ timeZone, onSelectDevice, onError }) {
               <Table.Tr key={client.id}><Table.Td><Text fw={600}>{client.client}</Text></Table.Td><Table.Td>{number(client.query_count)}</Table.Td><Table.Td>{number(client.blocked_count)}</Table.Td><Table.Td>{client.last_domain || '-'}</Table.Td><Table.Td style={{ whiteSpace: 'nowrap' }}>{formatDate(client.last_seen, timeZone)}</Table.Td></Table.Tr>
             ))}
             {!loading && unmatchedClients.length === 0 && (
-              <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" ta="center" py="xl">All recorded AdGuard clients are matched.</Text></Table.Td></Table.Tr>
+              <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" ta="center" py="xl">All recorded DNS clients are matched.</Text></Table.Td></Table.Tr>
             )}
           </Table.Tbody>
         </Table>

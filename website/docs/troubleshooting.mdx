@@ -68,7 +68,7 @@ Check that:
 
 Test the service URL from the Docker host, not only from your browser. A browser may resolve local DNS or cross VLANs differently from the server. Confirm credentials and required API permissions, then use the integration's **Test connection** action for a sanitized error.
 
-For HomeBox, confirm that the server exposes `/api/v1/entities`. For Speedtest Tracker, the token needs `results:read`. For per-device AdGuard data, AdGuard must see client IPs rather than only the router.
+For HomeBox, confirm that the server exposes `/api/v1/entities`. For Speedtest Tracker, the token needs `results:read`. For per-device DNS activity, the provider must see client IPs rather than only the router. Technitium requires version 15 or later, an enabled Query Logs app, and a token with **Logs: View**; optional DHCP synchronization also requires **DHCP: View**.
 
 ## Notifications do not arrive
 

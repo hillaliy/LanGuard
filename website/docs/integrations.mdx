@@ -1,6 +1,6 @@
 ---
 title: Integrations
-description: Connect LanGuard to Docker hosts, AdGuard Home, Pi-hole, Speedtest Tracker, HomeBox, and automation services.
+description: Connect LanGuard to Docker hosts, AdGuard Home, Pi-hole, Technitium DNS Server, Speedtest Tracker, HomeBox, and automation services.
 slug: /integrations
 ---
 
@@ -14,6 +14,7 @@ Docker installations can connect optional services from **Settings > Integration
 | --- | --- | --- |
 | AdGuard Home | Network-wide and per-device DNS destinations and blocked totals | Stores aggregate counters, not raw DNS responses |
 | Pi-hole v6 | DNS destinations, blocked totals, and DHCP client discovery | Stores aggregate counters and current lease identity data, not raw DNS responses |
+| Technitium DNS Server v15+ | DNS destinations and blocked totals, with optional DHCP enrichment | Stores aggregate counters and selected lease identity data, not raw DNS responses |
 | Speedtest Tracker | Latest internet result and health on the dashboard | Stores settings and latest processed health state, not result history |
 | HomeBox | Search and link an existing inventory item to a device | Stores the linked item ID; does not synchronize inventory |
 | Docker inventory | Running containers, health, addresses, restarts, and published ports | Reads the local Docker engine from the scheduler |
@@ -73,11 +74,25 @@ Pi-hole v6 is supported as an alternative to AdGuard Home. Only one DNS activity
 4. Save and select **Sync now** for the first import.
 5. Open the central **DNS Activity** page or a device's **DNS activity** tab.
 
-LanGuard uses the supported Pi-hole v6 API. It imports aggregated DNS counters and current DHCP leases; it does not mount Pi-hole databases or configuration files. Queries are attributed using LanGuard's historical IP ownership at the query time. DHCP leases can create unknown devices and update an existing device's IP by MAC address. A known device's name, hostname, icon, and other user-managed identity remain protected.
+LanGuard uses the supported Pi-hole v6 API. It imports aggregated DNS counters and can optionally read current DHCP leases; it does not mount Pi-hole databases or configuration files. Queries are attributed using LanGuard's historical IP ownership at the query time. **Sync DHCP leases** enriches existing devices by MAC address. **Create devices from leases** is a separate opt-in for adding unmatched valid leases as Unknown devices. A known device's name, hostname, icon, and other user-managed identity remain protected.
 
 Pi-hole is not a presence monitor. A lease can be active while a device is away, and a missing lease does not prove that a device is offline. LanGuard therefore never marks a device offline merely because it is absent from Pi-hole.
 
 > **Device attribution:** Pi-hole must see each originating client IP. DNS requests forwarded by a router are attributed to that router rather than guessed. Pi-hole DHCP discovery is available only when Pi-hole itself has active lease data.
+
+## Technitium DNS Server
+
+Technitium DNS Server v15 or later is supported as an alternative to AdGuard Home and Pi-hole. Only one DNS activity provider can be enabled at a time.
+
+1. Install and enable a compatible Query Logs app in Technitium. LanGuard discovers the active query-log implementation dynamically, so SQLite, PostgreSQL, MySQL, and SQL Server-backed apps are supported when they expose Technitium's Query Logs API.
+2. Create a Technitium API token with **Logs: View** permission. Add **DHCP: View** only when DHCP lease synchronization is required.
+3. Enable **Technitium DNS Server** in **Settings > Integrations > Network services**.
+4. Enter the Technitium web-console URL and API token, then select **Test connection**.
+5. Save and select **Sync now** for the first import.
+
+LanGuard sends the token only in the `Authorization: Bearer` header. Use HTTPS when Technitium is reached across an untrusted network; plain HTTP should be limited to a trusted local network. The integration is read-only and does not change zones, server settings, DHCP scopes, or DNS applications.
+
+DNS queries are imported incrementally and attributed using LanGuard's historical IP ownership at query time. Queries that cannot be assigned reliably remain in unmatched-client diagnostics. Optional DHCP synchronization can update the current IP and hostname of an existing unknown device by MAC address without changing user-managed known-device identity or presence. Creating Unknown devices from leases is a separate opt-in setting, and lease data never marks a device online or offline.
 
 ## Speedtest Tracker
 

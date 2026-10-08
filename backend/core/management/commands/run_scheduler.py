@@ -13,6 +13,7 @@ from core.scanning.lifecycle import ScanAlreadyRunning
 from core.scanning.orchestration import scan
 from core.integrations.adguard import sync_adguard_query_log
 from core.integrations.pihole import sync_pihole
+from core.integrations.technitium import sync_technitium
 from core.versioning import check_for_version_update
 from core.integrations.speedtest_tracker import (
     HEALTH_CHECK_INTERVAL_SECONDS,
@@ -176,6 +177,25 @@ class Command(BaseCommand):
             finally:
                 close_old_connections()
 
+        def run_technitium_sync():
+            close_old_connections()
+            try:
+                result = sync_technitium()
+                if result["status"] == "ok":
+                    self.stdout.write(
+                        self.style.SUCCESS(
+                            "Technitium sync completed: "
+                            f"{result['matched']} matched queries across "
+                            f"{result['domains_updated']} device domains; "
+                            f"{result['leases']} DHCP leases processed"
+                        )
+                    )
+            except Exception:
+                LOGGER.exception("Technitium sync failed")
+                self.stderr.write(self.style.ERROR("Technitium sync failed"))
+            finally:
+                close_old_connections()
+
         def run_version_update_check():
             close_old_connections()
             try:
@@ -264,6 +284,20 @@ class Command(BaseCommand):
                 if stop_event.wait(interval_seconds):
                     break
 
+        def technitium_sync_loop():
+            while not stop_event.is_set():
+                close_old_connections()
+                try:
+                    config = AppSettings.load()
+                    enabled = config.technitium_enabled
+                    interval_seconds = max(config.technitium_sync_interval, 1) * 60
+                finally:
+                    close_old_connections()
+                if enabled:
+                    run_technitium_sync()
+                if stop_event.wait(interval_seconds):
+                    break
+
         def version_update_loop():
             while not stop_event.is_set():
                 run_version_update_check()
@@ -335,6 +369,11 @@ class Command(BaseCommand):
         adguard_sync_thread.start()
         pihole_sync_thread = threading.Thread(target=pihole_sync_loop, daemon=True)
         pihole_sync_thread.start()
+        technitium_sync_thread = threading.Thread(
+            target=technitium_sync_loop,
+            daemon=True,
+        )
+        technitium_sync_thread.start()
         version_update_thread = threading.Thread(target=version_update_loop, daemon=True)
         version_update_thread.start()
         speedtest_health_thread = threading.Thread(
@@ -383,6 +422,9 @@ class Command(BaseCommand):
         )
         self.stdout.write(
             self.style.SUCCESS("Pi-hole sync follows the saved integration interval")
+        )
+        self.stdout.write(
+            self.style.SUCCESS("Technitium sync follows the saved integration interval")
         )
         self.stdout.write(
             self.style.SUCCESS("LanGuard update checks follow the saved version interval")

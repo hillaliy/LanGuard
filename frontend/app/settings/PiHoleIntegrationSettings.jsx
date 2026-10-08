@@ -1,12 +1,15 @@
-import { Badge, Box, Button, Group, Image, NumberInput, PasswordInput, SimpleGrid, Stack, Switch, Text, TextInput } from '@mantine/core';
+import { Alert, Badge, Box, Button, Group, Image, NumberInput, PasswordInput, SimpleGrid, Stack, Switch, Text, TextInput } from '@mantine/core';
 import { IconRefresh, IconSend } from '@tabler/icons-react';
 import { formatDate } from '../utils/date';
 
 export default function PiHoleIntegrationSettings({ controller }) {
   const {
-    piholeConfigured, piholeEnabled, piholeLastError, piholeLastSyncAt, piholePassword,
+    piholeConfigured, piholeDhcpCreateDevices, piholeDhcpEnabled, piholeEnabled,
+    piholeLastError, piholeLastSyncAt, piholePassword,
     piholeRetentionDays, piholeSyncInterval, piholeUrl, setAdguardEnabled, setPiholeEnabled,
-    setPiholePassword, setPiholeRetentionDays, setPiholeSyncInterval, setPiholeUrl,
+    setPiholeDhcpCreateDevices, setPiholeDhcpEnabled, setPiholePassword,
+    setPiholeRetentionDays, setPiholeSyncInterval, setPiholeUrl,
+    setTechnitiumEnabled,
     syncPiholeNow, syncingPihole, testPiholeConnection, testingPihole, timeZone,
   } = controller;
 
@@ -20,7 +23,10 @@ export default function PiHoleIntegrationSettings({ controller }) {
             <Switch label="Enabled" checked={piholeEnabled} onChange={(event) => {
               const enabled = event.currentTarget.checked;
               setPiholeEnabled(enabled);
-              if (enabled) setAdguardEnabled(false);
+              if (enabled) {
+                setAdguardEnabled(false);
+                setTechnitiumEnabled(false);
+              }
             }} />
           </Group>
           <Text size="sm" c="dimmed" mt={4}>
@@ -40,6 +46,26 @@ export default function PiHoleIntegrationSettings({ controller }) {
           onChange={(event) => setPiholePassword(event.currentTarget.value)} disabled={!piholeEnabled} />
       </SimpleGrid>
       {piholeConfigured && <Text size="xs" c="dimmed">Leave the application password blank to keep the saved password.</Text>}
+      <Group align="flex-start" wrap="wrap">
+        <Switch label="Sync DHCP leases"
+          description="Enrich existing devices with lease IP and hostname data."
+          checked={piholeDhcpEnabled} disabled={!piholeEnabled}
+          onChange={(event) => {
+            const enabled = event.currentTarget.checked;
+            setPiholeDhcpEnabled(enabled);
+            if (!enabled) setPiholeDhcpCreateDevices(false);
+          }} />
+        <Switch label="Create devices from leases"
+          description="Create Unknown devices for valid leases not already in LanGuard."
+          checked={piholeDhcpCreateDevices}
+          disabled={!piholeEnabled || !piholeDhcpEnabled}
+          onChange={(event) => setPiholeDhcpCreateDevices(event.currentTarget.checked)} />
+      </Group>
+      {piholeDhcpCreateDevices && (
+        <Alert color="yellow" variant="light">
+          DHCP-only devices are added as Unknown and are not marked online by the integration.
+        </Alert>
+      )}
       <Group justify="space-between" align="flex-end" wrap="wrap">
         <Group align="flex-end" wrap="wrap">
           <NumberInput w={170} label="Sync interval" value={piholeSyncInterval}

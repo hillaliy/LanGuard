@@ -18,6 +18,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     updated_at = UTCDateTimeField(read_only=True)
     adguard_last_sync_at = UTCDateTimeField(read_only=True)
     pihole_last_sync_at = UTCDateTimeField(read_only=True)
+    technitium_last_sync_at = UTCDateTimeField(read_only=True)
     scan_max_hosts = serializers.SerializerMethodField()
     snmp_max_devices = serializers.SerializerMethodField()
     discord_configured = serializers.SerializerMethodField()
@@ -27,6 +28,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     webhook_signature_configured = serializers.SerializerMethodField()
     adguard_configured = serializers.SerializerMethodField()
     pihole_configured = serializers.SerializerMethodField()
+    technitium_configured = serializers.SerializerMethodField()
     speedtest_tracker_configured = serializers.SerializerMethodField()
     homebox_configured = serializers.SerializerMethodField()
     homebox_api_token = serializers.CharField(write_only=True, required=False, allow_blank=True, max_length=512)
@@ -69,6 +71,13 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         allow_blank=True,
         max_length=255,
     )
+    technitium_api_token = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        max_length=512,
+        trim_whitespace=True,
+    )
     telegram_token = serializers.CharField(
         write_only=True,
         required=False,
@@ -101,6 +110,7 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     )
     adguard_last_error = serializers.SerializerMethodField()
     pihole_last_error = serializers.SerializerMethodField()
+    technitium_last_error = serializers.SerializerMethodField()
 
     @extend_schema_field(serializers.CharField)
     def get_adguard_last_error(self, obj):
@@ -109,6 +119,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.CharField)
     def get_pihole_last_error(self, obj):
         return stored_error_message("pihole", obj.pihole_last_error)
+
+    @extend_schema_field(serializers.CharField)
+    def get_technitium_last_error(self, obj):
+        return stored_error_message("technitium", obj.technitium_last_error)
 
     class Meta:
         model = AppSettings
@@ -170,8 +184,21 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "pihole_configured",
             "pihole_sync_interval",
             "pihole_retention_days",
+            "pihole_dhcp_enabled",
+            "pihole_dhcp_create_devices",
             "pihole_last_sync_at",
             "pihole_last_error",
+            "technitium_enabled",
+            "technitium_url",
+            "technitium_api_token",
+            "technitium_configured",
+            "technitium_sync_interval",
+            "technitium_retention_days",
+            "technitium_dhcp_enabled",
+            "technitium_dhcp_create_devices",
+            "technitium_last_sync_at",
+            "technitium_last_sync_summary",
+            "technitium_last_error",
             "speedtest_tracker_enabled",
             "homebox_enabled",
             "homebox_url",
@@ -195,6 +222,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "pihole_url": {"required": False, "allow_blank": True},
             "pihole_last_sync_at": {"read_only": True},
             "pihole_last_error": {"read_only": True},
+            "technitium_url": {"required": False, "allow_blank": True},
+            "technitium_last_sync_at": {"read_only": True},
+            "technitium_last_sync_summary": {"read_only": True},
+            "technitium_last_error": {"read_only": True},
             "speedtest_tracker_url": {"required": False, "allow_blank": True},
             "updated_at": {"read_only": True},
         }
@@ -205,6 +236,16 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         try:
             return normalize_telegram_api_url(value)
         except ValueError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+    def validate_technitium_url(self, value):
+        if not value:
+            return ""
+        from ..integrations.technitium import TechnitiumError, normalize_technitium_url
+
+        try:
+            return normalize_technitium_url(value)
+        except TechnitiumError as exc:
             raise serializers.ValidationError(str(exc)) from exc
 
     @extend_schema_field(serializers.IntegerField)
@@ -246,6 +287,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.BooleanField)
     def get_pihole_configured(self, obj):
         return bool(obj.pihole_url and obj.pihole_password)
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_technitium_configured(self, obj):
+        return bool(obj.technitium_url and obj.technitium_api_token)
 
     @extend_schema_field(serializers.BooleanField)
     def get_speedtest_tracker_configured(self, obj):
@@ -402,12 +447,73 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"pihole_password": "Enter a Pi-hole application password."}
             )
+        pihole_dhcp_enabled = attrs.get(
+            "pihole_dhcp_enabled",
+            self.instance.pihole_dhcp_enabled if self.instance else True,
+        )
+        pihole_create_devices = attrs.get(
+            "pihole_dhcp_create_devices",
+            self.instance.pihole_dhcp_create_devices if self.instance else False,
+        )
+        if pihole_create_devices and not pihole_dhcp_enabled:
+            raise serializers.ValidationError(
+                {
+                    "pihole_dhcp_create_devices": (
+                        "Enable Pi-hole DHCP lease synchronization before creating devices."
+                    )
+                }
+            )
         if enabled and pihole_enabled:
             raise serializers.ValidationError(
                 {
                     "pihole_enabled": (
                         "Disable AdGuard Home before enabling Pi-hole. Only one DNS "
                         "activity provider can be active at a time."
+                    )
+                }
+            )
+
+        technitium_enabled = attrs.get(
+            "technitium_enabled",
+            self.instance.technitium_enabled if self.instance else False,
+        )
+        technitium_url = attrs.get(
+            "technitium_url",
+            self.instance.technitium_url if self.instance else "",
+        )
+        technitium_token = attrs.get("technitium_api_token") or (
+            self.instance.technitium_api_token if self.instance else ""
+        )
+        technitium_dhcp_enabled = attrs.get(
+            "technitium_dhcp_enabled",
+            self.instance.technitium_dhcp_enabled if self.instance else False,
+        )
+        technitium_create_devices = attrs.get(
+            "technitium_dhcp_create_devices",
+            self.instance.technitium_dhcp_create_devices if self.instance else False,
+        )
+        if technitium_enabled and not technitium_url:
+            raise serializers.ValidationError(
+                {"technitium_url": "Configure the Technitium URL before enabling sync."}
+            )
+        if technitium_enabled and not technitium_token:
+            raise serializers.ValidationError(
+                {"technitium_api_token": "Enter a Technitium API token."}
+            )
+        if technitium_enabled and (enabled or pihole_enabled):
+            raise serializers.ValidationError(
+                {
+                    "technitium_enabled": (
+                        "Disable the other DNS provider before enabling Technitium. "
+                        "Only one DNS activity provider can be active at a time."
+                    )
+                }
+            )
+        if technitium_create_devices and not technitium_dhcp_enabled:
+            raise serializers.ValidationError(
+                {
+                    "technitium_dhcp_create_devices": (
+                        "Enable Technitium DHCP lease synchronization before creating devices."
                     )
                 }
             )
@@ -467,6 +573,8 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             validated_data.setdefault("adguard_password", "")
         if not validated_data.get("pihole_password"):
             validated_data.pop("pihole_password", None)
+        if not validated_data.get("technitium_api_token"):
+            validated_data.pop("technitium_api_token", None)
         if not validated_data.get("telegram_token"):
             validated_data.pop("telegram_token", None)
         if not validated_data.get("speedtest_tracker_api_token"):
@@ -566,6 +674,28 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Pi-hole retention must be at least 1 day.")
         if value > 3650:
             raise serializers.ValidationError("Pi-hole retention must be 3650 days or less.")
+        return value
+
+    def validate_technitium_sync_interval(self, value):
+        if value < 1:
+            raise serializers.ValidationError(
+                "Technitium sync interval must be at least 1 minute."
+            )
+        if value > 1440:
+            raise serializers.ValidationError(
+                "Technitium sync interval must be 1440 minutes or less."
+            )
+        return value
+
+    def validate_technitium_retention_days(self, value):
+        if value < 1:
+            raise serializers.ValidationError(
+                "Technitium retention must be at least 1 day."
+            )
+        if value > 3650:
+            raise serializers.ValidationError(
+                "Technitium retention must be 3650 days or less."
+            )
         return value
 
     def validate_notification_quiet_hours_start(self, value):

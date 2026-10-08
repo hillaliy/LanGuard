@@ -16,7 +16,29 @@ from ..serializers.dns import (
 )
 
 
+def active_dns_provider(config):
+    if config.technitium_enabled:
+        return "technitium"
+    if config.pihole_enabled:
+        return "pihole"
+    return "adguard"
+
+
 def dns_integration_payload(config, *, include_web_url=False):
+    if config.technitium_enabled:
+        payload = {
+            "provider": "technitium",
+            "provider_name": "Technitium DNS Server",
+            "enabled": True,
+            "configured": bool(
+                config.technitium_url and config.technitium_api_token
+            ),
+            "last_sync_at": utc_isoformat(config.technitium_last_sync_at),
+            "last_error": config.technitium_last_error,
+        }
+        if include_web_url:
+            payload["web_url"] = config.technitium_url
+        return payload
     if config.pihole_enabled:
         payload = {
             "provider": "pihole",
@@ -55,7 +77,7 @@ def device_dns_activity(request):
 
     target = get_object_or_404(Device, pk=id_)
     config = AppSettings.load()
-    provider = "pihole" if config.pihole_enabled else "adguard"
+    provider = active_dns_provider(config)
     base_queryset = DeviceDNSActivity.objects.filter(device=target, provider=provider)
     queryset = base_queryset
     search = str(request.query_params.get("search") or "").strip()
@@ -116,7 +138,7 @@ def device_dns_activity(request):
 @permission_classes([permissions.IsAuthenticated])
 def dns_activity(request):
     config = AppSettings.load()
-    provider = "pihole" if config.pihole_enabled else "adguard"
+    provider = active_dns_provider(config)
     base_queryset = DeviceDNSActivity.objects.filter(provider=provider).select_related(
         "device"
     )
@@ -187,7 +209,7 @@ def dns_activity(request):
 @permission_classes([permissions.IsAuthenticated])
 def dns_unmatched_clients(request):
     config = AppSettings.load()
-    provider = "pihole" if config.pihole_enabled else "adguard"
+    provider = active_dns_provider(config)
     base_queryset = AdGuardUnmatchedClient.objects.filter(provider=provider)
     queryset = base_queryset
     search = str(request.query_params.get("search") or "").strip()

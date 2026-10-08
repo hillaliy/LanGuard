@@ -27,12 +27,32 @@ class AdGuardConnectionSerializer(serializers.Serializer):
 class PiHoleConnectionSerializer(serializers.Serializer):
     url = serializers.URLField(max_length=2048)
     password = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    dhcp_enabled = serializers.BooleanField(required=False, default=True)
 
     def validate(self, attrs):
         saved = AppSettings.load()
         if not attrs.get("password") and not saved.pihole_password:
             raise serializers.ValidationError(
                 {"password": "Enter a Pi-hole application password."}
+            )
+        return attrs
+
+
+class TechnitiumConnectionSerializer(serializers.Serializer):
+    url = serializers.URLField(max_length=2048)
+    api_token = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=512,
+        trim_whitespace=True,
+    )
+    dhcp_enabled = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs):
+        saved = AppSettings.load()
+        if not attrs.get("api_token") and not saved.technitium_api_token:
+            raise serializers.ValidationError(
+                {"api_token": "Enter a Technitium API token."}
             )
         return attrs
 
@@ -53,5 +73,3 @@ class SpeedtestTrackerConnectionSerializer(serializers.Serializer):
                 {"api_token": "Enter a Speedtest Tracker API token."}
             )
         return attrs
-
-

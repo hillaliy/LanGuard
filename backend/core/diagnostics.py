@@ -205,9 +205,44 @@ def build_diagnostics_report():
             "pihole_configured": bool(config.pihole_url and config.pihole_password),
             "pihole_sync_interval_minutes": config.pihole_sync_interval,
             "pihole_retention_days": config.pihole_retention_days,
+            "pihole_dhcp_enabled": config.pihole_dhcp_enabled,
+            "pihole_dhcp_create_devices": config.pihole_dhcp_create_devices,
             "pihole_last_sync_at": utc_isoformat(config.pihole_last_sync_at),
             "pihole_last_error": stored_error_message(
                 "pihole", config.pihole_last_error
+            ),
+            "technitium_enabled": config.technitium_enabled,
+            "technitium_configured": bool(
+                config.technitium_url and config.technitium_api_token
+            ),
+            "technitium_sync_interval_minutes": config.technitium_sync_interval,
+            "technitium_retention_days": config.technitium_retention_days,
+            "technitium_dhcp_enabled": config.technitium_dhcp_enabled,
+            "technitium_dhcp_create_devices": (
+                config.technitium_dhcp_create_devices
+            ),
+            "technitium_last_sync_at": utc_isoformat(
+                config.technitium_last_sync_at
+            ),
+            "technitium_last_sync_summary": {
+                key: config.technitium_last_sync_summary.get(key, 0)
+                for key in (
+                    "processed",
+                    "matched",
+                    "unmatched",
+                    "invalid",
+                    "domains_updated",
+                    "leases",
+                    "devices_discovered",
+                    "devices_updated",
+                    "devices_skipped",
+                    "identity_conflicts",
+                    "invalid_leases",
+                    "expired_leases",
+                )
+            },
+            "technitium_last_error": stored_error_message(
+                "technitium", config.technitium_last_error
             ),
             "speedtest_tracker_enabled": config.speedtest_tracker_enabled,
             "notify_speedtest_changes": config.notify_speedtest_changes,

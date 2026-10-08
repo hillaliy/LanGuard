@@ -50,6 +50,7 @@ class Device(models.Model):
         INFERRED = "inferred", "Inferred"
         IMPORTED = "imported", "Imported inventory"
         PIHOLE = "pihole", "Pi-hole DHCP"
+        TECHNITIUM = "technitium", "Technitium DHCP"
 
     class Status(models.TextChoices):
         ONLINE = "online", "Online"
@@ -718,9 +719,23 @@ class AppSettings(models.Model):
     pihole_password = models.CharField(max_length=255, blank=True, default="")
     pihole_sync_interval = models.PositiveIntegerField(default=5)
     pihole_retention_days = models.PositiveIntegerField(default=90)
+    pihole_dhcp_enabled = models.BooleanField(default=True)
+    pihole_dhcp_create_devices = models.BooleanField(default=False)
     pihole_last_sync_at = models.DateTimeField(blank=True, null=True)
     pihole_last_query_id = models.PositiveBigIntegerField(blank=True, null=True)
     pihole_last_error = models.TextField(blank=True, default="")
+    technitium_enabled = models.BooleanField(default=False)
+    technitium_url = models.URLField(max_length=2048, blank=True, default="")
+    technitium_api_token = models.CharField(max_length=512, blank=True, default="")
+    technitium_sync_interval = models.PositiveIntegerField(default=5)
+    technitium_retention_days = models.PositiveIntegerField(default=90)
+    technitium_dhcp_enabled = models.BooleanField(default=False)
+    technitium_dhcp_create_devices = models.BooleanField(default=False)
+    technitium_last_sync_at = models.DateTimeField(blank=True, null=True)
+    technitium_last_query_at = models.DateTimeField(blank=True, null=True)
+    technitium_last_query_row = models.BigIntegerField(blank=True, null=True)
+    technitium_last_sync_summary = models.JSONField(default=dict, blank=True)
+    technitium_last_error = models.TextField(blank=True, default="")
     speedtest_tracker_enabled = models.BooleanField(default=False)
     homebox_enabled = models.BooleanField(default=False)
     homebox_url = models.URLField(max_length=2048, blank=True, default="")
@@ -813,9 +828,23 @@ class AppSettings(models.Model):
             "pihole_password": "",
             "pihole_sync_interval": 5,
             "pihole_retention_days": 90,
+            "pihole_dhcp_enabled": True,
+            "pihole_dhcp_create_devices": False,
             "pihole_last_sync_at": None,
             "pihole_last_query_id": None,
             "pihole_last_error": "",
+            "technitium_enabled": False,
+            "technitium_url": "",
+            "technitium_api_token": "",
+            "technitium_sync_interval": 5,
+            "technitium_retention_days": 90,
+            "technitium_dhcp_enabled": False,
+            "technitium_dhcp_create_devices": False,
+            "technitium_last_sync_at": None,
+            "technitium_last_query_at": None,
+            "technitium_last_query_row": None,
+            "technitium_last_sync_summary": {},
+            "technitium_last_error": "",
             "speedtest_tracker_enabled": False,
             "speedtest_tracker_url": "",
             "speedtest_tracker_api_token": "",
