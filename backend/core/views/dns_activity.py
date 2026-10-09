@@ -8,6 +8,7 @@ from rest_framework.response import Response
 
 from ..api import paginated_payload, parse_bool_param
 from ..datetime_utils import utc_isoformat
+from ..device_merging import group_device_ids, primary_device
 from ..models import AdGuardUnmatchedClient, AppSettings, Device, DeviceDNSActivity
 from ..serializers.dns import (
     AdGuardUnmatchedClientSerializer,
@@ -75,10 +76,14 @@ def device_dns_activity(request):
     if not id_:
         raise ValidationError({"id": "Device id is required."})
 
-    target = get_object_or_404(Device, pk=id_)
+    target = get_object_or_404(Device.objects.select_related("merged_into"), pk=id_)
+    target = primary_device(target)
     config = AppSettings.load()
     provider = active_dns_provider(config)
-    base_queryset = DeviceDNSActivity.objects.filter(device=target, provider=provider)
+    base_queryset = DeviceDNSActivity.objects.filter(
+        device_id__in=group_device_ids(target),
+        provider=provider,
+    )
     queryset = base_queryset
     search = str(request.query_params.get("search") or "").strip()
     blocked = parse_bool_param(request.query_params, "blocked")

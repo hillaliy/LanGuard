@@ -128,6 +128,7 @@ export async function apiRequest(path, options = {}) {
       method: options.method || 'GET',
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
+      cache: 'no-store',
     });
   } catch (error) {
     throw apiError(BACKEND_UNAVAILABLE_MESSAGE);

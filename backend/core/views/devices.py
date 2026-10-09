@@ -4,6 +4,7 @@ from datetime import timedelta, timezone as datetime_timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
+from django.db.models.deletion import ProtectedError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -16,6 +17,13 @@ from rest_framework.response import Response
 from ..access_control import CanEditDevices, CanRunScans
 from ..api import paginated_payload, parse_bool_param, parse_int_param
 from ..datetime_utils import utc_isoformat
+from ..device_merging import (
+    device_interfaces,
+    effective_device_state,
+    merge_device_interfaces,
+    primary_device,
+    unmerge_device_interface,
+)
 from ..models import AppSettings, Device, DevicePort, NetworkEvent
 from ..scanning.discovery import detect_web_interface
 from ..serializers.devices import (
@@ -31,10 +39,6 @@ LOGGER = logging.getLogger(__name__)
 DEVICE_ORDERING_FIELDS = {
     "name": ("name", "ip", "id"),
     "-name": ("-name", "ip", "id"),
-    "firstseen": ("firstseen", "ip", "id"),
-    "-firstseen": ("-firstseen", "ip", "id"),
-    "lastseen": ("lastseen", "ip", "id"),
-    "-lastseen": ("-lastseen", "ip", "id"),
 }
 FIRST_SEEN_PERIODS = {"today", "7d", "30d"}
 OUTSIDE_NETWORK_RANGE_FILTER = "outside"
@@ -142,7 +146,14 @@ def paginated_device_payload(request, devices):
             default_limit=10,
             max_limit=100,
         )
-    if ordering in {"ip", "-ip"}:
+    if ordering in {
+        "ip",
+        "-ip",
+        "firstseen",
+        "-firstseen",
+        "lastseen",
+        "-lastseen",
+    } or ordering is None:
         limit = parse_int_param(
             request.query_params,
             "limit",
@@ -156,11 +167,31 @@ def paginated_device_payload(request, devices):
             default=0,
             minimum=0,
         )
-        sorted_devices = sorted(
-            devices,
-            key=ip_sort_key,
-            reverse=ordering == "-ip",
-        )
+        if ordering in {"ip", "-ip"}:
+            sorted_devices = sorted(
+                devices,
+                key=ip_sort_key,
+                reverse=ordering == "-ip",
+            )
+        elif ordering in {"firstseen", "-firstseen", "lastseen", "-lastseen"}:
+            state_field = ordering.removeprefix("-")
+            sorted_devices = sorted(
+                devices,
+                key=lambda item: (
+                    effective_device_state(item)[state_field],
+                    ip_sort_key(item),
+                ),
+                reverse=ordering.startswith("-"),
+            )
+        else:
+            sorted_devices = sorted(
+                devices,
+                key=lambda item: (
+                    not effective_device_state(item)["online"],
+                    item.name.lower(),
+                    ip_sort_key(item),
+                ),
+            )
         total = len(sorted_devices)
         next_offset = offset + limit if offset + limit < total else None
         previous_offset = max(offset - limit, 0) if offset > 0 else None
@@ -215,16 +246,32 @@ def append_availability_segment(segments, state, started_at, ended_at):
 def device_availability_payload(device_item, period, now=None):
     now = now or timezone.now()
     started_at = now - DEVICE_AVAILABILITY_PERIODS[period]
-    presence_events = device_item.events.filter(
+    interfaces = device_interfaces(device_item)
+    interface_ids = [item.id for item in interfaces]
+    presence_events = NetworkEvent.objects.filter(
+        device_id__in=interface_ids,
         event_type__in=PRESENCE_EVENT_STATUSES,
         created_at__lte=now,
     )
-    previous_event = presence_events.filter(created_at__lte=started_at).first()
-    state = (
-        PRESENCE_EVENT_STATUSES[previous_event.event_type]
-        if previous_event
-        else "unknown"
+    interface_states = {interface_id: "unknown" for interface_id in interface_ids}
+    previous_events = presence_events.filter(created_at__lte=started_at).order_by(
+        "created_at",
+        "id",
     )
+    for event in previous_events:
+        interface_id = (event.metadata or {}).get("interface_device_id") or event.device_id
+        if interface_id in interface_states:
+            interface_states[interface_id] = PRESENCE_EVENT_STATUSES[event.event_type]
+
+    def physical_state():
+        states = set(interface_states.values())
+        if "online" in states:
+            return "online"
+        if states == {"offline"}:
+            return "offline"
+        return "unknown"
+
+    state = physical_state()
     events = list(
         presence_events.filter(created_at__gt=started_at).order_by("created_at", "id")
     )
@@ -234,9 +281,13 @@ def device_availability_payload(device_item, period, now=None):
     status_changes = 0
     for event in events:
         append_availability_segment(segments, state, cursor, event.created_at)
-        state = PRESENCE_EVENT_STATUSES[event.event_type]
+        previous_state = state
+        interface_id = (event.metadata or {}).get("interface_device_id") or event.device_id
+        if interface_id in interface_states:
+            interface_states[interface_id] = PRESENCE_EVENT_STATUSES[event.event_type]
+        state = physical_state()
         cursor = event.created_at
-        if event.event_type != NetworkEvent.EventType.NEW_DEVICE:
+        if state != previous_state and event.event_type != NetworkEvent.EventType.NEW_DEVICE:
             status_changes += 1
     append_availability_segment(segments, state, cursor, now)
 
@@ -271,22 +322,49 @@ def device_availability_payload(device_item, period, now=None):
 
 
 def active_device_counters():
-    active_devices = Device.objects.filter(archived=False)
+    active_devices = Device.objects.prefetch_related("merged_interfaces").filter(
+        archived=False,
+        merged_into__isnull=True,
+    )
     regular_devices = active_devices.filter(is_visitor=False)
     visitor_devices = active_devices.filter(is_visitor=True)
+    regular_states = [effective_device_state(item) for item in regular_devices]
+    visitor_states = [effective_device_state(item) for item in visitor_devices]
     return {
-        "all_devices": regular_devices.count(),
-        "online_devices": regular_devices.exclude(status=Device.Status.OFFLINE).count(),
-        "offline_devices": regular_devices.filter(status=Device.Status.OFFLINE).count(),
+        "all_devices": len(regular_states),
+        "online_devices": sum(
+            item["status"] != Device.Status.OFFLINE for item in regular_states
+        ),
+        "offline_devices": sum(
+            item["status"] == Device.Status.OFFLINE for item in regular_states
+        ),
         "new_devices": regular_devices.filter(known=False).count(),
         "open_ports": DevicePort.objects.filter(
             open=True,
             device__archived=False,
         ).count(),
-        "visitor_devices": visitor_devices.count(),
-        "online_visitors": visitor_devices.exclude(status=Device.Status.OFFLINE).count(),
-        "archived_devices": Device.objects.filter(archived=True).count(),
+        "visitor_devices": len(visitor_states),
+        "online_visitors": sum(
+            item["status"] != Device.Status.OFFLINE for item in visitor_states
+        ),
+        "archived_devices": Device.objects.filter(
+            archived=True,
+            merged_into__isnull=True,
+        ).count(),
     }
+
+
+def filter_devices_by_effective_state(devices, *, online=None, status_value=None):
+    if online is None and status_value is None:
+        return devices
+    matching_ids = []
+    for item in devices.prefetch_related("merged_interfaces"):
+        state = effective_device_state(item)
+        if status_value is not None and state["status"] == status_value:
+            matching_ids.append(item.id)
+        elif status_value is None and state["online"] is online:
+            matching_ids.append(item.id)
+    return devices.filter(id__in=matching_ids)
 
 
 @extend_schema(methods=["GET"], responses=OpenApiTypes.OBJECT)
@@ -305,7 +383,14 @@ def device(request):
         id_ = request.query_params.get("id")
         if not id_:
             archived = parse_bool_param(request.query_params, "archived") is True
-            devices = Device.objects.prefetch_related("ports").filter(archived=archived)
+            devices = Device.objects.prefetch_related(
+                "ports",
+                "merged_interfaces",
+                "merged_interfaces__ports",
+            ).filter(
+                archived=archived,
+                merged_into__isnull=True,
+            )
             online = parse_bool_param(request.query_params, "online")
             device_status = request.query_params.get("status")
             known = parse_bool_param(request.query_params, "known")
@@ -320,9 +405,12 @@ def device(request):
             if device_status:
                 if device_status not in Device.Status.values:
                     raise ValidationError({"status": "Invalid device status."})
-                devices = devices.filter(status=device_status)
+                devices = filter_devices_by_effective_state(
+                    devices,
+                    status_value=device_status,
+                )
             elif online is not None:
-                devices = devices.filter(online=online)
+                devices = filter_devices_by_effective_state(devices, online=online)
             if known is not None:
                 devices = devices.filter(known=known)
             if is_visitor is not None:
@@ -334,7 +422,12 @@ def device(request):
                     | Q(mac__icontains=search)
                     | Q(hostname__icontains=search)
                     | Q(vendor__icontains=search)
-                )
+                    | Q(merged_interfaces__name__icontains=search)
+                    | Q(merged_interfaces__ip__icontains=search)
+                    | Q(merged_interfaces__mac__icontains=search)
+                    | Q(merged_interfaces__hostname__icontains=search)
+                    | Q(merged_interfaces__vendor__icontains=search)
+                ).distinct()
             if open_port:
                 port = parse_int_param(
                     request.query_params,
@@ -343,7 +436,13 @@ def device(request):
                     minimum=1,
                     maximum=65535,
                 )
-                devices = devices.filter(ports__port=port, ports__open=True).distinct()
+                devices = devices.filter(
+                    Q(ports__port=port, ports__open=True)
+                    | Q(
+                        merged_interfaces__ports__port=port,
+                        merged_interfaces__ports__open=True,
+                    )
+                ).distinct()
             if first_seen:
                 if first_seen not in FIRST_SEEN_PERIODS:
                     raise ValidationError(
@@ -374,12 +473,23 @@ def device(request):
                 status=status.HTTP_200_OK,
             )
 
-        device_item = get_object_or_404(Device, pk=id_)
+        device_item = get_object_or_404(
+            Device.objects.select_related("merged_into").prefetch_related(
+                "ports",
+                "merged_interfaces",
+                "merged_interfaces__ports",
+            ),
+            pk=id_,
+        )
+        device_item = primary_device(device_item)
         return Response(
             {
                 "data": DeviceSerializer(
                     device_item,
-                    context={"include_snmp_inventory": True},
+                    context={
+                        "include_interfaces": True,
+                        "include_snmp_inventory": True,
+                    },
                 ).data
             },
             status=status.HTTP_200_OK,
@@ -391,7 +501,8 @@ def device(request):
             {"status": "Error", "info": "Id is missing"},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    device_item = get_object_or_404(Device, pk=id_)
+    device_item = get_object_or_404(Device.objects.select_related("merged_into"), pk=id_)
+    device_item = primary_device(device_item)
 
     if request.method == "PUT":
         serializer = DeviceSerializer(device_item, data=request.data, partial=True)
@@ -401,6 +512,8 @@ def device(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         device_item = serializer.save()
+        if "archived" in serializer.validated_data:
+            device_item.merged_interfaces.update(archived=device_item.archived)
         LOGGER.info(
             "Device (%s) updated - Name: %s / Icon: %s / Known: %s",
             device_item.id,
@@ -416,12 +529,19 @@ def device(request):
             status="OK",
         )
 
+    deleted_id = device_item.id
+    deleted_name = device_item.name
+    try:
+        device_item.delete()
+    except ProtectedError as exc:
+        raise ValidationError(
+            {"device": "Separate the device interfaces before deleting this device."}
+        ) from exc
     LOGGER.warning(
         "Device (%s) %s - deleted successfully",
-        device_item.id,
-        device_item.name,
+        deleted_id,
+        deleted_name,
     )
-    device_item.delete()
     return success_response(
         {"id": id_},
         "Device deleted",
@@ -533,13 +653,20 @@ def wake_device(request):
     if device_id < 1:
         raise ValidationError({"id": "A valid device ID is required."})
 
-    device_item = get_object_or_404(Device, pk=device_id, archived=False)
+    device_item = get_object_or_404(
+        Device.objects.select_related("merged_into").prefetch_related(
+            "merged_interfaces"
+        ),
+        pk=device_id,
+        archived=False,
+    )
+    device_item = primary_device(device_item)
+    interfaces = device_interfaces(device_item)
     try:
-        broadcast_address = wake_broadcast_address(
-            device_item.ip,
-            AppSettings.load().effective_scan_ranges,
-        )
-        send_magic_packet(device_item.mac, broadcast_address)
+        scan_ranges = AppSettings.load().effective_scan_ranges
+        for interface in interfaces:
+            broadcast_address = wake_broadcast_address(interface.ip, scan_ranges)
+            send_magic_packet(interface.mac, broadcast_address)
     except ValueError as exc:
         raise ValidationError({"device": str(exc)}) from exc
     except OSError:
@@ -552,9 +679,13 @@ def wake_device(request):
             response_status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    LOGGER.info("Wake-on-LAN packet sent for device %s", device_item.id)
+    LOGGER.info(
+        "Wake-on-LAN packet sent for device %s across %s interface(s)",
+        device_item.id,
+        len(interfaces),
+    )
     return success_response(
-        {"id": device_item.id},
+        {"id": device_item.id, "interfaces": len(interfaces)},
         "Wake request sent",
         f"Wake-on-LAN packet sent to {device_item.name}.",
         response_status=status.HTTP_202_ACCEPTED,
@@ -574,12 +705,22 @@ def device_web_interface(request):
     id_ = request.query_params.get("id")
     if not id_:
         raise ValidationError({"id": "Device id is required."})
-    target = get_object_or_404(Device.objects.prefetch_related("ports"), pk=id_)
-    open_ports = list(target.ports.filter(open=True).values_list("port", flat=True))
-    return Response(
-        {"url": detect_web_interface(target.ip, open_ports)},
-        status=status.HTTP_200_OK,
+    target = get_object_or_404(
+        Device.objects.select_related("merged_into").prefetch_related(
+            "ports",
+            "merged_interfaces",
+            "merged_interfaces__ports",
+        ),
+        pk=id_,
     )
+    for interface in device_interfaces(primary_device(target)):
+        open_ports = list(
+            interface.ports.filter(open=True).values_list("port", flat=True)
+        )
+        detected_url = detect_web_interface(interface.ip, open_ports)
+        if detected_url:
+            return Response({"url": detected_url}, status=status.HTTP_200_OK)
+    return Response({"url": ""}, status=status.HTTP_200_OK)
 
 
 @extend_schema(responses=OpenApiTypes.OBJECT)
@@ -590,7 +731,126 @@ def device_availability(request):
     period = request.query_params.get("period", "week")
     if period not in DEVICE_AVAILABILITY_PERIODS:
         raise ValidationError({"period": "Must be one of: day, week, month, year."})
-    device_item = get_object_or_404(Device, id=device_id)
+    device_item = get_object_or_404(
+        Device.objects.select_related("merged_into").prefetch_related(
+            "merged_interfaces"
+        ),
+        id=device_id,
+    )
+    device_item = primary_device(device_item)
     return Response(
         {"status": "OK", "data": device_availability_payload(device_item, period)}
+    )
+
+
+@extend_schema(responses=OpenApiTypes.OBJECT)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated, CanEditDevices])
+def device_merge_candidates(request):
+    device_id = parse_int_param(request.query_params, "id", 0, 1)
+    search = str(request.query_params.get("search") or "").strip()
+    candidates = Device.objects.filter(
+        archived=False,
+        merged_into__isnull=True,
+    ).exclude(id=device_id)
+    if search:
+        candidates = candidates.filter(
+            Q(name__icontains=search)
+            | Q(ip__icontains=search)
+            | Q(mac__icontains=search)
+            | Q(hostname__icontains=search)
+            | Q(vendor__icontains=search)
+        )
+    candidates = candidates.order_by("name", "ip")[:100]
+    return Response(
+        {
+            "data": [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "hostname": item.hostname,
+                    "vendor": item.vendor,
+                    "ip": item.ip,
+                    "mac": item.mac,
+                }
+                for item in candidates
+            ]
+        }
+    )
+
+
+@extend_schema(
+    request=inline_serializer(
+        name="MergeDeviceInterfacesRequest",
+        fields={
+            "target_id": serializers.IntegerField(min_value=1),
+            "source_ids": serializers.ListField(
+                child=serializers.IntegerField(min_value=1),
+                allow_empty=False,
+            ),
+        },
+    ),
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated, CanEditDevices])
+def merge_devices(request):
+    request_serializer = inline_serializer(
+        name="MergeDeviceInterfacesPayload",
+        fields={
+            "target_id": serializers.IntegerField(min_value=1),
+            "source_ids": serializers.ListField(
+                child=serializers.IntegerField(min_value=1),
+                allow_empty=False,
+                max_length=20,
+            ),
+        },
+        data=request.data,
+    )
+    request_serializer.is_valid(raise_exception=True)
+    target = merge_device_interfaces(
+        request_serializer.validated_data["target_id"],
+        request_serializer.validated_data["source_ids"],
+        request.user,
+    )
+    return success_response(
+        {"id": target.id},
+        "Devices merged",
+        "The selected network interfaces now belong to one device.",
+        status="OK",
+    )
+
+
+@extend_schema(
+    request=inline_serializer(
+        name="UnmergeDeviceInterfaceRequest",
+        fields={
+            "target_id": serializers.IntegerField(min_value=1),
+            "interface_id": serializers.IntegerField(min_value=1),
+        },
+    ),
+    responses=OpenApiTypes.OBJECT,
+)
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated, CanEditDevices])
+def unmerge_device(request):
+    request_serializer = inline_serializer(
+        name="UnmergeDeviceInterfacePayload",
+        fields={
+            "target_id": serializers.IntegerField(min_value=1),
+            "interface_id": serializers.IntegerField(min_value=1),
+        },
+        data=request.data,
+    )
+    request_serializer.is_valid(raise_exception=True)
+    interface = unmerge_device_interface(
+        request_serializer.validated_data["target_id"],
+        request_serializer.validated_data["interface_id"],
+        request.user,
+    )
+    return success_response(
+        {"id": interface.id},
+        "Interface separated",
+        "The network interface is a separate device again.",
+        status="OK",
     )

@@ -42,7 +42,10 @@ from .views.devices import (
     bulk_update_devices,
     device,
     device_availability,
+    device_merge_candidates,
     device_web_interface,
+    merge_devices,
+    unmerge_device,
     wake_device,
 )
 
@@ -118,6 +121,13 @@ urlpatterns = [
     path("maintenance/cleanup/", maintenance_cleanup, name="maintenance-cleanup"),
     path("device/", device, name="device"),
     path("device/availability/", device_availability, name="device-availability"),
+    path(
+        "device/merge-candidates/",
+        device_merge_candidates,
+        name="device-merge-candidates",
+    ),
+    path("device/merge/", merge_devices, name="merge-devices"),
+    path("device/unmerge/", unmerge_device, name="unmerge-device"),
     path("devices/bulk-update/", bulk_update_devices, name="bulk-update-devices"),
     path("device/web-interface/", device_web_interface, name="device-web-interface"),
     path("device/wake/", wake_device, name="wake-device"),

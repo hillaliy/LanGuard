@@ -5,6 +5,7 @@ import {
   IconArrowLeft,
   IconDeviceFloppy,
   IconEdit,
+  IconGitMerge,
   IconPower,
   IconRadar,
 } from '@tabler/icons-react';
@@ -27,12 +28,18 @@ export default function DeviceDetailsHeader({
   editing,
   onBack,
   openPortScan,
+  openMerge,
   save,
   saving,
   startEditing,
   wake,
   waking,
 }) {
+  const primaryInterface = device?.interfaces?.find((item) => item.primary);
+  const primaryInterfaceOnline = primaryInterface
+    ? primaryInterface.status === 'online'
+    : device?.status === 'online';
+
   return (
     <div className="device-detail-header">
       <Group className="device-detail-summary" gap="sm" align="flex-start" wrap="nowrap">
@@ -89,7 +96,7 @@ export default function DeviceDetailsHeader({
           </Group>
         ) : (
           <Group className="device-detail-actions" gap="xs" wrap="nowrap">
-            {(canEditDevices || canRunScans) && !device.archived && device.status === 'online' && (
+            {(canEditDevices || canRunScans) && !device.archived && primaryInterfaceOnline && (
               <Button
                 variant="light"
                 leftSection={<IconRadar size={18} />}
@@ -110,6 +117,15 @@ export default function DeviceDetailsHeader({
             )}
             {canEditDevices && (
               <>
+                {!device.archived && (
+                  <Button
+                    variant="default"
+                    leftSection={<IconGitMerge size={18} />}
+                    onClick={openMerge}
+                  >
+                    Merge interfaces
+                  </Button>
+                )}
                 <Button
                   variant="default"
                   leftSection={device.archived

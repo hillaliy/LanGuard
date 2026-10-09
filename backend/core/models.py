@@ -136,6 +136,21 @@ class Device(models.Model):
     known = models.BooleanField(default=False)
     is_visitor = models.BooleanField(default=False, db_index=True)
     is_gateway = models.BooleanField(default=False)
+    merged_into = models.ForeignKey(
+        "self",
+        related_name="merged_interfaces",
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+    )
+    merged_at = models.DateTimeField(blank=True, null=True)
+    merged_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="device_interface_merges",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+    )
 
     class Meta:
         ordering = ["-online", "name", "ip"]
@@ -144,10 +159,22 @@ class Device(models.Model):
                 condition=models.Q(is_visitor=False) | models.Q(known=True),
                 name="visitor_device_must_be_known",
             ),
+            models.CheckConstraint(
+                condition=~models.Q(merged_into=models.F("id")),
+                name="device_cannot_merge_into_itself",
+            ),
         ]
 
     def __str__(self):
         return f"Device: {self.name} - IP:{self.ip}"
+
+    @property
+    def primary_device(self):
+        return self.merged_into or self
+
+    @property
+    def is_merged_interface(self):
+        return self.merged_into_id is not None
 
     def save(self, *args, **kwargs):
         ip_observed_at = kwargs.pop("ip_observed_at", None) or timezone.now()
@@ -556,6 +583,14 @@ class NetworkEvent(models.Model):
         PORT_CLOSED = "port_closed", "Port closed"
         CONTAINER_DISCOVERED = "container_discovered", "Container discovered"
         CONTAINER_PORT_EXPOSED = "container_port_exposed", "Container port exposed"
+        DEVICE_INTERFACES_MERGED = (
+            "device_interfaces_merged",
+            "Device interfaces merged",
+        )
+        DEVICE_INTERFACE_SEPARATED = (
+            "device_interface_separated",
+            "Device interface separated",
+        )
 
     scan_run = models.ForeignKey(
         ScanRun,

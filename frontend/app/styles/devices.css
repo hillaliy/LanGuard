@@ -104,6 +104,29 @@
   width: 17px;
 }
 
+.device-interfaces-table {
+  min-width: 920px;
+}
+
+.device-interfaces-table th,
+.device-interfaces-table td {
+  white-space: nowrap;
+}
+
+.device-interface-mac,
+.device-interface-hostname,
+.device-interface-last-seen {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.device-interface-ports {
+  max-width: 260px;
+  overflow: hidden;
+}
+
 .device-icon-stack {
   align-items: center;
   display: inline-flex;
