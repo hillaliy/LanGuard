@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added reversible manual merging for devices with multiple network interfaces, keeping per-MAC addresses, status, ports, history, DNS activity, and Wake-on-LAN behavior while showing one physical device in the inventory.
 - Added read-only Technitium DNS Server v15 integration with dynamically discovered Query Logs apps, scheduled DNS activity synchronization, optional DHCP enrichment, protected API tokens, and historical IP attribution.
 - Added separate Pi-hole controls for DHCP lease enrichment and opt-in creation of Unknown devices while preserving existing configured installations.
 - Added bounded read-only SNMP v2c infrastructure inventory with protected community settings, managed-device classification, interface state, and LLDP topology hints on device pages.

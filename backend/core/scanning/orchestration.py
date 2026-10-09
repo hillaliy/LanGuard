@@ -5,6 +5,7 @@ from django.utils import timezone
 import scapy.all as scapy
 
 from ..models import AppSettings, Device, ScanRun
+from ..device_merging import logical_online_device_count
 from ..user_messages import scan_error_message
 from .discovery import discover_hostname_hints, ssdp_metadata_map
 from .lifecycle import claim_scan_run, scan_failure_diagnostics, touch_scan_run
@@ -137,7 +138,7 @@ def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
         scan_run.heartbeat_at = scan_run.finished_at
         scan_run.devices_seen = len(answered_list)
         scan_run.new_devices = new_devices
-        scan_run.online_devices = Device.objects.filter(online=True, archived=False).count()
+        scan_run.online_devices = logical_online_device_count()
         scan_run.ports_opened = ports_opened
         scan_run.ports_closed = ports_closed
         scan_run.error = ""

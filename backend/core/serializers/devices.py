@@ -13,6 +13,7 @@ from ..models import (
     Device,
     DevicePort,
 )
+from ..device_merging import device_interfaces, effective_device_state
 from ..port_guidance import port_attention, port_guidance
 
 
@@ -32,6 +33,55 @@ class DevicePortSerializer(serializers.ModelSerializer):
         model = DevicePort
         fields = "__all__"
         read_only_fields = ("device", "firstseen", "lastseen")
+
+
+class DeviceInterfaceSerializer(serializers.ModelSerializer):
+    firstseen = UTCDateTimeField(read_only=True)
+    lastseen = UTCDateTimeField(read_only=True)
+    last_status_check = UTCDateTimeField(read_only=True)
+    last_port_scan = UTCDateTimeField(read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    status_source_display = serializers.CharField(
+        source="get_status_source_display",
+        read_only=True,
+    )
+    open_ports = serializers.SerializerMethodField()
+    primary = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Device
+        fields = (
+            "id",
+            "ip",
+            "mac",
+            "hostname",
+            "vendor",
+            "online",
+            "status",
+            "status_display",
+            "status_source",
+            "status_source_display",
+            "status_reason",
+            "firstseen",
+            "lastseen",
+            "last_status_check",
+            "last_port_scan",
+            "missed_scans",
+            "open_ports",
+            "primary",
+        )
+
+    @extend_schema_field(DevicePortSerializer(many=True))
+    def get_open_ports(self, obj):
+        return DevicePortSerializer(
+            obj.ports.filter(open=True),
+            many=True,
+            context=self.context,
+        ).data
+
+    @extend_schema_field(serializers.BooleanField)
+    def get_primary(self, obj):
+        return obj.merged_into_id is None
 
 
 PORT_DENSE_ROLES = {"camera", "intercom", "nas", "server"}
@@ -111,18 +161,18 @@ def device_risk(device):
         score += 3
         reasons.append("New unknown device")
 
-    prefetched_ports = getattr(device, "_prefetched_objects_cache", {}).get("ports")
-    if prefetched_ports is None:
-        open_ports = list(device.ports.filter(open=True).order_by("port", "protocol"))
-    else:
-        open_ports = sorted(
-            (
-                device_port
-                for device_port in prefetched_ports
-                if device_port.open
-            ),
-            key=lambda item: (item.port, item.protocol),
+    open_ports = []
+    for interface in device_interfaces(device):
+        prefetched_ports = getattr(interface, "_prefetched_objects_cache", {}).get(
+            "ports"
         )
+        if prefetched_ports is None:
+            open_ports.extend(interface.ports.filter(open=True))
+        else:
+            open_ports.extend(
+                device_port for device_port in prefetched_ports if device_port.open
+            )
+    open_ports.sort(key=lambda item: (item.port, item.protocol, item.device_id))
     port_findings = [
         (device_port, port_attention(device, device_port))
         for device_port in open_ports
@@ -148,8 +198,9 @@ def device_risk(device):
         reasons.append("No vendor detected")
 
     if not device.known and (
-        device.status in {Device.Status.RECENTLY_SEEN, Device.Status.SLEEPING}
-        or device.missed_scans
+        effective_device_state(device)["status"]
+        in {Device.Status.RECENTLY_SEEN, Device.Status.SLEEPING}
+        or effective_device_state(device)["missed_scans"]
     ):
         score += 1
         reasons.append("Recently missed scans")
@@ -199,10 +250,11 @@ def device_offline_attention_days(device):
 
 def device_is_offline_beyond_expectation(device, now=None):
     attention_days = device_offline_attention_days(device)
+    state = effective_device_state(device)
     return bool(
         attention_days is not None
-        and device.status == Device.Status.OFFLINE
-        and device.lastseen < (now or timezone.now()) - timedelta(days=attention_days)
+        and state["status"] == Device.Status.OFFLINE
+        and state["lastseen"] < (now or timezone.now()) - timedelta(days=attention_days)
     )
 
 
@@ -232,9 +284,13 @@ def device_risk_signature(device, risk_data=None):
             "known": device.known,
             "role": (device.role or "").strip().lower(),
             "open_ports": list(
-                device.ports.filter(open=True)
-                .order_by("port", "protocol")
-                .values_list("port", "protocol")
+                sorted(
+                    {
+                        (device_port.port, device_port.protocol)
+                        for interface in device_interfaces(device)
+                        for device_port in interface.ports.filter(open=True)
+                    }
+                )
             ),
             "risk_level": current_risk["level"],
             "offline_over_week": device_is_offline_beyond_expectation(device),
@@ -269,6 +325,8 @@ class DeviceSerializer(serializers.ModelSerializer):
     homebox_available = serializers.SerializerMethodField()
     effective_external_url = serializers.CharField(read_only=True)
     offline_attention_effective_days = serializers.SerializerMethodField()
+    interface_count = serializers.SerializerMethodField()
+    interfaces = serializers.SerializerMethodField()
 
     def homebox_config(self):
         if "homebox_config" not in self.context:
@@ -347,14 +405,55 @@ class DeviceSerializer(serializers.ModelSerializer):
             "identity_conflict_detected_at",
             "snmp_data",
             "snmp_last_seen",
+            "merged_into",
+            "merged_at",
+            "merged_by",
         )
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
+        effective_state = effective_device_state(instance)
+        data.update(
+            {
+                "online": effective_state["online"],
+                "status": effective_state["status"],
+                "status_display": effective_state["status_display"],
+                "status_source": effective_state["status_source"],
+                "status_source_display": effective_state["status_source_display"],
+                "status_reason": effective_state["status_reason"],
+                "firstseen": UTCDateTimeField().to_representation(
+                    effective_state["firstseen"]
+                ),
+                "lastseen": UTCDateTimeField().to_representation(
+                    effective_state["lastseen"]
+                ),
+                "last_status_check": UTCDateTimeField().to_representation(
+                    effective_state["last_status_check"]
+                ),
+                "last_port_scan": UTCDateTimeField().to_representation(
+                    effective_state["last_port_scan"]
+                ),
+                "missed_scans": effective_state["missed_scans"],
+            }
+        )
         if not self.context.get("include_snmp_inventory"):
             data.pop("snmp_data", None)
             data.pop("snmp_last_seen", None)
+        if not self.context.get("include_interfaces"):
+            data.pop("interfaces", None)
         return data
+
+    @extend_schema_field(serializers.IntegerField)
+    def get_interface_count(self, obj):
+        return len(device_interfaces(obj))
+
+    @extend_schema_field(DeviceInterfaceSerializer(many=True))
+    def get_interfaces(self, obj):
+        return DeviceInterfaceSerializer(
+            device_interfaces(obj),
+            many=True,
+            context=self.context,
+        ).data
 
     def get_device_identity(self, obj):
         if not hasattr(obj, "_identity_data"):
@@ -399,10 +498,14 @@ class DeviceSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(DevicePortSerializer(many=True))
     def get_open_ports(self, obj):
+        ports = []
+        for interface in device_interfaces(obj):
+            ports.extend(interface.ports.filter(open=True))
+        ports.sort(key=lambda item: (item.port, item.protocol, item.device_id))
         return DevicePortSerializer(
-            obj.ports.filter(open=True),
+            ports,
             many=True,
-            context={**self.context, "device": obj},
+            context=self.context,
         ).data
 
     def get_device_risk(self, obj):

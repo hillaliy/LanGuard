@@ -19,6 +19,14 @@ The Devices page is the authoritative inventory. The dashboard summarizes it, wh
 
 Visitor devices are excluded from the Home Map. They are not included in the main regular-device number, so an absent visitor does not permanently inflate the household or office total.
 
+## Multiple network interfaces
+
+A computer or other physical device can have more than one MAC address, such as separate Ethernet and Wi-Fi interfaces. Use **Merge interfaces** on the device page to keep one entry as the primary profile and move selected inventory entries into its network-interface list.
+
+LanGuard continues scanning every MAC address independently. Each interface retains its current and historical IP addresses, reachability state, ports, DNS activity, and event history. The physical device is online when at least one of its interfaces is online, and Wake-on-LAN sends a packet through every retained interface. The primary entry supplies the device name, role, room, icon, notes, and notification settings.
+
+Merging is manual because a shared hostname, vendor, or IP address is not enough evidence that two MAC addresses belong to the same physical device. LanGuard does not automatically combine suggested matches. Use **Separate** in the network-interface table to return an interface to the inventory as an independent device without deleting its history.
+
 ## Roles and icons
 
 Roles describe what a device does, while icons control how it is represented in inventory and on the Home Map. They can be selected independently when editing a known device. Dedicated choices include common computers and infrastructure as well as game consoles, laptops, NAS devices, smart relays, smart power strips, and power meters.

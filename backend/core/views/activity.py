@@ -4,7 +4,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import ValidationError
 
 from ..api import paginated_response, parse_bool_param, parse_datetime_param, parse_int_param
-from ..models import NetworkEvent, ScanRun
+from ..device_merging import group_device_ids, primary_device
+from ..models import Device, NetworkEvent, ScanRun
 from ..serializers.activity import NetworkEventSerializer
 from ..serializers.scans import ScanRunSerializer
 
@@ -62,8 +63,12 @@ def events(request):
     if created_before:
         queryset = queryset.filter(created_at__lte=created_before)
     if device_id:
+        requested_device = Device.objects.select_related("merged_into").get(
+            id=parse_int_param(request.query_params, "device", 0, 1)
+        )
+        requested_device = primary_device(requested_device)
         queryset = queryset.filter(
-            device_id=parse_int_param(request.query_params, "device", 0, 1)
+            device_id__in=group_device_ids(requested_device)
         )
     if scan_run_id:
         queryset = queryset.filter(

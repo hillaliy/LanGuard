@@ -1,6 +1,7 @@
 import logging
 from datetime import timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 from scapy.data import ManufDA
 
@@ -179,6 +180,11 @@ def sync_discovered_device(
             ip_observed_at=scan_started_at,
             close_competing_ip_assignments=not conflict_reason,
         )
+        primary_device_id = device.merged_into_id or device.id
+        Device.objects.filter(
+            Q(pk=primary_device_id) | Q(merged_into_id=primary_device_id),
+            archived=True,
+        ).update(archived=False)
 
         if resolved_conflict_reason:
             Device.objects.filter(

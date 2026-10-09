@@ -26,6 +26,7 @@ import {
   formatOfflineAttention,
 } from './DeviceDetailFields';
 import DeviceSnmpInventory from './DeviceSnmpInventory';
+import DeviceInterfacesSection from './DeviceInterfacesSection';
 
 export default function DeviceOverviewTab({
   activeUrl,
@@ -47,6 +48,7 @@ export default function DeviceOverviewTab({
   name,
   offlineAttentionAfterDays,
   offlineNotificationPreference,
+  onSeparateInterface,
   onlineNotificationPreference,
   presenceExpectation,
   role,
@@ -326,6 +328,13 @@ export default function DeviceOverviewTab({
               </Group>
             </section>
           </SimpleGrid>
+
+          <DeviceInterfacesSection
+            canEditDevices={canEditDevices}
+            device={device}
+            onSeparate={onSeparateInterface}
+            timeZone={timeZone}
+          />
 
           <DeviceSnmpInventory device={device} timeZone={timeZone} />
 

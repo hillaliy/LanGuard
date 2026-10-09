@@ -19,6 +19,7 @@ import DeviceDetailsHeader from './DeviceDetailsHeader';
 import DeviceDetailsModals from './DeviceDetailsModals';
 import DeviceDnsActivityTab from './DeviceDnsActivityTab';
 import DeviceHistoryTab from './DeviceHistoryTab';
+import useDeviceInterfaces from './useDeviceInterfaces';
 import DeviceOverviewTab from './DeviceOverviewTab';
 import useDeviceActions from './useDeviceActions';
 import useDeviceDetailsForm from './useDeviceDetailsForm';
@@ -71,6 +72,13 @@ export default function DeviceDetailsView({
     form,
     loadDevice,
     onDeleted,
+    onError,
+    onSaved,
+    onSuccess,
+  });
+  const interfaces = useDeviceInterfaces({
+    device,
+    loadDevice,
     onError,
     onSaved,
     onSuccess,
@@ -183,6 +191,7 @@ export default function DeviceDetailsView({
           editing={form.editing}
           onBack={onBack}
           openPortScan={portScan.open}
+          openMerge={interfaces.openMerge}
           save={actions.save}
           saving={actions.saving}
           startEditing={startEditing}
@@ -223,6 +232,7 @@ export default function DeviceDetailsView({
               detectingWebUrl={detectingWebUrl}
               device={device}
               roomOptions={roomOptions}
+              onSeparateInterface={interfaces.confirmSeparate}
               timeZone={timeZone}
             />
 
@@ -244,6 +254,7 @@ export default function DeviceDetailsView({
         device={device}
         remove={actions.remove}
         saving={actions.saving}
+        {...interfaces.modalProps}
       />
     </Paper>
   );

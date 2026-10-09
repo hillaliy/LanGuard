@@ -1,5 +1,6 @@
 import {
-  Alert, Badge, Box, Button, Group, Modal, Paper, Progress, Stack, Text, TextInput,
+  Alert, Badge, Box, Button, Group, Modal, MultiSelect, Paper, Progress, Stack,
+  Text, TextInput,
 } from '@mantine/core';
 import {
   IconAlertCircle, IconArchive, IconArchiveOff, IconPlayerStop, IconRadar, IconTrash,
@@ -11,11 +12,16 @@ import { formatRoleLabel } from '../utils/device';
 export default function DeviceDetailsModals({
   archiveConfirm,
   archiveConfirmOpened,
+  candidates,
   cancelDetailedPortScan,
   changeArchiveState,
   deleteConfirm,
   deleteConfirmOpened,
   device,
+  loadingCandidates,
+  merge,
+  mergeModal,
+  mergeOpened,
   portScan,
   portScanError,
   portScanLoading,
@@ -24,11 +30,80 @@ export default function DeviceDetailsModals({
   portScanSpec,
   remove,
   saving,
+  savingInterfaces,
+  selectedIds,
+  selectedInterface,
+  separate,
+  separateModal,
+  separateOpened,
+  setSelectedIds,
   setPortScanSpec,
   startDetailedPortScan,
 }) {
   return (
     <>
+      <Modal
+        opened={mergeOpened}
+        onClose={mergeModal.close}
+        title="Merge network interfaces"
+        centered
+        size="lg"
+      >
+        <Stack>
+          <Text size="sm">
+            Keep {device?.name} as the primary device and move the selected devices into
+            its interface list. Their MAC addresses, IP history, ports, and events are kept.
+          </Text>
+          <Alert color="blue">
+            This is reversible. LanGuard will continue scanning every MAC address separately,
+            while the inventory shows one physical device.
+          </Alert>
+          <MultiSelect
+            label="Devices to merge"
+            placeholder={loadingCandidates ? 'Loading devices...' : 'Choose devices'}
+            data={candidates.map((candidate) => ({
+              value: String(candidate.id),
+              label: `${candidate.name} · ${candidate.ip} · ${candidate.mac}`,
+            }))}
+            value={selectedIds}
+            onChange={setSelectedIds}
+            searchable
+            disabled={loadingCandidates || savingInterfaces}
+            nothingFoundMessage="No matching devices"
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={mergeModal.close} disabled={savingInterfaces}>
+              Cancel
+            </Button>
+            <Button onClick={merge} loading={savingInterfaces} disabled={!selectedIds.length}>
+              Merge interfaces
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal
+        opened={separateOpened}
+        onClose={separateModal.close}
+        title="Separate network interface"
+        centered
+      >
+        <Stack>
+          <Text>
+            Separate {selectedInterface?.mac} from {device?.name}?
+          </Text>
+          <Text size="sm" c="dimmed">
+            It will return to the inventory as its own device with its existing history.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={separateModal.close} disabled={savingInterfaces}>
+              Cancel
+            </Button>
+            <Button color="red" onClick={separate} loading={savingInterfaces}>
+              Separate interface
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
       <Modal
         opened={deleteConfirmOpened}
         onClose={deleteConfirm.close}

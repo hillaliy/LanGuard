@@ -140,6 +140,9 @@ def inventory_device_payload(device):
         "known": device.known,
         "is_visitor": device.is_visitor,
         "is_gateway": device.is_gateway,
+        "merged_into_mac": (
+            device.merged_into.mac if device.merged_into_id else None
+        ),
         "status": device.status,
         "open_ports": list(
             device.ports.filter(open=True).order_by("port").values_list("port", flat=True)
@@ -449,6 +452,7 @@ def import_inventory_devices(payload):
     updated = 0
     skipped = 0
     removed_duplicates = 0
+    interface_links = {}
     now = timezone.now()
 
     for item in imported_devices:
@@ -737,6 +741,12 @@ def import_inventory_devices(payload):
         created += 1 if was_created else 0
         updated += 0 if was_created else 1
 
+        merged_into_mac = normalize_inventory_mac(
+            item.get("merged_into_mac") or item.get("mergedIntoMac")
+        )
+        if merged_into_mac and merged_into_mac != mac:
+            interface_links[mac] = merged_into_mac
+
         for port in normalize_inventory_ports(item.get("open_ports") or item.get("openPorts")):
             DevicePort.objects.update_or_create(
                 device=device,
@@ -755,6 +765,23 @@ def import_inventory_devices(payload):
                 else ""
             )
             device.save(update_fields=["attention_acknowledged_signature"])
+
+    root_macs = set(interface_links.values()) - set(interface_links)
+    linked_devices = {
+        item.mac: item
+        for item in Device.objects.filter(
+            mac__in=set(interface_links) | root_macs
+        )
+    }
+    for interface_mac, primary_mac in interface_links.items():
+        interface = linked_devices.get(interface_mac)
+        primary = linked_devices.get(primary_mac)
+        if not interface or not primary or primary_mac not in root_macs:
+            continue
+        interface.merged_into = primary
+        interface.merged_at = now
+        interface.merged_by = None
+        interface.save(update_fields=["merged_into", "merged_at", "merged_by"])
 
     return {
         "created": created,
