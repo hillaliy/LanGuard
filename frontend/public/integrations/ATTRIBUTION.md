@@ -7,3 +7,7 @@ the [Creative Commons Attribution 4.0 International
 license](https://creativecommons.org/licenses/by/4.0/).
 
 Product names and logos remain the property of their respective owners.
+
+The Technitium DNS Server logo is sourced from the
+[official Technitium DNS Server repository](https://github.com/TechnitiumSoftware/DnsServer/blob/master/DnsServerCore/www/img/logo.png).
+Technitium DNS Server and its logo remain the property of Technitium.

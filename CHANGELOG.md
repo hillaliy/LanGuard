@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Replaced the generic Technitium integration icon with the official Technitium DNS Server logo.
+- Arranged device-detail actions in compact rows so long device names retain enough space on wide and intermediate screens.
+- Reused the desktop device table on landscape tablets by moving navigation into the existing drawer, while preserving the card layout for narrow screens, preventing Gateway badges from truncating, and aligning the menu button with the LanGuard logo.
+
 ## 1.23.0 - 2026-10-09
 
 - Added reversible manual merging for devices with multiple network interfaces, keeping per-MAC addresses, status, ports, history, DNS activity, and Wake-on-LAN behavior while showing one physical device in the inventory.

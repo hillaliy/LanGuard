@@ -42,14 +42,16 @@ export default function AppHeader({ controller, user }) {
       <Container size="xl" py="sm">
         <Group justify="space-between">
           <Group className="topbar-brand" gap="sm" wrap="nowrap">
-            <Burger
-              className="mobile-topbar-menu"
-              opened={mobileNavigationOpened}
-              onClick={mobileNavigation.toggle}
-              size="sm"
-              aria-label={mobileNavigationOpened ? 'Close navigation' : 'Open navigation'}
-            />
-            <Image src="/logo.png" alt="LanGuard" w={42} h={42} radius="sm" />
+            <Group className="topbar-brand-leading" gap="sm" wrap="nowrap" align="center">
+              <Burger
+                className="mobile-topbar-menu"
+                opened={mobileNavigationOpened}
+                onClick={mobileNavigation.toggle}
+                size="sm"
+                aria-label={mobileNavigationOpened ? 'Close navigation' : 'Open navigation'}
+              />
+              <Image src="/logo.png" alt="LanGuard" w={42} h={42} radius="sm" />
+            </Group>
             <Box className="topbar-brand-details">
               <Group className="topbar-brand-title" gap="xs">
                 <Title order={3}>LanGuard</Title>

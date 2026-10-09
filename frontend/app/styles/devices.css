@@ -215,19 +215,6 @@
 }
 
 @container (max-width: 1100px) {
-  .devices-content-panel .device-list,
-  .devices-content-panel .device-list-toolbar {
-    display: none;
-  }
-
-  .devices-content-panel .device-mobile-list {
-    display: flex;
-  }
-
-  .devices-content-panel .device-mobile-sort-toolbar {
-    display: block;
-  }
-
   .devices-content-panel .devices-panel-header {
     align-items: stretch;
     display: grid;
@@ -290,7 +277,51 @@
   }
 }
 
-@container (min-width: 700px) and (max-width: 1100px) {
+@container (min-width: 921px) and (max-width: 1100px) {
+  .devices-content-panel .device-list-row {
+    gap: 10px;
+    grid-template-columns: minmax(180px, 0.95fr) minmax(0, 2.9fr);
+    padding-inline: 14px;
+  }
+
+  .devices-content-panel .device-list-row.bulk-edit {
+    grid-template-columns: 28px minmax(180px, 0.95fr) minmax(0, 2.9fr);
+  }
+
+  .devices-content-panel .device-list-meta {
+    gap: 6px;
+    grid-template-columns:
+      minmax(64px, 0.6fr)
+      minmax(112px, 0.85fr)
+      minmax(56px, 0.6fr)
+      minmax(68px, 0.7fr)
+      minmax(130px, 0.95fr)
+      minmax(58px, 0.5fr)
+      minmax(122px, 1.1fr);
+  }
+
+  .devices-content-panel .port-badge {
+    min-width: 40px;
+    padding-inline: 6px;
+  }
+}
+
+@container (max-width: 920px) {
+  .devices-content-panel .device-list,
+  .devices-content-panel .device-list-toolbar {
+    display: none;
+  }
+
+  .devices-content-panel .device-mobile-list {
+    display: flex;
+  }
+
+  .devices-content-panel .device-mobile-sort-toolbar {
+    display: block;
+  }
+}
+
+@container (min-width: 700px) and (max-width: 920px) {
   .devices-content-panel .device-mobile-row {
     align-items: center;
     display: grid;
@@ -309,7 +340,7 @@
     align-items: stretch;
     flex-direction: column;
     flex-wrap: nowrap;
-    width: 82px;
+    width: 96px;
   }
 
   .devices-content-panel .device-mobile-badges .device-risk-badge,
