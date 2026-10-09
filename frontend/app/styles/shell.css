@@ -31,6 +31,10 @@
   min-width: 0;
 }
 
+.topbar-brand-leading {
+  flex: 0 0 auto;
+}
+
 .topbar-brand-title {
   flex-wrap: nowrap;
 }
@@ -58,6 +62,11 @@
 .mobile-topbar-menu,
 .mobile-page-title {
   display: none;
+}
+
+.mobile-topbar-menu {
+  align-items: center;
+  justify-content: center;
 }
 
 .sidebar-nav-button {

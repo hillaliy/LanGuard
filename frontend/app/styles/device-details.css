@@ -147,11 +147,16 @@
 
 .device-detail-title-row .mantine-Title-root,
 .device-detail-subtitle .mantine-Text-root {
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .device-detail-actions {
+  align-items: center;
+  display: grid;
   flex-shrink: 0;
+  gap: 8px;
+  grid-template-columns: repeat(3, max-content);
   justify-content: flex-end;
 }
 

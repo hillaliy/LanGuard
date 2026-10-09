@@ -1,8 +1,8 @@
 import {
-  Alert, Badge, Box, Button, Group, NumberInput, PasswordInput, SimpleGrid,
+  Alert, Badge, Box, Button, Group, Image, NumberInput, PasswordInput, SimpleGrid,
   Stack, Switch, Text, TextInput,
 } from '@mantine/core';
-import { IconDatabase, IconExternalLink, IconRefresh, IconSend } from '@tabler/icons-react';
+import { IconExternalLink, IconRefresh, IconSend } from '@tabler/icons-react';
 import { formatDate } from '../utils/date';
 
 export default function TechnitiumIntegrationSettings({ controller }) {
@@ -22,7 +22,14 @@ export default function TechnitiumIntegrationSettings({ controller }) {
       <Group justify="space-between" align="flex-start">
         <Box>
           <Group gap="sm">
-            <IconDatabase size={24} aria-hidden="true" />
+            <Image
+              src="/integrations/technitium-dns-server.png"
+              alt=""
+              aria-hidden="true"
+              w={24}
+              h={24}
+              fit="contain"
+            />
             <Text fw={700}>Technitium DNS Server</Text>
             <Switch label="Enabled" checked={technitiumEnabled} onChange={(event) => {
               const enabled = event.currentTarget.checked;
