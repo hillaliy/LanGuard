@@ -217,6 +217,31 @@ class Device(models.Model):
             return self.external_url
 
 
+class DeviceRelatedLink(models.Model):
+    device = models.ForeignKey(
+        Device,
+        related_name="related_links",
+        on_delete=models.CASCADE,
+    )
+    label = models.CharField(max_length=100)
+    url = models.URLField(max_length=2048)
+    position = models.PositiveSmallIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["position", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["device", "url"],
+                name="unique_device_related_link_url",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.device.name}: {self.label}"
+
+
 class DeviceIPAddressAssignment(models.Model):
     device = models.ForeignKey(
         Device,

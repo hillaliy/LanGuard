@@ -56,20 +56,16 @@
 }
 
 .dashboard-status-secondary {
+  align-items: flex-start;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
   font-size: 0.78rem;
-  gap: 2px 6px;
+  gap: 2px;
   line-height: 1.15;
 }
 
 .dashboard-status-secondary-item {
   white-space: nowrap;
-}
-
-.dashboard-status-secondary-item + .dashboard-status-secondary-item::before {
-  content: "·";
-  margin-right: 6px;
 }
 
 .dashboard-summary-grid {

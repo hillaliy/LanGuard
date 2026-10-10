@@ -9,6 +9,7 @@ from ..models import (
     Device,
     DeviceIPAddressAssignment,
     DevicePort,
+    DeviceRelatedLink,
     NetworkEvent,
     NotificationDelivery,
     ScanRun,
@@ -83,6 +84,11 @@ class InventoryApiTests(TestCase):
             ]
         )
         DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
+        DeviceRelatedLink.objects.create(
+            device=self.device,
+            label="User manual",
+            url="https://documents.example/manual.pdf",
+        )
         self.client.put(
             f"/api/v1/device/?id={self.device.id}",
             {"acknowledge_attention": True},
@@ -101,6 +107,15 @@ class InventoryApiTests(TestCase):
         self.assertEqual(exported_device["comments"], "Demo note")
         self.assertEqual(exported_device["external_url"], "https://192.168.1.10")
         self.assertTrue(exported_device["external_url_follow_device_ip"])
+        self.assertEqual(
+            exported_device["related_links"],
+            [
+                {
+                    "label": "User manual",
+                    "url": "https://documents.example/manual.pdf",
+                }
+            ],
+        )
         self.assertEqual(exported_device["online_notification_preference"], "always")
         self.assertEqual(exported_device["offline_notification_preference"], "never")
         self.assertEqual(exported_device["presence_expectation"], "occasional")
@@ -160,6 +175,78 @@ class InventoryApiTests(TestCase):
             list(self.device.ports.filter(open=True).values_list("port", flat=True)),
             [80, 443],
         )
+
+    def test_device_inventory_import_replaces_and_deduplicates_related_links(self):
+        DeviceRelatedLink.objects.create(
+            device=self.device,
+            label="Old document",
+            url="https://documents.example/old.pdf",
+        )
+        payload = {
+            "format": "languard-device-inventory",
+            "version": 1,
+            "devices": [
+                {
+                    "name": "Laptop",
+                    "ip": "192.168.1.20",
+                    "mac": "aa:aa:aa:aa:aa:aa",
+                    "related_links": [
+                        {
+                            "label": "User manual",
+                            "url": "https://documents.example/manual.pdf",
+                        },
+                        {
+                            "label": "Duplicate manual",
+                            "url": "https://documents.example/manual.pdf",
+                        },
+                        {
+                            "label": "Unsafe",
+                            "url": "https://admin:secret@documents.example/private",
+                        },
+                    ],
+                }
+            ],
+        }
+
+        response = self.client.post("/api/v1/devices/import/", payload, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(self.device.related_links.values_list("label", "url", "position")),
+            [
+                (
+                    "User manual",
+                    "https://documents.example/manual.pdf",
+                    0,
+                )
+            ],
+        )
+
+    def test_legacy_inventory_import_preserves_existing_related_links(self):
+        link = DeviceRelatedLink.objects.create(
+            device=self.device,
+            label="User manual",
+            url="https://documents.example/manual.pdf",
+        )
+
+        response = self.client.post(
+            "/api/v1/devices/import/",
+            {
+                "format": "languard-device-inventory",
+                "version": 1,
+                "devices": [
+                    {
+                        "name": "Laptop",
+                        "ip": "192.168.1.20",
+                        "mac": "aa:aa:aa:aa:aa:aa",
+                    }
+                ],
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(DeviceRelatedLink.objects.filter(pk=link.id).exists())
 
     def test_legacy_inventory_import_preserves_existing_visitor_classification(self):
         self.device.known = True

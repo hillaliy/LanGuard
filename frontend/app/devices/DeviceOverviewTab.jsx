@@ -1,8 +1,8 @@
 import {
   Alert, Box, Button, Divider, Group, Loader, NumberInput, Select, SimpleGrid, Stack,
-  Switch, Tabs, Text, TextInput, Textarea, Title,
+  Switch, Tabs, Text, TextInput, Textarea, Title, UnstyledButton,
 } from '@mantine/core';
-import { IconArrowUpRight, IconExternalLink, IconTrash, IconX } from '@tabler/icons-react';
+import { IconExternalLink, IconTrash, IconWorld, IconX } from '@tabler/icons-react';
 
 import { PortGuidanceBadge } from '../components/PortGuidance';
 import { formatDate } from '../utils/date';
@@ -27,6 +27,7 @@ import {
 } from './DeviceDetailFields';
 import DeviceSnmpInventory from './DeviceSnmpInventory';
 import DeviceInterfacesSection from './DeviceInterfacesSection';
+import DeviceRelatedLinksSection from './DeviceRelatedLinksSection';
 
 export default function DeviceOverviewTab({
   activeUrl,
@@ -50,11 +51,14 @@ export default function DeviceOverviewTab({
   offlineNotificationPreference,
   onSeparateInterface,
   onlineNotificationPreference,
+  onError,
   presenceExpectation,
+  relatedLinks,
   role,
   room,
   roomOptions,
   secondaryIcon,
+  onSuccess,
   setAttentionAcknowledged,
   setComments,
   setExternalUrl,
@@ -68,6 +72,7 @@ export default function DeviceOverviewTab({
   setOfflineNotificationPreference,
   setOnlineNotificationPreference,
   setPresenceExpectation,
+  setRelatedLinks,
   setRole,
   setRoom,
   setSecondaryIcon,
@@ -165,6 +170,14 @@ export default function DeviceOverviewTab({
               </Button>
             )}
           </SimpleGrid>
+          <DeviceRelatedLinksSection
+            deviceId={device.id}
+            editing
+            initialLinks={relatedLinks}
+            onError={onError}
+            onLinksChange={setRelatedLinks}
+            onSuccess={onSuccess}
+          />
           <SimpleGrid cols={{ base: 1, md: 2 }}>
             <DeviceIconPicker value={icon} onChange={setIcon} />
             <DeviceIconPicker
@@ -381,18 +394,34 @@ export default function DeviceOverviewTab({
                 </Group>
               )}
               {activeUrl && validExternalUrl(activeUrl) && (
-                <Button
+                <UnstyledButton
                   component="a"
                   href={activeUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  variant="light"
-                  mt="md"
-                  leftSection={<IconArrowUpRight size={17} />}
+                  className="device-interface-link"
+                  aria-label="Open device interface in a new tab"
                 >
-                  Open device interface
-                </Button>
+                  <Box className="device-interface-link-icon">
+                    <IconWorld size={20} aria-hidden="true" />
+                  </Box>
+                  <Box className="device-interface-link-copy">
+                    <Text fw={700}>Device interface</Text>
+                    <Text size="xs" c="dimmed" truncate className="device-interface-link-url">
+                      {activeUrl}
+                    </Text>
+                  </Box>
+                  <IconExternalLink size={18} aria-hidden="true" />
+                </UnstyledButton>
               )}
+              <DeviceRelatedLinksSection
+                deviceId={device.id}
+                editing={false}
+                initialLinks={relatedLinks}
+                onError={onError}
+                onLinksChange={setRelatedLinks}
+                onSuccess={onSuccess}
+              />
             </section>
           </SimpleGrid>
           {currentStatus?.reason && <Alert color="gray">{currentStatus.reason}</Alert>}

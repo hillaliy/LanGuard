@@ -23,7 +23,7 @@ from ..serializers.devices import (
     device_risk,
     device_risk_signature,
 )
-from ..models import Device, DevicePort
+from ..models import Device, DevicePort, DeviceRelatedLink
 
 LOGGER = logging.getLogger(__name__)
 
@@ -112,6 +112,42 @@ def import_inventory_role(item):
     return None
 
 
+def valid_inventory_http_url(value):
+    parsed = urlparse(value)
+    return bool(
+        parsed.scheme in {"http", "https"}
+        and parsed.netloc
+        and parsed.hostname
+        and parsed.username is None
+        and parsed.password is None
+    )
+
+
+def import_inventory_related_links(item):
+    if "related_links" in item:
+        raw_links = item.get("related_links")
+    elif "relatedLinks" in item:
+        raw_links = item.get("relatedLinks")
+    else:
+        return None
+
+    if not isinstance(raw_links, list):
+        return []
+
+    links = []
+    seen_urls = set()
+    for raw_link in raw_links:
+        if not isinstance(raw_link, dict):
+            continue
+        label = str(raw_link.get("label") or "").strip()[:100]
+        url = str(raw_link.get("url") or "").strip()[:2048]
+        if not label or not valid_inventory_http_url(url) or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        links.append({"label": label, "url": url})
+    return links
+
+
 def inventory_device_payload(device):
     risk_data = device_risk(device)
     return {
@@ -129,6 +165,10 @@ def inventory_device_payload(device):
         "comments": device.comments,
         "external_url": device.external_url,
         "external_url_follow_device_ip": device.external_url_follow_device_ip,
+        "related_links": [
+            {"label": link.label, "url": link.url}
+            for link in device.related_links.all()
+        ],
         "homebox_item_id": str(device.homebox_item_id) if device.homebox_item_id else None,
         "archived": device.archived,
         "online_notification_preference": device.online_notification_preference,
@@ -497,16 +537,9 @@ def import_inventory_devices(payload):
         comments = str(item.get("comments") or "").strip()
         external_url_present = "external_url" in item or "externalUrl" in item
         external_url = str(item.get("external_url") or item.get("externalUrl") or "").strip()
-        if external_url:
-            parsed_external_url = urlparse(external_url)
-            if (
-                parsed_external_url.scheme not in {"http", "https"}
-                or not parsed_external_url.netloc
-                or not parsed_external_url.hostname
-                or parsed_external_url.username is not None
-                or parsed_external_url.password is not None
-            ):
-                external_url = ""
+        if external_url and not valid_inventory_http_url(external_url):
+            external_url = ""
+        related_links = import_inventory_related_links(item)
         external_url_follow_device_ip_present = (
             "external_url_follow_device_ip" in item
             or "externalUrlFollowDeviceIp" in item
@@ -741,6 +774,20 @@ def import_inventory_devices(payload):
         created += 1 if was_created else 0
         updated += 0 if was_created else 1
 
+        if related_links is not None:
+            device.related_links.all().delete()
+            DeviceRelatedLink.objects.bulk_create(
+                [
+                    DeviceRelatedLink(
+                        device=device,
+                        label=link["label"],
+                        url=link["url"],
+                        position=position,
+                    )
+                    for position, link in enumerate(related_links)
+                ]
+            )
+
         merged_into_mac = normalize_inventory_mac(
             item.get("merged_into_mac") or item.get("mergedIntoMac")
         )
@@ -793,7 +840,7 @@ def import_inventory_devices(payload):
 
 
 def inventory_export_response():
-    devices = Device.objects.prefetch_related("ports").order_by("name", "ip")
+    devices = Device.objects.prefetch_related("ports", "related_links").order_by("name", "ip")
     return JsonResponse(
         {
             "format": INVENTORY_FORMAT,

@@ -12,6 +12,7 @@ from ..models import (
     AppSettings,
     Device,
     DevicePort,
+    DeviceRelatedLink,
 )
 from ..device_merging import device_interfaces, effective_device_state
 from ..port_guidance import port_attention, port_guidance
@@ -82,6 +83,42 @@ class DeviceInterfaceSerializer(serializers.ModelSerializer):
     @extend_schema_field(serializers.BooleanField)
     def get_primary(self, obj):
         return obj.merged_into_id is None
+
+
+def validate_http_url(value):
+    value = (value or "").strip()
+    if not value:
+        return ""
+
+    parsed = urlparse(value)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        raise serializers.ValidationError("Enter a valid HTTP or HTTPS URL.")
+    return value
+
+
+class DeviceRelatedLinkSerializer(serializers.ModelSerializer):
+    created_at = UTCDateTimeField(read_only=True)
+    updated_at = UTCDateTimeField(read_only=True)
+
+    class Meta:
+        model = DeviceRelatedLink
+        fields = ("id", "label", "url", "position", "created_at", "updated_at")
+        read_only_fields = ("id", "position", "created_at", "updated_at")
+
+    def validate_label(self, value):
+        value = (value or "").strip()
+        if not value:
+            raise serializers.ValidationError("Enter a link label.")
+        return value
+
+    def validate_url(self, value):
+        return validate_http_url(value)
 
 
 PORT_DENSE_ROLES = {"camera", "intercom", "nas", "server"}
@@ -327,6 +364,12 @@ class DeviceSerializer(serializers.ModelSerializer):
     offline_attention_effective_days = serializers.SerializerMethodField()
     interface_count = serializers.SerializerMethodField()
     interfaces = serializers.SerializerMethodField()
+    related_links = DeviceRelatedLinkSerializer(many=True, read_only=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.context.get("include_related_links"):
+            self.fields.pop("related_links", None)
 
     def homebox_config(self):
         if "homebox_config" not in self.context:
@@ -481,20 +524,7 @@ class DeviceSerializer(serializers.ModelSerializer):
         return self.get_device_identity(obj)["evidence"]
 
     def validate_external_url(self, value):
-        value = (value or "").strip()
-        if not value:
-            return ""
-
-        parsed = urlparse(value)
-        if (
-            parsed.scheme not in {"http", "https"}
-            or not parsed.netloc
-            or not parsed.hostname
-            or parsed.username is not None
-            or parsed.password is not None
-        ):
-            raise serializers.ValidationError("Enter a valid HTTP or HTTPS URL.")
-        return value
+        return validate_http_url(value)
 
     @extend_schema_field(DevicePortSerializer(many=True))
     def get_open_ports(self, obj):

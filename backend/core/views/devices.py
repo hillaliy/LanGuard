@@ -4,6 +4,7 @@ from datetime import timedelta, timezone as datetime_timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
+from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -24,10 +25,11 @@ from ..device_merging import (
     primary_device,
     unmerge_device_interface,
 )
-from ..models import AppSettings, Device, DevicePort, NetworkEvent
+from ..models import AppSettings, Device, DevicePort, DeviceRelatedLink, NetworkEvent
 from ..scanning.discovery import detect_web_interface
 from ..serializers.devices import (
     DeviceBulkUpdateSerializer,
+    DeviceRelatedLinkSerializer,
     DeviceSerializer,
     device_needs_attention,
     device_risk_signature,
@@ -476,6 +478,7 @@ def device(request):
         device_item = get_object_or_404(
             Device.objects.select_related("merged_into").prefetch_related(
                 "ports",
+                "related_links",
                 "merged_interfaces",
                 "merged_interfaces__ports",
             ),
@@ -488,6 +491,7 @@ def device(request):
                     device_item,
                     context={
                         "include_interfaces": True,
+                        "include_related_links": True,
                         "include_snmp_inventory": True,
                     },
                 ).data
@@ -548,6 +552,127 @@ def device(request):
         "The device was removed.",
         response_status=status.HTTP_202_ACCEPTED,
         status="OK",
+    )
+
+
+def device_related_links_data(device_item):
+    return DeviceRelatedLinkSerializer(
+        device_item.related_links.order_by("position", "id"),
+        many=True,
+    ).data
+
+
+@extend_schema(methods=["GET"], responses=OpenApiTypes.OBJECT)
+@extend_schema(
+    methods=["POST", "PUT"],
+    request=DeviceRelatedLinkSerializer,
+    responses=OpenApiTypes.OBJECT,
+)
+@extend_schema(
+    methods=["PATCH"],
+    request=inline_serializer(
+        name="DeviceRelatedLinkOrderRequest",
+        fields={
+            "order": serializers.ListField(
+                child=serializers.IntegerField(min_value=1),
+            )
+        },
+    ),
+    responses=OpenApiTypes.OBJECT,
+)
+@extend_schema(methods=["DELETE"], request=None, responses=OpenApiTypes.OBJECT)
+@api_view(["GET", "POST", "PUT", "PATCH", "DELETE"])
+@permission_classes([permissions.IsAuthenticated, CanEditDevices])
+def device_related_links(request):
+    device_id = parse_int_param(request.query_params, "id", default=0, minimum=1)
+    device_item = get_object_or_404(
+        Device.objects.select_related("merged_into"),
+        pk=device_id,
+    )
+    device_item = primary_device(device_item)
+
+    if request.method == "GET":
+        return Response({"data": device_related_links_data(device_item)})
+
+    if request.method == "PATCH":
+        requested_order = request.data.get("order")
+        if not isinstance(requested_order, list):
+            raise ValidationError({"order": "Provide the complete ordered list of link ids."})
+        try:
+            requested_ids = [int(link_id) for link_id in requested_order]
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({"order": "Every link id must be an integer."}) from exc
+        current_links = list(device_item.related_links.order_by("position", "id"))
+        current_ids = [link.id for link in current_links]
+        if len(requested_ids) != len(set(requested_ids)) or set(requested_ids) != set(current_ids):
+            raise ValidationError(
+                {"order": "Include every related link exactly once."}
+            )
+        links_by_id = {link.id: link for link in current_links}
+        with transaction.atomic():
+            ordered_links = []
+            for position, link_id in enumerate(requested_ids):
+                link = links_by_id[link_id]
+                link.position = position
+                ordered_links.append(link)
+            DeviceRelatedLink.objects.bulk_update(ordered_links, ["position"])
+        return success_response(
+            device_related_links_data(device_item),
+            "Links reordered",
+            "The related links were reordered.",
+        )
+
+    if request.method == "POST":
+        serializer = DeviceRelatedLinkSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        if device_item.related_links.filter(url=serializer.validated_data["url"]).exists():
+            raise ValidationError({"url": "This URL is already linked to the device."})
+        try:
+            serializer.save(
+                device=device_item,
+                position=device_item.related_links.count(),
+            )
+        except IntegrityError as exc:
+            raise ValidationError(
+                {"url": "This URL is already linked to the device."}
+            ) from exc
+        return success_response(
+            device_related_links_data(device_item),
+            "Link added",
+            "The related link was added.",
+            response_status=status.HTTP_201_CREATED,
+        )
+
+    link_id = parse_int_param(request.query_params, "link_id", default=0, minimum=1)
+    link = get_object_or_404(DeviceRelatedLink, pk=link_id, device=device_item)
+
+    if request.method == "PUT":
+        serializer = DeviceRelatedLinkSerializer(link, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        next_url = serializer.validated_data.get("url", link.url)
+        if device_item.related_links.exclude(pk=link.id).filter(url=next_url).exists():
+            raise ValidationError({"url": "This URL is already linked to the device."})
+        try:
+            serializer.save()
+        except IntegrityError as exc:
+            raise ValidationError(
+                {"url": "This URL is already linked to the device."}
+            ) from exc
+        return success_response(
+            device_related_links_data(device_item),
+            "Link updated",
+            "The related link was updated.",
+        )
+
+    link.delete()
+    remaining_links = list(device_item.related_links.order_by("position", "id"))
+    for position, remaining_link in enumerate(remaining_links):
+        remaining_link.position = position
+    DeviceRelatedLink.objects.bulk_update(remaining_links, ["position"])
+    return success_response(
+        device_related_links_data(device_item),
+        "Link deleted",
+        "The related link was removed.",
     )
 
 
