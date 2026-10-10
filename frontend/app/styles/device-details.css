@@ -186,6 +186,51 @@
   padding-left: 24px;
 }
 
+.device-interface-link {
+  align-items: center;
+  background: color-mix(in srgb, var(--brand-soft) 68%, transparent);
+  border: 1px solid var(--soft-border-color);
+  border-radius: 6px;
+  color: inherit;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  margin-top: 16px;
+  padding: 12px;
+  width: 100%;
+}
+
+.device-interface-link:hover {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+}
+
+.device-interface-link:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.device-interface-link-icon {
+  align-items: center;
+  background: var(--panel-bg);
+  border: 1px solid var(--soft-border-color);
+  border-radius: 6px;
+  color: var(--brand-strong);
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
+}
+
+.device-interface-link-copy {
+  min-width: 0;
+}
+
+.device-interface-link-url {
+  direction: ltr;
+  text-align: left;
+}
+
 .device-related-links {
   margin-top: 20px;
   min-width: 0;

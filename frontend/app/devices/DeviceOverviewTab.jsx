@@ -1,8 +1,8 @@
 import {
   Alert, Box, Button, Divider, Group, Loader, NumberInput, Select, SimpleGrid, Stack,
-  Switch, Tabs, Text, TextInput, Textarea, Title,
+  Switch, Tabs, Text, TextInput, Textarea, Title, UnstyledButton,
 } from '@mantine/core';
-import { IconArrowUpRight, IconExternalLink, IconTrash, IconX } from '@tabler/icons-react';
+import { IconDeviceDesktop, IconExternalLink, IconTrash, IconX } from '@tabler/icons-react';
 
 import { PortGuidanceBadge } from '../components/PortGuidance';
 import { formatDate } from '../utils/date';
@@ -394,17 +394,25 @@ export default function DeviceOverviewTab({
                 </Group>
               )}
               {activeUrl && validExternalUrl(activeUrl) && (
-                <Button
+                <UnstyledButton
                   component="a"
                   href={activeUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  variant="light"
-                  mt="md"
-                  leftSection={<IconArrowUpRight size={17} />}
+                  className="device-interface-link"
+                  aria-label="Open device interface in a new tab"
                 >
-                  Open device interface
-                </Button>
+                  <Box className="device-interface-link-icon">
+                    <IconDeviceDesktop size={20} aria-hidden="true" />
+                  </Box>
+                  <Box className="device-interface-link-copy">
+                    <Text fw={700}>Device interface</Text>
+                    <Text size="xs" c="dimmed" truncate className="device-interface-link-url">
+                      {activeUrl}
+                    </Text>
+                  </Box>
+                  <IconExternalLink size={18} aria-hidden="true" />
+                </UnstyledButton>
               )}
               <DeviceRelatedLinksSection
                 deviceId={device.id}
