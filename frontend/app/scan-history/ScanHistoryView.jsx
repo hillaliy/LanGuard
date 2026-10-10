@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -14,6 +14,7 @@ import {
   Table,
   Text,
   Title,
+  UnstyledButton,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { IconAlertCircle, IconArrowsSort, IconHistory } from '@tabler/icons-react';
@@ -21,6 +22,7 @@ import { IconAlertCircle, IconArrowsSort, IconHistory } from '@tabler/icons-reac
 import ActivityTablePanel from '../components/ActivityTablePanel';
 import PageIcon from '../components/PageIcon';
 import ScanRangesSummary from '../components/ScanRangesSummary';
+import ScanFailureDetailsModal from './ScanFailureDetailsModal';
 import { activityRecordLabel, hasNextActivityPage } from '../utils/activity';
 import { formatDate, formatDuration } from '../utils/date';
 import { compactScanRangesLabel, normalizedScanRanges } from '../utils/scan';
@@ -163,9 +165,21 @@ export default function ScanHistoryView({
   onLoadMore,
 }) {
   const [comparisonOpened, comparison] = useDisclosure(false);
+  const [selectedFailure, setSelectedFailure] = useState(null);
+  const failureTriggerRef = useRef(null);
   const comparableRunCount = scanRuns.filter(
     (run) => run.status !== 'running' && run.finished_at
   ).length;
+
+  function openFailureDetails(run, trigger) {
+    failureTriggerRef.current = trigger;
+    setSelectedFailure(run);
+  }
+
+  function closeFailureDetails() {
+    setSelectedFailure(null);
+    window.requestAnimationFrame(() => failureTriggerRef.current?.focus());
+  }
 
   return (
     <>
@@ -212,9 +226,20 @@ export default function ScanHistoryView({
               {scanRuns.map((run) => (
                 <Table.Tr key={run.id}>
                   <Table.Td>
-                    <Badge color={run.status === 'success' ? 'teal' : run.status === 'failed' ? 'red' : 'blue'} variant="light">
-                      {run.status}
-                    </Badge>
+                    {run.status === 'failed' ? (
+                      <UnstyledButton
+                        className="scan-failure-trigger"
+                        aria-label={`View failure details for scan started ${formatDate(run.started_at, timeZone)}`}
+                        aria-haspopup="dialog"
+                        onClick={(event) => openFailureDetails(run, event.currentTarget)}
+                      >
+                        <Badge color="red" variant="light">{run.status}</Badge>
+                      </UnstyledButton>
+                    ) : (
+                      <Badge color={run.status === 'success' ? 'teal' : 'blue'} variant="light">
+                        {run.status}
+                      </Badge>
+                    )}
                   </Table.Td>
                   <Table.Td>
                     <ScanRangesSummary
@@ -235,6 +260,12 @@ export default function ScanHistoryView({
         opened={comparisonOpened}
         onClose={comparison.close}
         scanRuns={scanRuns}
+        timeZone={timeZone}
+      />
+      <ScanFailureDetailsModal
+        opened={Boolean(selectedFailure)}
+        onClose={closeFailureDetails}
+        scanRun={selectedFailure}
         timeZone={timeZone}
       />
     </>
