@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Made failed scan-history badges open accessible, sanitized failure details with stage, code, fingerprint, source, ranges, timing, and recorded scan totals.
+- Displayed DNS Activity navigation for configured Technitium DNS Server integrations, using the active provider's console URL and name.
 - Replaced the generic Technitium integration icon with the official Technitium DNS Server logo.
 - Arranged device-detail actions in compact rows so long device names retain enough space on wide and intermediate screens.
 - Reused the desktop device table on landscape tablets by moving navigation into the existing drawer, while preserving the card layout for narrow screens, preventing Gateway badges from truncating, and aligning the menu button with the LanGuard logo.

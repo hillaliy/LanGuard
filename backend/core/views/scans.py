@@ -178,6 +178,12 @@ def scan_status(request):
                         app_config.pihole_url and app_config.pihole_password
                     ),
                 },
+                "technitium": {
+                    "enabled": app_config.technitium_enabled,
+                    "configured": bool(
+                        app_config.technitium_url and app_config.technitium_api_token
+                    ),
+                },
                 "speedtest_tracker": {
                     "enabled": app_config.speedtest_tracker_enabled,
                     "configured": bool(

@@ -33,6 +33,16 @@
   outline: none;
 }
 
+.scan-failure-trigger {
+  border-radius: var(--mantine-radius-xl);
+  line-height: 0;
+}
+
+.scan-failure-trigger:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-5);
+  outline-offset: 2px;
+}
+
 .settings-page {
   position: relative;
 }

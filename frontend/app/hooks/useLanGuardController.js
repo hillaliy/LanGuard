@@ -51,6 +51,7 @@ export function useLanGuardController({
   const showDnsActivity = Boolean(
     (integrationStatus?.adguard?.enabled && integrationStatus?.adguard?.configured)
     || (integrationStatus?.pihole?.enabled && integrationStatus?.pihole?.configured)
+    || (integrationStatus?.technitium?.enabled && integrationStatus?.technitium?.configured)
   );
   const showDockerInventory = Boolean(integrationStatus?.docker?.configured);
 

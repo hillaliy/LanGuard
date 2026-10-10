@@ -113,6 +113,10 @@ class ScanApiTests(TestCase):
             {"enabled": False, "configured": False},
         )
         self.assertEqual(
+            response.data["integrations"]["technitium"],
+            {"enabled": False, "configured": False},
+        )
+        self.assertEqual(
             response.data["integrations"]["docker"],
             {"configured": False},
         )
@@ -145,6 +149,23 @@ class ScanApiTests(TestCase):
         )
         self.assertNotIn("adguard_url", str(response.data))
         self.assertNotIn("secret-password", str(response.data))
+
+    def test_scan_status_exposes_safe_active_technitium_state(self):
+        config = AppSettings.load()
+        config.technitium_enabled = True
+        config.technitium_url = "http://192.168.1.3:5380"
+        config.technitium_api_token = "secret-token"
+        config.save()
+
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["integrations"]["technitium"],
+            {"enabled": True, "configured": True},
+        )
+        self.assertNotIn("technitium_url", str(response.data))
+        self.assertNotIn("secret-token", str(response.data))
 
     def test_scan_status_endpoint_returns_active_scan_visibility(self):
         running_scan = ScanRun.objects.create(
@@ -233,6 +254,39 @@ class ScanApiTests(TestCase):
         self.assertEqual(response.data["data"][0]["id"], self.scan_run.id)
         self.assertTrue(response.data["data"][0]["started_at"].endswith("Z"))
         self.assertEqual(response.data["pagination"]["count"], 1)
+
+    def test_scan_runs_endpoint_returns_sanitized_failure_diagnostics(self):
+        self.scan_run.status = ScanRun.Status.FAILED
+        self.scan_run.error = "Failed at /private/path using token secret-value"
+        self.scan_run.failure_code = "network_io"
+        self.scan_run.failure_type = "OSError"
+        self.scan_run.failure_stage = "arp_discovery"
+        self.scan_run.failure_fingerprint = "0123456789abcdef"
+        self.scan_run.save(
+            update_fields=[
+                "status",
+                "error",
+                "failure_code",
+                "failure_type",
+                "failure_stage",
+                "failure_fingerprint",
+            ]
+        )
+
+        response = self.client.get("/api/v1/scan/runs/")
+
+        self.assertEqual(response.status_code, 200)
+        scan_run = response.data["data"][0]
+        self.assertEqual(scan_run["failure_code"], "network_io")
+        self.assertEqual(scan_run["failure_type"], "OSError")
+        self.assertEqual(scan_run["failure_stage"], "arp_discovery")
+        self.assertEqual(scan_run["failure_fingerprint"], "0123456789abcdef")
+        self.assertEqual(
+            scan_run["error"],
+            "The network scan could not be completed. Check the scanner container.",
+        )
+        self.assertNotIn("/private/path", str(response.data))
+        self.assertNotIn("secret-value", str(response.data))
 
     def test_scan_runs_endpoint_filters_by_status(self):
         ScanRun.objects.create(
