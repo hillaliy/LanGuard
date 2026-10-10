@@ -7,6 +7,7 @@ from .models import (
     DeviceIPAddressAssignment,
     DetailedPortScan,
     DevicePort,
+    DeviceRelatedLink,
     DockerContainer,
     DockerHost,
     NetworkEvent,
@@ -53,6 +54,13 @@ class DevicePortInline(admin.TabularInline):
     readonly_fields = ("firstseen", "lastseen")
 
 
+class DeviceRelatedLinkInline(admin.TabularInline):
+    model = DeviceRelatedLink
+    extra = 0
+    ordering = ("position", "id")
+    readonly_fields = ("created_at", "updated_at")
+
+
 @admin.register(Device)
 class DeviceAdmin(admin.ModelAdmin):
     list_display = (
@@ -65,7 +73,7 @@ class DeviceAdmin(admin.ModelAdmin):
         "offline_notification_preference", "online", "known", "is_visitor", "is_gateway", "vendor",
     )
     search_fields = ("name", "ip", "mac", "vendor")
-    inlines = [DevicePortInline]
+    inlines = [DevicePortInline, DeviceRelatedLinkInline]
 
 
 @admin.register(DevicePort)

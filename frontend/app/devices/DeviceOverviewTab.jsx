@@ -27,6 +27,7 @@ import {
 } from './DeviceDetailFields';
 import DeviceSnmpInventory from './DeviceSnmpInventory';
 import DeviceInterfacesSection from './DeviceInterfacesSection';
+import DeviceRelatedLinksSection from './DeviceRelatedLinksSection';
 
 export default function DeviceOverviewTab({
   activeUrl,
@@ -50,11 +51,14 @@ export default function DeviceOverviewTab({
   offlineNotificationPreference,
   onSeparateInterface,
   onlineNotificationPreference,
+  onError,
   presenceExpectation,
+  relatedLinks,
   role,
   room,
   roomOptions,
   secondaryIcon,
+  onSuccess,
   setAttentionAcknowledged,
   setComments,
   setExternalUrl,
@@ -68,6 +72,7 @@ export default function DeviceOverviewTab({
   setOfflineNotificationPreference,
   setOnlineNotificationPreference,
   setPresenceExpectation,
+  setRelatedLinks,
   setRole,
   setRoom,
   setSecondaryIcon,
@@ -165,6 +170,14 @@ export default function DeviceOverviewTab({
               </Button>
             )}
           </SimpleGrid>
+          <DeviceRelatedLinksSection
+            deviceId={device.id}
+            editing
+            initialLinks={relatedLinks}
+            onError={onError}
+            onLinksChange={setRelatedLinks}
+            onSuccess={onSuccess}
+          />
           <SimpleGrid cols={{ base: 1, md: 2 }}>
             <DeviceIconPicker value={icon} onChange={setIcon} />
             <DeviceIconPicker
@@ -393,6 +406,14 @@ export default function DeviceOverviewTab({
                   Open device interface
                 </Button>
               )}
+              <DeviceRelatedLinksSection
+                deviceId={device.id}
+                editing={false}
+                initialLinks={relatedLinks}
+                onError={onError}
+                onLinksChange={setRelatedLinks}
+                onSuccess={onSuccess}
+              />
             </section>
           </SimpleGrid>
           {currentStatus?.reason && <Alert color="gray">{currentStatus.reason}</Alert>}

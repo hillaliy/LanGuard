@@ -186,6 +186,47 @@
   padding-left: 24px;
 }
 
+.device-related-links {
+  min-width: 0;
+}
+
+.device-related-link-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 8px;
+  padding: 8px;
+  background: var(--muted-panel-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.device-related-link-anchor {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  color: inherit;
+}
+
+.device-related-link-anchor:hover,
+.device-related-link-anchor:focus-visible {
+  color: var(--brand-strong);
+  outline: none;
+}
+
+.device-related-link-anchor:focus-visible {
+  box-shadow: 0 0 0 2px var(--mantine-color-blue-5);
+}
+
+.device-related-link-copy {
+  min-width: 0;
+}
+
+.device-related-link-actions {
+  flex: 0 0 auto;
+}
+
 .device-history-time {
   min-width: 190px;
   white-space: nowrap;

@@ -41,6 +41,7 @@ from .views.diagnostics import export_diagnostics
 from .views.devices import (
     bulk_update_devices,
     device,
+    device_related_links,
     device_availability,
     device_merge_candidates,
     device_web_interface,
@@ -120,6 +121,7 @@ urlpatterns = [
     path("home-map-layout/", home_map_layout, name="home-map-layout"),
     path("maintenance/cleanup/", maintenance_cleanup, name="maintenance-cleanup"),
     path("device/", device, name="device"),
+    path("device/links/", device_related_links, name="device-related-links"),
     path("device/availability/", device_availability, name="device-availability"),
     path(
         "device/merge-candidates/",

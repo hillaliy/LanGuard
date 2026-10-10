@@ -208,6 +208,14 @@
     width: 100%;
   }
 
+  .device-related-link-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .device-related-link-actions {
+    justify-content: flex-end;
+  }
+
   .docker-host-header {
     padding: 14px;
   }
@@ -676,10 +684,6 @@
     flex-direction: column;
     font-size: 0.56rem;
     gap: 1px;
-  }
-
-  .dashboard-status-secondary-item + .dashboard-status-secondary-item::before {
-    display: none;
   }
 
   .device-mobile-row {

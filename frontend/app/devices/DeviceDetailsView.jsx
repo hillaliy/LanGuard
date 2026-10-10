@@ -41,6 +41,7 @@ export default function DeviceDetailsView({
   onSuccess,
 }) {
   const [device, setDevice] = useState(null);
+  const [relatedLinks, setRelatedLinks] = useState([]);
   const [detectedWebUrl, setDetectedWebUrl] = useState('');
   const [detectingWebUrl, setDetectingWebUrl] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -91,6 +92,7 @@ export default function DeviceDetailsView({
       const payload = await apiRequest('device/', { params: { id: deviceId } });
       const nextDevice = payload.data;
       setDevice(nextDevice);
+      setRelatedLinks(nextDevice.related_links || []);
       form.populate(nextDevice);
       return nextDevice;
     } catch (err) {
@@ -111,6 +113,7 @@ export default function DeviceDetailsView({
       .then(([devicePayload, eventPayload]) => {
         if (!active) return;
         setDevice(devicePayload.data);
+        setRelatedLinks(devicePayload.data.related_links || []);
         form.populate(devicePayload.data);
         history.hydrateEvents(eventPayload);
         actions.setError('');
@@ -233,6 +236,10 @@ export default function DeviceDetailsView({
               device={device}
               roomOptions={roomOptions}
               onSeparateInterface={interfaces.confirmSeparate}
+              onError={onError}
+              relatedLinks={relatedLinks}
+              setRelatedLinks={setRelatedLinks}
+              onSuccess={onSuccess}
               timeZone={timeZone}
             />
 
