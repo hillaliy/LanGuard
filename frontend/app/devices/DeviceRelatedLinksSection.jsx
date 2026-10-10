@@ -21,6 +21,7 @@ import {
   IconArrowUp,
   IconEdit,
   IconExternalLink,
+  IconLink,
   IconPlus,
   IconTrash,
   IconWorld,
@@ -146,7 +147,7 @@ export default function DeviceRelatedLinksSection({
     <Box className="device-related-links">
       <Group justify="space-between" align="center" mb="sm">
         <Group gap="xs">
-          <IconWorld size={18} aria-hidden="true" />
+          <IconLink size={18} aria-hidden="true" />
           <Title order={5}>Related links</Title>
         </Group>
         {editing && (
@@ -173,6 +174,9 @@ export default function DeviceRelatedLinksSection({
                 className="device-related-link-anchor"
                 aria-label={`Open ${link.label} in a new tab`}
               >
+                <Box className="device-related-link-icon">
+                  <IconWorld size={19} aria-hidden="true" />
+                </Box>
                 <Box className="device-related-link-copy">
                   <Text fw={700} truncate>{link.label}</Text>
                   <Text size="xs" c="dimmed" truncate>{link.url}</Text>

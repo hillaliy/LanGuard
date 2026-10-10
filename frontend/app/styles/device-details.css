@@ -247,10 +247,10 @@
 }
 
 .device-related-link-anchor {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
+  display: grid;
   gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   min-width: 0;
   color: inherit;
 }
@@ -267,6 +267,18 @@
 
 .device-related-link-copy {
   min-width: 0;
+}
+
+.device-related-link-icon {
+  align-items: center;
+  background: var(--brand-soft);
+  border: 1px solid var(--soft-border-color);
+  border-radius: 6px;
+  color: var(--brand-strong);
+  display: inline-flex;
+  height: 36px;
+  justify-content: center;
+  width: 36px;
 }
 
 .device-related-link-actions {
