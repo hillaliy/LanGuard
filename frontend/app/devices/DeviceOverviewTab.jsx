@@ -2,7 +2,7 @@ import {
   Alert, Box, Button, Divider, Group, Loader, NumberInput, Select, SimpleGrid, Stack,
   Switch, Tabs, Text, TextInput, Textarea, Title, UnstyledButton,
 } from '@mantine/core';
-import { IconDeviceDesktop, IconExternalLink, IconTrash, IconX } from '@tabler/icons-react';
+import { IconExternalLink, IconTrash, IconWorld, IconX } from '@tabler/icons-react';
 
 import { PortGuidanceBadge } from '../components/PortGuidance';
 import { formatDate } from '../utils/date';
@@ -403,7 +403,7 @@ export default function DeviceOverviewTab({
                   aria-label="Open device interface in a new tab"
                 >
                   <Box className="device-interface-link-icon">
-                    <IconDeviceDesktop size={20} aria-hidden="true" />
+                    <IconWorld size={20} aria-hidden="true" />
                   </Box>
                   <Box className="device-interface-link-copy">
                     <Text fw={700}>Device interface</Text>

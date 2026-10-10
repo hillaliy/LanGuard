@@ -21,9 +21,9 @@ import {
   IconArrowUp,
   IconEdit,
   IconExternalLink,
-  IconLink,
   IconPlus,
   IconTrash,
+  IconWorld,
 } from '@tabler/icons-react';
 
 import { apiRequest } from '../api';
@@ -146,7 +146,7 @@ export default function DeviceRelatedLinksSection({
     <Box className="device-related-links">
       <Group justify="space-between" align="center" mb="sm">
         <Group gap="xs">
-          <IconLink size={18} aria-hidden="true" />
+          <IconWorld size={18} aria-hidden="true" />
           <Title order={5}>Related links</Title>
         </Group>
         {editing && (
