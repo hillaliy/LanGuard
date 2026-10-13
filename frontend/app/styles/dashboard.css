@@ -149,6 +149,10 @@
   white-space: nowrap;
 }
 
+.automatic-scanning-next-scan {
+  grid-column: 1 / -1;
+}
+
 @media (min-width: 981px) and (max-width: 1400px) {
   .dashboard-summary-card {
     padding: 18px;

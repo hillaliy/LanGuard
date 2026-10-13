@@ -9,6 +9,7 @@ export default function DashboardView({
   networkRangeLabels,
   scanStatus,
   scanVisibility,
+  schedulerState,
   timeZone,
   onOpenScanDetails,
   speedtestTrackerPayload,
@@ -30,6 +31,7 @@ export default function DashboardView({
         networkRangeLabels={networkRangeLabels}
         scanStatus={scanStatus}
         scanVisibility={scanVisibility}
+        schedulerState={schedulerState}
         timeZone={timeZone}
         onOpenScanDetails={onOpenScanDetails}
         speedtestTrackerPayload={speedtestTrackerPayload}

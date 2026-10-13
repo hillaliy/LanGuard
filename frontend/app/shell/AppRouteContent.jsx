@@ -117,6 +117,7 @@ export default function AppRouteContent({ controller }) {
         networkRangeLabels={c.configuredNetworkRangeLabels}
         scanStatus={c.scanStatus}
         scanVisibility={c.scanVisibility}
+        schedulerState={c.schedulerState}
         timeZone={c.displayTimeZone}
         onOpenScanDetails={c.scanDetailsModal.open}
         speedtestTrackerPayload={c.speedtestTrackerPayload}

@@ -13,6 +13,7 @@ from ..models import (
     DevicePort,
     NetworkEvent,
     NotificationDelivery,
+    SchedulerRuntimeState,
     ScanRun,
 )
 from ..scanning.ports import normalize_scan_ports
@@ -131,6 +132,59 @@ class ScanApiTests(TestCase):
         self.assertTrue(response.data["visibility"]["started_at"].endswith("Z"))
         self.assertTrue(response.data["visibility"]["finished_at"].endswith("Z"))
         self.assertGreaterEqual(response.data["visibility"]["duration_seconds"], 119)
+        self.assertEqual(response.data["scheduler"]["status"], "unavailable")
+        self.assertFalse(response.data["scheduler"]["available"])
+
+    @override_settings(SCHEDULER_HEARTBEAT_STALE_SECONDS=60)
+    def test_scan_status_returns_next_scheduled_scan(self):
+        now = timezone.now()
+        next_scan_at = now + timedelta(minutes=5)
+        SchedulerRuntimeState.objects.create(
+            heartbeat_at=now,
+            next_scan_at=next_scan_at,
+        )
+
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["scheduler"]["status"], "scheduled")
+        self.assertTrue(response.data["scheduler"]["available"])
+        self.assertEqual(
+            response.data["scheduler"]["next_scan_at"],
+            utc_isoformat(next_scan_at),
+        )
+
+    @override_settings(SCHEDULER_HEARTBEAT_STALE_SECONDS=60)
+    def test_scan_status_hides_next_scan_when_scheduler_is_stale(self):
+        SchedulerRuntimeState.objects.create(
+            heartbeat_at=timezone.now() - timedelta(seconds=61),
+            next_scan_at=timezone.now() + timedelta(minutes=5),
+        )
+
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.data["scheduler"]["status"], "unavailable")
+        self.assertFalse(response.data["scheduler"]["available"])
+        self.assertIsNone(response.data["scheduler"]["next_scan_at"])
+
+    @override_settings(SCHEDULER_HEARTBEAT_STALE_SECONDS=60)
+    def test_scan_status_reports_scheduled_scan_in_progress(self):
+        now = timezone.now()
+        SchedulerRuntimeState.objects.create(
+            heartbeat_at=now,
+            next_scan_at=now + timedelta(minutes=5),
+        )
+        ScanRun.objects.create(
+            ip_range="192.168.2.0/24",
+            status=ScanRun.Status.RUNNING,
+            source=ScanRun.Source.SCHEDULED,
+        )
+
+        response = self.client.get("/api/v1/scan/status/")
+
+        self.assertEqual(response.data["scheduler"]["status"], "scanning")
+        self.assertTrue(response.data["scheduler"]["available"])
+        self.assertIsNone(response.data["scheduler"]["next_scan_at"])
 
     def test_scan_status_exposes_safe_active_adguard_state(self):
         config = AppSettings.load()

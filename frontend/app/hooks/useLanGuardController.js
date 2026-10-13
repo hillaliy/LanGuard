@@ -19,6 +19,7 @@ export function useLanGuardController({
   const [error, setError] = useState('');
   const [scanStatus, setScanStatus] = useState(null);
   const [scanVisibility, setScanVisibility] = useState(null);
+  const [schedulerState, setSchedulerState] = useState(null);
   const [integrationStatus, setIntegrationStatus] = useState({});
   const [speedtestTrackerPayload, setSpeedtestTrackerPayload] = useState(null);
   const [appSettings, setAppSettings] = useState(null);
@@ -58,6 +59,7 @@ export function useLanGuardController({
   function applyScanStatus(statusData) {
     setScanStatus(statusData.data || statusData.active_scan || null);
     setScanVisibility(statusData.visibility || null);
+    setSchedulerState(statusData.scheduler || null);
     setIntegrationStatus(statusData.integrations || {});
     const nextNetworkRanges = Array.isArray(statusData.network_ranges)
       ? statusData.network_ranges
@@ -249,7 +251,7 @@ export function useLanGuardController({
     roleDeviceCount: inventory.roleDeviceCount,
     devicePagination: inventory.devicePagination,
     counters: inventory.counters,
-    scanStatus, scanVisibility, speedtestTrackerPayload,
+    scanStatus, scanVisibility, schedulerState, speedtestTrackerPayload,
     scanRuns: activity.scanRuns,
     scanRunPagination: activity.scanRunPagination,
     dashboardEvents: activity.dashboardEvents,

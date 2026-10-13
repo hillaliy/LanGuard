@@ -42,7 +42,13 @@ function NetworkHealthCard({ counters = {} }) {
   );
 }
 
-function AutomaticScanningCard({ appSettings, networkRanges, networkRangeLabels }) {
+function AutomaticScanningCard({
+  appSettings,
+  networkRanges,
+  networkRangeLabels,
+  schedulerState,
+  timeZone,
+}) {
   const configuredRanges = normalizedScanRanges(networkRanges);
   const ranges = configuredRanges.length
     ? configuredRanges
@@ -50,6 +56,18 @@ function AutomaticScanningCard({ appSettings, networkRanges, networkRangeLabels 
   const rangeLabels = Object.keys(networkRangeLabels || {}).length
     ? networkRangeLabels
     : appSettings?.scan_range_labels || {};
+  const schedulerStatus = schedulerState?.status || 'unavailable';
+  const nextScan = schedulerStatus === 'scanning'
+    ? 'Scanning now'
+    : schedulerStatus === 'scheduled'
+      ? formatDate(schedulerState?.next_scan_at, timeZone)
+      : 'Unavailable';
+  const badgeLabel = schedulerStatus === 'scanning'
+    ? 'Scanning'
+    : schedulerStatus === 'scheduled'
+      ? 'Enabled'
+      : 'Unavailable';
+  const badgeColor = schedulerStatus === 'unavailable' ? 'gray' : 'blue';
 
   return (
     <Paper className="dashboard-summary-card automatic-scanning-card" radius="md">
@@ -61,12 +79,12 @@ function AutomaticScanningCard({ appSettings, networkRanges, networkRangeLabels 
         )}
         title="Automatic Scanning"
         badge={(
-          <Badge className="dashboard-status-badge" color="blue" variant="light">
-            Enabled
+          <Badge className="dashboard-status-badge" color={badgeColor} variant="light">
+            {badgeLabel}
           </Badge>
         )}
       />
-      <SimpleGrid cols={2} mt="xl">
+      <SimpleGrid cols={2} mt="xl" spacing="sm">
         <SummaryMetric
           label="Interval"
           value={appSettings?.scan_interval ? `${appSettings.scan_interval} min` : '-'}
@@ -76,6 +94,9 @@ function AutomaticScanningCard({ appSettings, networkRanges, networkRangeLabels 
           value={<ScanRangesSummary ranges={ranges} labels={rangeLabels} namesOnly />}
           align="right"
         />
+        <div className="automatic-scanning-next-scan">
+          <SummaryMetric label="Next scan" value={nextScan} nowrap />
+        </div>
       </SimpleGrid>
     </Paper>
   );
@@ -223,6 +244,7 @@ export default function DashboardSummaryCards({
   onOpenScanDetails,
   scanStatus,
   scanVisibility,
+  schedulerState,
   speedtestTrackerPayload,
   timeZone,
 }) {
@@ -236,6 +258,8 @@ export default function DashboardSummaryCards({
         appSettings={appSettings}
         networkRanges={networkRanges}
         networkRangeLabels={networkRangeLabels}
+        schedulerState={schedulerState}
+        timeZone={timeZone}
       />
       <LatestScanCard
         scanStatus={scanStatus}

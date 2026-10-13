@@ -1,16 +1,24 @@
 import logging
 import signal
 import threading
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import close_old_connections
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
 from core.maintenance import cleanup_all_activity
 from core.models import AppSettings, ScanRun
 from core.notifications import retry_failed_notifications
 from core.scanning.lifecycle import ScanAlreadyRunning
 from core.scanning.orchestration import scan
+from core.scheduler_runtime import (
+    set_next_scheduled_scan,
+    start_scheduler_runtime,
+    stop_scheduler_runtime,
+    touch_scheduler_runtime,
+)
 from core.integrations.adguard import sync_adguard_query_log
 from core.integrations.pihole import sync_pihole
 from core.integrations.technitium import sync_technitium
@@ -34,6 +42,37 @@ def load_scan_schedule(ip_range_override=None, interval_override=None):
     scan_ranges = ip_range_override or config.effective_scan_ranges
     interval = interval_override or config.scan_interval
     return list(scan_ranges), interval
+
+
+def wait_for_next_scheduled_scan(
+    stop_event,
+    schedule_anchor,
+    ip_range_override=None,
+    interval_override=None,
+):
+    next_scan_at = None
+    while not stop_event.is_set():
+        close_old_connections()
+        try:
+            _, interval = load_scan_schedule(ip_range_override, interval_override)
+            target = schedule_anchor + timedelta(minutes=interval)
+            if target != next_scan_at:
+                set_next_scheduled_scan(target)
+                next_scan_at = target
+        finally:
+            close_old_connections()
+
+        remaining_seconds = (target - timezone.now()).total_seconds()
+        if remaining_seconds <= 0:
+            return True
+        if stop_event.wait(
+            min(
+                remaining_seconds,
+                max(1, settings.SCHEDULER_SCHEDULE_POLL_SECONDS),
+            )
+        ):
+            return False
+    return False
 
 
 class Command(BaseCommand):
@@ -350,6 +389,20 @@ class Command(BaseCommand):
                 if stop_event.wait(60):
                     break
 
+        def scheduler_heartbeat_loop():
+            while not stop_event.is_set():
+                close_old_connections()
+                try:
+                    touch_scheduler_runtime()
+                except Exception:
+                    LOGGER.exception("Scheduler heartbeat update failed")
+                finally:
+                    close_old_connections()
+                if stop_event.wait(
+                    max(1, settings.SCHEDULER_HEARTBEAT_INTERVAL_SECONDS)
+                ):
+                    break
+
         def stop_scheduler(signum, frame):
             self.stdout.write("Stopping scheduler...")
             stop_event.set()
@@ -357,13 +410,23 @@ class Command(BaseCommand):
         signal.signal(signal.SIGTERM, stop_scheduler)
         signal.signal(signal.SIGINT, stop_scheduler)
 
+        start_scheduler_runtime()
+        heartbeat_thread = threading.Thread(
+            target=scheduler_heartbeat_loop,
+            daemon=True,
+        )
+        heartbeat_thread.start()
+
         retry_thread = threading.Thread(target=retry_loop, daemon=True)
         retry_thread.start()
         activity_cleanup_thread = threading.Thread(target=activity_cleanup_loop, daemon=True)
         activity_cleanup_thread.start()
 
+        schedule_anchor = timezone.now()
         if options["run_now"]:
+            set_next_scheduled_scan(None)
             run_scheduled_scan()
+            schedule_anchor = timezone.now()
 
         adguard_sync_thread = threading.Thread(target=adguard_sync_loop, daemon=True)
         adguard_sync_thread.start()
@@ -439,9 +502,26 @@ class Command(BaseCommand):
             self.style.SUCCESS("Docker inventory sync follows each host interval")
         )
 
-        while not stop_event.is_set():
-            _, interval = load_scan_schedule(ip_range_override, interval_override)
+        try:
+            while not stop_event.is_set():
+                should_scan = wait_for_next_scheduled_scan(
+                    stop_event,
+                    schedule_anchor,
+                    ip_range_override,
+                    interval_override,
+                )
+                if not should_scan:
+                    break
+                set_next_scheduled_scan(None)
+                run_scheduled_scan()
+                schedule_anchor = timezone.now()
+        finally:
+            stop_event.set()
+            heartbeat_thread.join(
+                timeout=max(1, settings.SCHEDULER_HEARTBEAT_INTERVAL_SECONDS) + 1
+            )
             close_old_connections()
-            if stop_event.wait(interval * 60):
-                break
-            run_scheduled_scan()
+            try:
+                stop_scheduler_runtime()
+            finally:
+                close_old_connections()

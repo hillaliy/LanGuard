@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Displayed the scheduler-owned next network scan time on the dashboard, including live scanning and stale-scheduler states, with automatic interval-change updates.
 - Added ordered related links for device manuals, invoices, diagrams, and support pages, with secure editing and inventory import/export support.
 - Fixed tablet dashboard and device-list spacing so visitor and archived totals use separate lines and port overflow counts remain fully visible.
 - Made failed scan-history badges open accessible, sanitized failure details with stage, code, fingerprint, source, ranges, timing, and recorded scan totals.

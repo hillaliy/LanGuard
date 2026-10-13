@@ -540,6 +540,21 @@ class ScanRun(models.Model):
         return f"Scan {self.ip_range} - {self.status}"
 
 
+class SchedulerRuntimeState(models.Model):
+    singleton_key = models.PositiveSmallIntegerField(default=1, unique=True, editable=False)
+    heartbeat_at = models.DateTimeField(blank=True, null=True)
+    next_scan_at = models.DateTimeField(blank=True, null=True)
+    stopped_at = models.DateTimeField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Scheduler runtime state"
+        verbose_name_plural = "Scheduler runtime state"
+
+    def __str__(self):
+        return "Scheduler runtime state"
+
+
 class DetailedPortScan(models.Model):
     class Status(models.TextChoices):
         QUEUED = "queued", "Queued"
