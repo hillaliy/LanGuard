@@ -13,6 +13,7 @@ from ..models import AppSettings, DockerHost, NetworkEvent, ScanRun
 from ..scanning.lifecycle import ScanAlreadyRunning, active_scan_run
 from ..scanning.orchestration import scan
 from ..scanning.ranges import validate_ip_ranges
+from ..scheduler_runtime import scheduler_runtime_payload
 from ..serializers.scans import ScanRunSerializer
 from ..user_messages import error_response, scan_error_message, success_response
 from .devices import active_device_counters
@@ -124,6 +125,12 @@ def scan_status(request):
     visible_scan = active_scan or latest_scan
     app_config = AppSettings.load()
     now = timezone.now()
+    scheduler = scheduler_runtime_payload(
+        scheduled_scan_running=bool(
+            active_scan and active_scan.source == ScanRun.Source.SCHEDULED
+        ),
+        now=now,
+    )
     duration_seconds = None
     if visible_scan:
         finished_at = visible_scan.finished_at or now
@@ -159,6 +166,7 @@ def scan_status(request):
                 ),
             },
             "time_zone": app_config.time_zone,
+            "scheduler": scheduler,
             "network_ranges": app_config.effective_scan_ranges,
             "network_range_labels": app_config.effective_scan_range_labels,
             "integrations": {

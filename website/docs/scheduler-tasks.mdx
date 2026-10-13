@@ -27,11 +27,13 @@ The `languard-scheduler` container owns recurring and queued background work. It
 
 Intervals are measured from the end of the previous run, not from fixed clock boundaries. A five-minute network interval and a scan ending at 10:12 results in the next scan starting at approximately 10:17.
 
+The **Automatic Scanning** dashboard card shows the next network scan using runtime state written by the scheduler. It shows **Scanning now** during a scheduled scan and **Unavailable** when the scheduler is stopped or its heartbeat is stale. A manual scan does not replace the scheduled target. If it is still running when that target arrives, the scheduled cycle is skipped and the next interval begins.
+
 The update check works the same way. If the scheduler last checked three hours before you enabled a six-hour interval, the next check can occur about three hours later rather than immediately.
 
 ## Reloading configuration
 
-The scheduler reloads network ranges and scan interval before each cycle. Activity retention, DNS integration configuration, the Docker inventory interval, and the update-check interval are also read from the database during their own loops. Restarting the container is not normally required after changing these settings.
+The scheduler reloads network ranges before each cycle and checks the scan interval while it waits. Changing the interval updates the next scheduled time without requiring a container restart. Activity retention, DNS integration configuration, the Docker inventory interval, and the update-check interval are also read from the database during their own loops.
 
 ## Why there is no cron setup
 

@@ -12,6 +12,7 @@ from .models import (
     DockerHost,
     NetworkEvent,
     NotificationDelivery,
+    SchedulerRuntimeState,
     ScanRun,
     UserAccess,
 )
@@ -149,6 +150,18 @@ class ScanRunAdmin(admin.ModelAdmin):
     )
     list_filter = ("status", "source")
     readonly_fields = ("started_at", "heartbeat_at", "finished_at")
+
+
+@admin.register(SchedulerRuntimeState)
+class SchedulerRuntimeStateAdmin(admin.ModelAdmin):
+    list_display = ("heartbeat_at", "next_scan_at", "stopped_at", "updated_at")
+    readonly_fields = (
+        "singleton_key",
+        "heartbeat_at",
+        "next_scan_at",
+        "stopped_at",
+        "updated_at",
+    )
 
 
 @admin.register(DetailedPortScan)

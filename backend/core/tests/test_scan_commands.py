@@ -55,8 +55,10 @@ class ScanCommandTests(TestCase):
     @patch("core.management.commands.run_scheduler.threading.Thread")
     @patch("core.management.commands.run_scheduler.threading.Event")
     @patch("core.management.commands.run_scheduler.scan")
+    @patch("core.management.commands.run_scheduler.wait_for_next_scheduled_scan")
     def test_scheduler_uses_latest_ranges_when_cycle_starts(
         self,
+        wait_for_scan_mock,
         scan_mock,
         event_factory,
         thread_factory,
@@ -70,13 +72,13 @@ class ScanCommandTests(TestCase):
         stop_event = Mock()
         stop_event.is_set.side_effect = [False, True]
 
-        def finish_wait(_seconds):
+        def finish_wait(*_args):
             config.scan_ranges = ["192.168.20.0/24", "192.168.30.0/24"]
             config.scan_interval = 25
             config.save(update_fields=["scan_ranges", "scan_interval"])
-            return False
+            return True
 
-        stop_event.wait.side_effect = finish_wait
+        wait_for_scan_mock.side_effect = finish_wait
         event_factory.return_value = stop_event
 
         call_command("run_scheduler")
@@ -97,8 +99,10 @@ class ScanCommandTests(TestCase):
     @patch("core.management.commands.run_scheduler.threading.Thread")
     @patch("core.management.commands.run_scheduler.threading.Event")
     @patch("core.management.commands.run_scheduler.scan")
+    @patch("core.management.commands.run_scheduler.wait_for_next_scheduled_scan")
     def test_scheduler_retries_after_manual_scan_conflict(
         self,
+        wait_for_scan_mock,
         scan_mock,
         event_factory,
         _,
@@ -111,7 +115,7 @@ class ScanCommandTests(TestCase):
         scan_mock.side_effect = [ScanAlreadyRunning(active_scan), None]
         stop_event = Mock()
         stop_event.is_set.side_effect = [False, False, True]
-        stop_event.wait.return_value = False
+        wait_for_scan_mock.side_effect = [True, True]
         event_factory.return_value = stop_event
         output = StringIO()
 
