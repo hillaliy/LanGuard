@@ -15,7 +15,10 @@ import {
 import { IconGripVertical, IconNetwork, IconRestore, IconSmartHome } from '@tabler/icons-react';
 
 import {
+  buildHomeMapGridSlots,
   buildHomeMapRooms,
+  filterHomeMapRoomTree,
+  getHomeMapVisualDropIndex,
   homeMapFilterOptions,
   unassignedRoomLabel,
 } from '../utils/homeMap';
@@ -25,6 +28,7 @@ import useHomeMapLayout from './useHomeMapLayout';
 
 export default function HomeMapView({
   devices = [],
+  devicesLoaded = true,
   onSelectDevice,
   canEditLayout,
   onError,
@@ -44,7 +48,36 @@ export default function HomeMapView({
     [rooms]
   );
   const deviceCount = rooms.reduce((total, section) => total + section.devices.length, 0);
-  const layout = useHomeMapLayout({ assignedRooms, canEditLayout, onError, onSuccess });
+  const layout = useHomeMapLayout({
+    assignedRooms,
+    canEditLayout,
+    devicesLoaded,
+    onError,
+    onSuccess,
+  });
+  const visibleRoomTree = useMemo(
+    () => filterHomeMapRoomTree(layout.roomTree, deviceFilter, layout.layoutEditMode),
+    [deviceFilter, layout.layoutEditMode, layout.roomTree]
+  );
+  const showUnassigned = Boolean(
+    unassignedSection
+    && (
+      deviceFilter === 'all'
+      || layout.layoutEditMode
+      || unassignedSection.visibleDevices.length > 0
+    )
+  );
+  const rootSlots = useMemo(
+    () => buildHomeMapGridSlots(
+      visibleRoomTree,
+      deviceFilter === 'all' || layout.layoutEditMode ? layout.placements : {},
+      {
+      columns: 4,
+      includeDropRow: layout.layoutEditMode,
+      }
+    ),
+    [deviceFilter, layout.layoutEditMode, layout.placements, visibleRoomTree]
+  );
 
   return (
     <>
@@ -100,34 +133,72 @@ export default function HomeMapView({
                 </Group>
               )}
             </Group>
-            <section className="home-map-building">
-              <div
-                className={`home-map-room-grid ${layout.layoutEditMode ? 'editing' : ''}`}
-                onDragOver={layout.layoutEditMode
-                  ? (event) => event.preventDefault()
-                  : undefined}
-                onDrop={layout.layoutEditMode ? layout.handleDropOnBuilding : undefined}
-              >
-                {layout.roomTree.map((section) => (
-                  <HomeMapRoom
-                    key={section.room}
-                    section={section}
-                    childSections={section.children}
-                    draggedRoom={layout.draggedRoom}
-                    editMode={layout.layoutEditMode}
-                    dropTarget={layout.dropTarget}
-                    onDragStart={layout.handleRoomDragStart}
-                    onDragEnd={layout.handleRoomDragEnd}
-                    onDragOverRoom={layout.handleDragOverRoom}
-                    onDropOnRoom={layout.handleDropOnRoom}
-                    onDragLeaveRoom={layout.handleDragLeaveRoom}
-                    onMoveToRoot={layout.moveRoomToRoot}
-                    onSelectDevice={onSelectDevice}
-                  />
-                ))}
-              </div>
-            </section>
-            {unassignedSection && (
+            {(visibleRoomTree.length > 0 || !showUnassigned) && (
+              <section className="home-map-building">
+                <div
+                  className={`home-map-room-grid ${layout.layoutEditMode ? 'editing' : ''}`}
+                  onDragOver={layout.layoutEditMode
+                    ? (event) => event.preventDefault()
+                    : undefined}
+                  onDrop={layout.layoutEditMode ? layout.handleDropOnBuilding : undefined}
+                >
+                  {rootSlots.map(({ section, slot }) => section ? (
+                    <HomeMapRoom
+                      key={section.room}
+                      section={section}
+                      childSections={section.children}
+                      draggedRoom={layout.draggedRoom}
+                      editMode={layout.layoutEditMode}
+                      placementSlot={slot}
+                      placements={
+                        deviceFilter === 'all' || layout.layoutEditMode
+                          ? layout.placements
+                          : {}
+                      }
+                      sizes={layout.sizes}
+                      dropTarget={layout.dropTarget}
+                      onDragStart={layout.handleRoomDragStart}
+                      onDragEnd={layout.handleRoomDragEnd}
+                      onDragOverRoom={layout.handleDragOverRoom}
+                      onDropOnRoom={layout.handleDropOnRoom}
+                      onDropOnSlot={layout.handleDropOnSlot}
+                      onDragLeaveRoom={layout.handleDragLeaveRoom}
+                      onMoveToRoot={layout.moveRoomToRoot}
+                      onRoomIconChange={layout.setRoomIcon}
+                      onRoomSizeChange={layout.setRoomSize}
+                      onSelectDevice={onSelectDevice}
+                    />
+                  ) : (
+                    <button
+                      key={`empty-root-${slot}`}
+                      type="button"
+                      className={`home-map-empty-slot root ${layout.layoutEditMode ? 'editing' : ''}`}
+                      aria-label={`Place a room in top-level position ${slot + 1}`}
+                      onDragOver={layout.layoutEditMode
+                        ? (event) => event.preventDefault()
+                        : undefined}
+                      onDrop={layout.layoutEditMode
+                        ? (event) => layout.handleDropOnSlot(
+                          event,
+                          null,
+                          getHomeMapVisualDropIndex(event.currentTarget) ?? slot,
+                          3
+                        )
+                        : undefined}
+                      tabIndex={layout.layoutEditMode ? 0 : -1}
+                    >
+                      {layout.layoutEditMode ? <span>Drop here</span> : null}
+                    </button>
+                  ))}
+                  {visibleRoomTree.length === 0 && (
+                    <Text className="home-map-empty-filter" c="dimmed" ta="center">
+                      No devices match this filter.
+                    </Text>
+                  )}
+                </div>
+              </section>
+            )}
+            {showUnassigned && (
               <section className="home-map-utility">
                 <Group justify="space-between" align="center" mb="sm" wrap="nowrap">
                   <Group gap="xs" wrap="nowrap">
@@ -159,7 +230,7 @@ export default function HomeMapView({
         size="sm"
       >
         <Text c="dimmed" mb="lg">
-          This will reset the Home Map layout to the automatic arrangement.
+          This will reset the room order, positions, sizes, nesting, and icons to the automatic arrangement.
         </Text>
         <Group justify="flex-end">
           <Button variant="default" onClick={layout.resetModal.close}>Cancel</Button>

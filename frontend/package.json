@@ -1,10 +1,12 @@
 {
   "name": "languard-frontend",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "lint": "eslint app"
+    "lint": "eslint app",
+    "test": "node --test app/**/*.test.js"
   },
   "engines": {
     "node": ">=24"

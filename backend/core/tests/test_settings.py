@@ -124,6 +124,9 @@ class SettingsApiTests(TestCase):
                 "home_map_layout": {
                     "order": ["Floor", "Bedroom"],
                     "parents": {"Bedroom": "Floor"},
+                    "icons": {"Floor": "home", "Bedroom": "bedroom"},
+                    "placements": {"Floor": 0, "Bedroom": 3},
+                    "sizes": {"Floor": 8, "Bedroom": 3},
                 },
             },
             format="json",
@@ -154,7 +157,13 @@ class SettingsApiTests(TestCase):
         self.assertEqual(config.activity_cleanup_retention_days, 45)
         self.assertEqual(
             config.home_map_layout,
-            {"order": ["Floor", "Bedroom"], "parents": {"Bedroom": "Floor"}},
+            {
+                "order": ["Floor", "Bedroom"],
+                "parents": {"Bedroom": "Floor"},
+                "icons": {"Floor": "home", "Bedroom": "bedroom"},
+                "placements": {"Floor": 0, "Bedroom": 3},
+                "sizes": {"Floor": 8, "Bedroom": 3},
+            },
         )
         self.assertEqual(config.discord_webhook, "https://discord.example/webhook")
         self.assertEqual(config.telegram_token, "token")
@@ -199,7 +208,13 @@ class SettingsApiTests(TestCase):
         self.assertEqual(response.data["data"]["activity_cleanup_retention_days"], 45)
         self.assertEqual(
             response.data["data"]["home_map_layout"],
-            {"order": ["Floor", "Bedroom"], "parents": {"Bedroom": "Floor"}},
+            {
+                "order": ["Floor", "Bedroom"],
+                "parents": {"Bedroom": "Floor"},
+                "icons": {"Floor": "home", "Bedroom": "bedroom"},
+                "placements": {"Floor": 0, "Bedroom": 3},
+                "sizes": {"Floor": 8, "Bedroom": 3},
+            },
         )
 
     def test_settings_endpoint_keeps_telegram_token_secret_and_preserves_blank(self):
