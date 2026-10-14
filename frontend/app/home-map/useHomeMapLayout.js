@@ -5,19 +5,10 @@ import { apiRequest } from '../api';
 import {
   homeMapLayoutStorageKey,
   isHomeMapDescendant,
+  moveHomeMapRoomToSlot,
   normalizeHomeMapLayout,
   orderHomeMapRooms,
 } from '../utils/homeMap';
-
-function hasLayout(layout) {
-  return Boolean(
-    layout
-    && (
-      (Array.isArray(layout.order) && layout.order.length > 0)
-      || (layout.parents && Object.keys(layout.parents).length > 0)
-    )
-  );
-}
 
 function getRoomDropPosition(event) {
   const targetRect = event.currentTarget.getBoundingClientRect();
@@ -27,8 +18,16 @@ function getRoomDropPosition(event) {
   return 'inside';
 }
 
-export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError, onSuccess }) {
-  const [layout, setLayout] = useState({ order: [], parents: {} });
+export default function useHomeMapLayout({
+  assignedRooms,
+  canEditLayout,
+  devicesLoaded,
+  onError,
+  onSuccess,
+}) {
+  const [layout, setLayout] = useState({
+    order: [], parents: {}, icons: {}, placements: {}, sizes: {},
+  });
   const [layoutEditMode, setLayoutEditMode] = useState(false);
   const [draggedRoom, setDraggedRoom] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
@@ -46,7 +45,11 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
   const roomTree = useMemo(() => {
     const sectionsByRoom = new Map(orderedRooms.map((section) => [
       section.room,
-      { ...section, children: [] },
+      {
+        ...section,
+        children: [],
+        roomIcon: normalizedLayout.icons[section.room] || 'home',
+      },
     ]));
     const roots = [];
 
@@ -61,7 +64,7 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
       }
     });
     return roots;
-  }, [normalizedLayout.parents, orderedRooms]);
+  }, [normalizedLayout.icons, normalizedLayout.parents, orderedRooms]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,22 +75,19 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
         const serverLayout = payload.data?.layout || {};
         let nextLayout = serverLayout;
 
-        if (!hasLayout(serverLayout)) {
-          try {
-            const storedLayout = JSON.parse(
-              localStorage.getItem(homeMapLayoutStorageKey) || '{}'
-            );
-            if (hasLayout(storedLayout)) nextLayout = storedLayout;
-          } catch {
-            nextLayout = serverLayout;
-          }
+        try {
+          const storedValue = localStorage.getItem(homeMapLayoutStorageKey);
+          const storedLayout = storedValue === null ? null : JSON.parse(storedValue);
+          if (storedLayout && typeof storedLayout === 'object') nextLayout = storedLayout;
+        } catch {
+          nextLayout = serverLayout;
         }
 
         if (!cancelled) {
           setLayout(
             nextLayout && typeof nextLayout === 'object'
               ? nextLayout
-              : { order: [], parents: {} }
+              : { order: [], parents: {}, icons: {}, placements: {}, sizes: {} }
           );
           setLayoutLoaded(true);
         }
@@ -106,15 +106,18 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
   }, []);
 
   useEffect(() => {
-    if (!layoutLoaded) return;
+    if (!layoutLoaded || !devicesLoaded) return;
     const nextLayout = normalizeHomeMapLayout(layout, assignedRooms);
     if (
       JSON.stringify(nextLayout.order) !== JSON.stringify(layout.order)
       || JSON.stringify(nextLayout.parents) !== JSON.stringify(layout.parents)
+      || JSON.stringify(nextLayout.icons) !== JSON.stringify(layout.icons)
+      || JSON.stringify(nextLayout.placements) !== JSON.stringify(layout.placements)
+      || JSON.stringify(nextLayout.sizes) !== JSON.stringify(layout.sizes)
     ) {
       setLayout(nextLayout);
     }
-  }, [assignedRooms, layout, layoutLoaded]);
+  }, [assignedRooms, devicesLoaded, layout, layoutLoaded]);
 
   useEffect(() => {
     if (!layoutEditMode) {
@@ -130,7 +133,13 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
   function updateLayout(updater) {
     setLayout((currentLayout) => {
       const normalizedCurrent = normalizeHomeMapLayout(currentLayout, assignedRooms);
-      return normalizeHomeMapLayout(updater(normalizedCurrent), assignedRooms);
+      const nextLayout = normalizeHomeMapLayout(updater(normalizedCurrent), assignedRooms);
+      try {
+        localStorage.setItem(homeMapLayoutStorageKey, JSON.stringify(nextLayout));
+      } catch {
+        // The server save on Done remains available when local storage is unavailable.
+      }
+      return nextLayout;
     });
   }
 
@@ -166,12 +175,14 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
   }
 
   function handleRoomDragStart(event, room) {
+    event.stopPropagation();
     setDraggedRoom(room);
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData('text/plain', room);
   }
 
-  function handleRoomDragEnd() {
+  function handleRoomDragEnd(event) {
+    event?.stopPropagation();
     setDraggedRoom(null);
     setDropTarget(null);
   }
@@ -215,7 +226,9 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
       if (dropPosition === 'inside') {
         order.splice(targetIndex >= 0 ? targetIndex + 1 : order.length, 0, sourceRoom);
         parents[sourceRoom] = targetRoom;
-        return { order, parents };
+        const placements = { ...currentLayout.placements };
+        delete placements[sourceRoom];
+        return { ...currentLayout, order, parents, placements };
       }
 
       order.splice(
@@ -230,8 +243,27 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
       } else {
         delete parents[sourceRoom];
       }
-      return { order, parents };
+      return { ...currentLayout, order, parents };
     });
+  }
+
+  function moveRoomToSlot(sourceRoom, targetParent, targetSlot, targetSpan = null) {
+    updateLayout((currentLayout) => moveHomeMapRoomToSlot(
+      currentLayout,
+      assignedRooms,
+      sourceRoom,
+      targetParent,
+      targetSlot,
+      targetSpan
+    ));
+  }
+
+  function handleDropOnSlot(event, targetParent, targetSlot, targetSpan = null) {
+    event.preventDefault();
+    event.stopPropagation();
+    const sourceRoom = event.dataTransfer.getData('text/plain') || draggedRoom;
+    handleRoomDragEnd();
+    if (sourceRoom) moveRoomToSlot(sourceRoom, targetParent, targetSlot, targetSpan);
   }
 
   function handleDropOnBuilding(event) {
@@ -246,9 +278,11 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
     updateLayout((currentLayout) => {
       const parents = { ...currentLayout.parents };
       delete parents[sourceRoom];
+      const placements = { ...currentLayout.placements };
+      delete placements[sourceRoom];
       const order = currentLayout.order.filter((room) => room !== sourceRoom);
       order.push(sourceRoom);
-      return { order, parents };
+      return { ...currentLayout, order, parents, placements };
     });
   }
 
@@ -256,16 +290,45 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
     updateLayout((currentLayout) => {
       const parents = { ...currentLayout.parents };
       delete parents[room];
+      const placements = { ...currentLayout.placements };
+      delete placements[room];
       const order = currentLayout.order.filter((item) => item !== room);
       order.push(room);
-      return { order, parents };
+      return { ...currentLayout, order, parents, placements };
     });
+  }
+
+  function setRoomIcon(room, icon) {
+    updateLayout((currentLayout) => ({
+      ...currentLayout,
+      icons: {
+        ...currentLayout.icons,
+        [room]: icon,
+      },
+    }));
+  }
+
+  function setRoomSize(room, span) {
+    updateLayout((currentLayout) => ({
+      ...currentLayout,
+      sizes: {
+        ...currentLayout.sizes,
+        [room]: span,
+      },
+    }));
   }
 
   function resetLayout() {
     setDraggedRoom(null);
     setDropTarget(null);
-    setLayout({ order: [], parents: {} });
+    setLayout({ order: [], parents: {}, icons: {}, placements: {}, sizes: {} });
+    try {
+      localStorage.setItem(homeMapLayoutStorageKey, JSON.stringify({
+        order: [], parents: {}, icons: {}, placements: {}, sizes: {},
+      }));
+    } catch {
+      // The reset will still be persisted when the user selects Done.
+    }
     resetModal.close();
   }
 
@@ -276,15 +339,20 @@ export default function useHomeMapLayout({ assignedRooms, canEditLayout, onError
     handleDragOverRoom,
     handleDropOnBuilding,
     handleDropOnRoom,
+    handleDropOnSlot,
     handleRoomDragEnd,
     handleRoomDragStart,
     layoutEditMode,
+    placements: normalizedLayout.placements,
     layoutSaving,
     moveRoomToRoot,
     resetLayout,
     resetModal,
     resetModalOpened,
     roomTree,
+    setRoomIcon,
+    setRoomSize,
+    sizes: normalizedLayout.sizes,
     toggleEditMode,
   };
 }

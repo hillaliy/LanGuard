@@ -35,6 +35,7 @@ export default function AppRouteContent({ controller }) {
     return (
       <HomeMapView
         devices={c.mapDevices}
+        devicesLoaded={!c.loading}
         onSelectDevice={c.openDevicePage}
         canEditLayout={c.canEditHomeMap}
         onError={showErrorNotification}

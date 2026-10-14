@@ -44,9 +44,7 @@
 }
 
 .home-map-panel {
-  background:
-    radial-gradient(circle at 50% 0, color-mix(in srgb, var(--brand-soft) 40%, transparent), transparent 34%),
-    var(--panel-strong-bg);
+  background: var(--panel-strong-bg);
   border: 1px solid var(--border-color);
   overflow: hidden;
   padding: 18px;
@@ -81,19 +79,14 @@
 
 .home-map-filter {
   max-width: 100%;
+  overflow-x: auto;
 }
 
 .home-map-building {
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--border-color) 34%, transparent) 1px, transparent 1px),
-    linear-gradient(180deg, color-mix(in srgb, var(--border-color) 34%, transparent) 1px, transparent 1px),
-    var(--input-panel-bg);
-  background-size: 32px 32px;
-  border: 3px solid color-mix(in srgb, var(--field-text) 56%, var(--border-color));
-  border-radius: 3px;
-  box-shadow:
-    0 18px 45px color-mix(in srgb, var(--field-text) 7%, transparent),
-    inset 0 0 0 1px color-mix(in srgb, var(--panel-strong-bg) 68%, transparent);
+  background: color-mix(in srgb, var(--input-panel-bg) 72%, var(--panel-strong-bg));
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--field-text) 5%, transparent);
   min-width: 0;
   padding: 14px;
 }
@@ -108,24 +101,69 @@
 }
 
 .home-map-room-grid {
+  align-items: start;
   display: grid;
   gap: 12px;
   grid-auto-flow: dense;
-  grid-auto-rows: minmax(118px, auto);
+  grid-auto-rows: 8px;
   grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
 .home-map-room-grid.editing {
-  outline: 2px dashed color-mix(in srgb, var(--brand) 44%, transparent);
-  outline-offset: -9px;
+  outline: 1px dashed color-mix(in srgb, var(--brand) 52%, transparent);
+  outline-offset: 6px;
+}
+
+.home-map-empty-slot {
+  background: transparent;
+  border: 0;
+  grid-column: span 1;
+  min-height: 108px;
+  min-width: 0;
+  padding: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.home-map-empty-slot.root {
+  grid-column: span 3;
+  grid-row: span 7;
+  min-height: 126px;
+}
+
+.home-map-empty-slot.editing {
+  align-items: center;
+  background: color-mix(in srgb, var(--brand-soft) 14%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--brand) 42%, var(--border-color));
+  border-radius: 8px;
+  color: var(--muted-text);
+  cursor: copy;
+  display: flex;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  justify-content: center;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.home-map-empty-slot.editing:hover,
+.home-map-empty-slot.editing:focus-visible {
+  background: color-mix(in srgb, var(--brand-soft) 38%, transparent);
+  border-color: var(--brand);
+  color: var(--brand-strong);
+  outline: none;
 }
 
 .home-map-room {
-  background: color-mix(in srgb, var(--muted-panel-bg) 78%, transparent);
-  border: 2px solid color-mix(in srgb, var(--field-text) 42%, var(--border-color));
-  border-radius: 0;
+  align-self: start;
+  background: color-mix(in srgb, var(--muted-panel-bg) 88%, var(--panel-strong-bg));
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
   box-shadow: none;
+  container-type: inline-size;
   grid-column: span 3;
+  grid-row-end: span var(--home-map-room-row-span, 8);
   margin: 0;
   min-height: 126px;
   min-width: 0;
@@ -148,7 +186,7 @@
 }
 
 .home-map-room.large {
-  grid-column: span 4;
+  grid-column: span 6;
 }
 
 .home-map-room.zone {
@@ -156,10 +194,14 @@
   min-height: 232px;
 }
 
+.home-map-room:not(.nested) {
+  grid-column: span var(--home-map-room-span, 3);
+}
+
 .home-map-room.nested {
-  background: color-mix(in srgb, var(--input-panel-bg) 82%, transparent);
-  border-color: color-mix(in srgb, var(--field-text) 26%, var(--border-color));
-  grid-column: span 1;
+  background: color-mix(in srgb, var(--input-panel-bg) 76%, var(--panel-strong-bg));
+  border-color: color-mix(in srgb, var(--border-color) 78%, var(--brand));
+  grid-column: span var(--home-map-room-span, 4);
   margin: 0;
   min-height: 108px;
   padding: 10px;
@@ -177,8 +219,13 @@
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--brand) 52%, transparent);
 }
 
+.home-map-room.resizing {
+  cursor: ew-resize;
+  user-select: none;
+}
+
 .home-map-room.attention {
-  border-color: color-mix(in srgb, #fd7e14 36%, color-mix(in srgb, var(--field-text) 42%, var(--border-color)));
+  border-color: color-mix(in srgb, #fd7e14 54%, var(--border-color));
 }
 
 .home-map-room.drop-before,
@@ -231,13 +278,113 @@
   width: 100%;
 }
 
+.home-map-room-heading-copy {
+  min-width: 0;
+}
+
+.home-map-room-icon {
+  align-items: center;
+  color: var(--brand-strong);
+  display: inline-flex;
+  flex: 0 0 28px;
+  height: 28px;
+  justify-content: center;
+}
+
+.home-map-room-icon-button {
+  color: var(--brand-strong);
+  flex: 0 0 auto;
+}
+
+.home-map-room-icon-menu {
+  padding: 10px;
+}
+
+.home-map-room-icon-option {
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--field-text);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: 74px;
+  justify-content: center;
+  min-width: 0;
+  padding: 4px;
+}
+
+.home-map-room-icon-option:hover {
+  background: var(--hover-bg);
+}
+
+.home-map-room-icon-option.selected {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.home-map-room-icon-option span {
+  font-size: 9px;
+  line-height: 1.15;
+  max-width: 100%;
+  min-height: 2.3em;
+  overflow-wrap: anywhere;
+  text-align: center;
+  white-space: normal;
+}
+
 .home-map-room-name {
   display: block;
   max-width: 100%;
   overflow: hidden;
-  overflow-wrap: anywhere;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.home-map-room-summary {
+  align-items: center;
+  color: var(--muted-text);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  gap: 3px 9px;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+.home-map-room-summary-item {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.home-map-room-summary-item.attention {
+  color: #e8590c;
+}
+
+.home-map-room-summary-dot {
+  background: var(--muted-text);
+  border-radius: 999px;
+  display: inline-block;
+  height: 5px;
+  opacity: 0.72;
+  width: 5px;
+}
+
+.home-map-room-summary-dot.online {
+  background: #12b886;
+  opacity: 1;
+}
+
+.home-map-room-summary-item:not(.attention) .home-map-room-summary-dot.attention {
+  opacity: 0.42;
+}
+
+.home-map-room-summary-item.attention .home-map-room-summary-dot.attention {
+  background: #fd7e14;
+  opacity: 1;
 }
 
 .home-map-room-grip {
@@ -253,6 +400,36 @@
   flex: 0 0 auto;
 }
 
+.home-map-room-actions {
+  flex: 0 0 auto;
+}
+
+.home-map-room-resize-handle {
+  align-items: center;
+  background: var(--panel-strong-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 5px 0 0;
+  bottom: 0;
+  color: var(--brand-strong);
+  cursor: ew-resize;
+  display: flex;
+  height: 25px;
+  justify-content: center;
+  padding: 0;
+  position: absolute;
+  right: 0;
+  touch-action: none;
+  width: 25px;
+  z-index: 4;
+}
+
+.home-map-room-resize-handle:hover,
+.home-map-room-resize-handle:focus-visible {
+  background: var(--brand-soft);
+  border-color: var(--brand);
+  outline: none;
+}
+
 .home-map-device-cloud {
   align-items: center;
   display: flex;
@@ -260,7 +437,12 @@
   gap: 8px;
   margin-top: 10px;
   max-width: 100%;
-  overflow: hidden auto;
+  overflow: visible;
+}
+
+.home-map-empty-filter {
+  grid-column: 1 / -1;
+  padding-block: 34px;
 }
 
 .home-map-device {
@@ -279,12 +461,37 @@
 }
 
 .home-map-child-rooms {
+  align-items: start;
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-auto-flow: dense;
+  grid-auto-rows: 8px;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   margin-top: 12px;
   max-width: 100%;
   overflow: hidden;
+}
+
+.home-map-child-rooms > .home-map-empty-slot {
+  grid-column: span 4;
+  grid-row: span 8;
+}
+
+@container (max-width: 540px) {
+  .home-map-room.nested.span-2,
+  .home-map-room.nested.span-3,
+  .home-map-room.nested.span-4,
+  .home-map-room.nested.span-5,
+  .home-map-child-rooms > .home-map-empty-slot {
+    grid-column: span 6;
+  }
+}
+
+@container (max-width: 330px) {
+  .home-map-room.nested,
+  .home-map-child-rooms > .home-map-empty-slot {
+    grid-column: span 12;
+  }
 }
 
 .home-map-device:hover {
@@ -315,6 +522,16 @@
 
 .home-map-device-risk.high {
   border-color: #fa5252;
+}
+
+.home-map-device-tooltip {
+  min-width: 190px;
+}
+
+.home-map-device-tooltip-meta {
+  border-top: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  margin-top: 2px;
+  padding-top: 5px;
 }
 
 .network-device-node {

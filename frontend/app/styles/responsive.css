@@ -185,8 +185,12 @@
   }
 
   .home-map-room-grid {
-    grid-auto-rows: minmax(118px, auto);
+    grid-auto-rows: 8px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .home-map-room-grid.editing {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
   }
 
   .home-map-room,
@@ -194,7 +198,26 @@
   .home-map-room.wide,
   .home-map-room.large {
     grid-column: span 1;
-    grid-row: span 1;
+  }
+
+  .home-map-room:not(.nested) {
+    grid-column: span 1;
+  }
+
+  .home-map-room-grid.editing > .home-map-room.editable:not(.nested) {
+    grid-column: span var(--home-map-room-span, 3);
+  }
+
+  .home-map-empty-slot:not(.editing) {
+    display: none;
+  }
+
+  .home-map-empty-slot.root {
+    grid-column: span 1;
+  }
+
+  .home-map-child-rooms {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
   }
 }
 
@@ -750,5 +773,13 @@
 
   .home-map-room-grid {
     grid-template-columns: 1fr;
+  }
+
+  .home-map-room-grid.editing {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+
+  .home-map-child-rooms {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
   }
 }
