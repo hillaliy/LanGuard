@@ -1,5 +1,5 @@
 import {
-  Alert, Box, Button, Divider, Group, Loader, NumberInput, Select, SimpleGrid, Stack,
+  Box, Button, Divider, Group, Loader, NumberInput, Select, SimpleGrid, Stack,
   Switch, Tabs, Text, TextInput, Textarea, Title, UnstyledButton,
 } from '@mantine/core';
 import { IconExternalLink, IconTrash, IconWorld, IconX } from '@tabler/icons-react';
@@ -28,13 +28,13 @@ import {
 import DeviceSnmpInventory from './DeviceSnmpInventory';
 import DeviceInterfacesSection from './DeviceInterfacesSection';
 import DeviceRelatedLinksSection from './DeviceRelatedLinksSection';
+import DeviceNetworkChange from './DeviceNetworkChange';
 
 export default function DeviceOverviewTab({
   activeUrl,
   attentionAcknowledged,
   canEditDevices,
   comments,
-  currentStatus,
   deleteConfirm,
   detectedWebUrl,
   detectingWebUrl,
@@ -50,6 +50,7 @@ export default function DeviceOverviewTab({
   offlineAttentionAfterDays,
   offlineNotificationPreference,
   onSeparateInterface,
+  onShowHistory,
   onlineNotificationPreference,
   onError,
   presenceExpectation,
@@ -78,6 +79,8 @@ export default function DeviceOverviewTab({
   setSecondaryIcon,
   timeZone,
 }) {
+  const hasMultipleInterfaces = (device.interfaces || []).length > 1;
+
   return (
     <Tabs.Panel value="overview" pt="lg">
       {!editing && device.homebox_link && (
@@ -314,40 +317,55 @@ export default function DeviceOverviewTab({
             <section className="device-detail-section">
               <Title order={4}>Identity</Title>
               <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md">
-                <DeviceField label="Vendor" value={device.vendor || '-'} />
                 <DeviceField label="Hostname" value={device.hostname || '-'} />
-                <DeviceField label="MAC address" value={device.mac || '-'} />
+                <DeviceField label="First seen" value={formatDate(device.firstseen, timeZone)} />
               </SimpleGrid>
               <IdentityConfidenceField device={device} />
             </section>
             <section className="device-detail-section">
               <Title order={4}>Network</Title>
               <SimpleGrid cols={{ base: 1, sm: 2 }} mt="md">
-                <DeviceField label="IP address" value={device.ip || '-'} />
+                {!hasMultipleInterfaces && (
+                  <>
+                    <DeviceField label="IP address" value={device.ip || '-'} />
+                    <DeviceField label="MAC address" value={device.mac || '-'} />
+                    <DeviceField label="Last seen" value={formatDate(device.lastseen, timeZone)} />
+                  </>
+                )}
                 <DeviceField
                   label="Last port scan"
                   value={formatDate(device.last_port_scan, timeZone)}
                 />
                 <DeviceField label="Missed scans" value={String(device.missed_scans ?? 0)} />
-                <DeviceField label="Status source" value={device.status_source_display || '-'} />
               </SimpleGrid>
-              <Text size="xs" c="dimmed" mt="md">Open ports</Text>
-              <Group gap={6} mt={6}>
-                {(device.open_ports || []).length ? (
-                  device.open_ports.map((port) => (
-                    <PortGuidanceBadge key={`${port.protocol}-${port.port}`} port={port} />
-                  ))
-                ) : <Text size="sm">-</Text>}
-              </Group>
+              {!hasMultipleInterfaces && (
+                <>
+                  <Text size="xs" c="dimmed" mt="md">Open ports</Text>
+                  <Group gap={6} mt={6}>
+                    {(device.open_ports || []).length ? (
+                      device.open_ports.map((port) => (
+                        <PortGuidanceBadge key={`${port.protocol}-${port.port}`} port={port} />
+                      ))
+                    ) : <Text size="sm">-</Text>}
+                  </Group>
+                </>
+              )}
+              <DeviceNetworkChange
+                event={device.last_network_change}
+                onShowHistory={onShowHistory}
+                timeZone={timeZone}
+              />
             </section>
           </SimpleGrid>
 
-          <DeviceInterfacesSection
-            canEditDevices={canEditDevices}
-            device={device}
-            onSeparate={onSeparateInterface}
-            timeZone={timeZone}
-          />
+          {hasMultipleInterfaces && (
+            <DeviceInterfacesSection
+              canEditDevices={canEditDevices}
+              device={device}
+              onSeparate={onSeparateInterface}
+              timeZone={timeZone}
+            />
+          )}
 
           <DeviceSnmpInventory device={device} timeZone={timeZone} />
 
@@ -378,8 +396,6 @@ export default function DeviceOverviewTab({
                   label="Absence attention"
                   value={formatOfflineAttention(device)}
                 />
-                <DeviceField label="First seen" value={formatDate(device.firstseen, timeZone)} />
-                <DeviceField label="Last seen" value={formatDate(device.lastseen, timeZone)} />
               </SimpleGrid>
             </section>
             <section className="device-detail-section">
@@ -424,7 +440,6 @@ export default function DeviceOverviewTab({
               />
             </section>
           </SimpleGrid>
-          {currentStatus?.reason && <Alert color="gray">{currentStatus.reason}</Alert>}
         </Stack>
       )}
     </Tabs.Panel>

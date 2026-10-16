@@ -85,6 +85,62 @@ class DeviceApiTests(TestCase):
         self.assertEqual(device_detail["snmp_data"], self.device.snmp_data)
         self.assertIsNotNone(device_detail["snmp_last_seen"])
 
+    def test_last_network_change_includes_merged_interfaces_and_skips_presence(self):
+        secondary = Device.objects.create(
+            name="Laptop Wi-Fi",
+            ip="192.168.1.21",
+            mac="aa:aa:aa:aa:aa:ab",
+            merged_into=self.device,
+        )
+        older = timezone.now() - timedelta(days=2)
+        NetworkEvent.objects.create(
+            device=self.device,
+            event_type=NetworkEvent.EventType.IP_CHANGED,
+            message="Primary IP changed",
+            created_at=older,
+        )
+        latest = NetworkEvent.objects.create(
+            device=secondary,
+            event_type=NetworkEvent.EventType.PORT_OPENED,
+            message="Wi-Fi port 443 opened",
+            created_at=older + timedelta(hours=1),
+        )
+        # Presence events must not hide an older configuration change.
+        NetworkEvent.objects.bulk_create([
+            NetworkEvent(
+                device=self.device,
+                event_type=NetworkEvent.EventType.DEVICE_ONLINE,
+                message="Laptop came online",
+            ) for _ in range(101)
+        ])
+
+        detail = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+        change = detail["last_network_change"]
+        self.assertEqual(change["id"], latest.pk)
+        self.assertEqual(change["event_type"], "port_opened")
+        self.assertEqual(change["event_type_display"], "Port opened")
+        self.assertEqual(change["message"], "Wi-Fi port 443 opened")
+        self.assertIsNotNone(change["created_at"])
+
+    def test_last_network_change_is_detail_only_and_excludes_other_devices(self):
+        unrelated = Device.objects.create(
+            name="Other device", ip="192.168.1.30", mac="aa:aa:aa:aa:aa:ac"
+        )
+        NetworkEvent.objects.create(
+            device=unrelated,
+            event_type=NetworkEvent.EventType.IP_CHANGED,
+            message="Other device IP changed",
+        )
+        detail = self.client.get(
+            "/api/v1/device/", {"id": self.device.id}
+        ).data["data"]
+        self.assertIsNone(detail["last_network_change"])
+        device_list = self.client.get("/api/v1/device/").data["data"]
+        for device in device_list:
+            self.assertNotIn("last_network_change", device)
+
     def test_removing_network_range_marks_only_previously_monitored_devices_offline(self):
         removed_device = Device.objects.create(
             name="Removed VLAN device",

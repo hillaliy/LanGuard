@@ -47,3 +47,18 @@ export function formatDuration(seconds) {
   }
   return `${remainingSeconds}s`;
 }
+
+export function formatRelativeDate(value, now = Date.now()) {
+  if (!value) return '-';
+  const timestamp = new Date(normalizeApiDate(value)).getTime();
+  if (!Number.isFinite(timestamp)) return '-';
+  const seconds = (timestamp - now) / 1000;
+  if (Math.abs(seconds) < 60) return 'Just now';
+  const formatter = new Intl.RelativeTimeFormat('en', { numeric: 'always' });
+  for (const [unit, length] of [['year', 31_536_000], ['month', 2_592_000], ['day', 86_400], ['hour', 3600], ['minute', 60]]) {
+    if (Math.abs(seconds) >= length) {
+      return formatter.format(Math.trunc(seconds / length), unit);
+    }
+  }
+  return 'Just now';
+}

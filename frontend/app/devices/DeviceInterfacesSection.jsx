@@ -1,16 +1,12 @@
 import {
-  Badge, Button, Group, ScrollArea, Stack, Table, Text, Title,
+  Badge, Button, Group, ScrollArea, Stack, Table, Text, Title, Tooltip,
 } from '@mantine/core';
 import { IconUnlink } from '@tabler/icons-react';
+import { useEffect, useState } from 'react';
 
 import { PortGuidanceBadge } from '../components/PortGuidance';
-import { formatDate } from '../utils/date';
-
-function statusColor(status) {
-  if (status === 'online') return 'green';
-  if (status === 'recently_seen' || status === 'sleeping') return 'yellow';
-  return 'red';
-}
+import DevicePresenceStatus from '../components/DevicePresenceStatus';
+import { formatDate, formatRelativeDate } from '../utils/date';
 
 export default function DeviceInterfacesSection({
   canEditDevices,
@@ -19,6 +15,14 @@ export default function DeviceInterfacesSection({
   timeZone,
 }) {
   const interfaces = device.interfaces || [];
+  const [now, setNow] = useState(null);
+
+  useEffect(() => {
+    const updateTime = () => setNow(Date.now());
+    updateTime();
+    const timer = setInterval(updateTime, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <section className="device-detail-section device-interfaces-section">
@@ -65,17 +69,7 @@ export default function DeviceInterfacesSection({
                 </Table.Td>
                 <Table.Td>{networkInterface.ip}</Table.Td>
                 <Table.Td>
-                  <Stack gap={2} align="flex-start">
-                    <Badge
-                      color={statusColor(networkInterface.status)}
-                      variant="light"
-                    >
-                      {networkInterface.status_display}
-                    </Badge>
-                    <Text size="xs" c="dimmed">
-                      {networkInterface.status_source_display || '-'}
-                    </Text>
-                  </Stack>
+                  <DevicePresenceStatus device={networkInterface} />
                 </Table.Td>
                 <Table.Td>
                   <Group gap={5} wrap="nowrap" className="device-interface-ports">
@@ -90,7 +84,19 @@ export default function DeviceInterfacesSection({
                   </Group>
                 </Table.Td>
                 <Table.Td className="device-interface-last-seen">
-                  {formatDate(networkInterface.lastseen, timeZone)}
+                  <Tooltip label={formatDate(networkInterface.lastseen, timeZone)} withArrow>
+                    <Text
+                      component="time"
+                      dateTime={networkInterface.lastseen || undefined}
+                      size="sm"
+                      tabIndex={0}
+                      title={formatDate(networkInterface.lastseen, timeZone)}
+                    >
+                      {now === null
+                        ? formatDate(networkInterface.lastseen, timeZone)
+                        : formatRelativeDate(networkInterface.lastseen, now)}
+                    </Text>
+                  </Tooltip>
                 </Table.Td>
                 {canEditDevices && (
                   <Table.Td>
