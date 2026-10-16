@@ -9,6 +9,7 @@ from django.conf import settings
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from ..database_writes import serialized_database_write
 from .adguard import (
     ActivityAggregate,
     UnmatchedClientAggregate,
@@ -330,6 +331,11 @@ def test_technitium_connection(base_url, api_token, *, dhcp_enabled=False):
 
 
 def sync_technitium(config=None, max_entries=MAX_SYNC_ENTRIES):
+    with serialized_database_write():
+        return _sync_technitium(config=config, max_entries=max_entries)
+
+
+def _sync_technitium(config=None, max_entries=MAX_SYNC_ENTRIES):
     config = config or AppSettings.load()
     if not config.technitium_enabled:
         return {"status": "disabled", "processed": 0, "matched": 0, "unmatched": 0}

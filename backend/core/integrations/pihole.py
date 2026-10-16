@@ -8,6 +8,7 @@ import requests
 from django.conf import settings
 from django.utils import timezone
 
+from ..database_writes import serialized_database_write
 from .adguard import (
     ActivityAggregate,
     UnmatchedClientAggregate,
@@ -287,6 +288,11 @@ def test_pihole_connection(base_url, password="", *, dhcp_enabled=True):
 
 
 def sync_pihole(config=None, max_entries=MAX_SYNC_ENTRIES):
+    with serialized_database_write():
+        return _sync_pihole(config=config, max_entries=max_entries)
+
+
+def _sync_pihole(config=None, max_entries=MAX_SYNC_ENTRIES):
     config = config or AppSettings.load()
     if not config.pihole_enabled:
         return {"status": "disabled", "processed": 0, "matched": 0, "unmatched": 0}
