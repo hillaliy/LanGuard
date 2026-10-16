@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.24.0 - 2026-10-16
+
 - Serialized network scans and DNS integration synchronization across backend and scheduler containers to prevent SQLite lock failures during overlapping writes.
 - Refreshed Home Map rooms with selectable room icons, draggable grid positions, adjustable room widths with container-aware content, compact device health summaries, an Attention filter, structured device tooltips, responsive neutral styling, and layout metadata that remains compatible with existing saved maps.
 - Displayed the scheduler-owned next network scan time on the dashboard, including live scanning and stale-scheduler states, with automatic interval-change updates.
