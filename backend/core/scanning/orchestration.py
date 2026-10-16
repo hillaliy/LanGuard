@@ -4,11 +4,18 @@ from django.conf import settings
 from django.utils import timezone
 import scapy.all as scapy
 
+from ..database_writes import serialized_database_write
 from ..models import AppSettings, Device, ScanRun
 from ..device_merging import logical_online_device_count
 from ..user_messages import scan_error_message
 from .discovery import discover_hostname_hints, ssdp_metadata_map
-from .lifecycle import claim_scan_run, scan_failure_diagnostics, touch_scan_run
+from .lifecycle import (
+    ScanAlreadyRunning,
+    active_scan_run,
+    claim_scan_run,
+    scan_failure_diagnostics,
+    touch_scan_run,
+)
 from .network import discover_devices, get_default_gateway_ip, local_scanner_interface
 from .presence import clear_stale_gateways, mark_missing_devices_offline
 from .ranges import validate_ip_ranges
@@ -20,6 +27,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
+    active_scan = active_scan_run()
+    if active_scan:
+        raise ScanAlreadyRunning(active_scan)
+
     scan_ranges = validate_ip_ranges(ip_ranges)
     primary_range = scan_ranges[0]
     config = AppSettings.load()
@@ -29,7 +40,19 @@ def scan(ip_ranges, *, source=ScanRun.Source.COMMAND):
         for network_range in scan_ranges
         if network_range in configured_labels
     }
-    scan_run = claim_scan_run(scan_ranges, scan_range_labels, source)
+    with serialized_database_write():
+        scan_run = claim_scan_run(scan_ranges, scan_range_labels, source)
+    with serialized_database_write():
+        return _execute_scan(
+            scan_ranges,
+            scan_range_labels,
+            primary_range,
+            config,
+            scan_run,
+        )
+
+
+def _execute_scan(scan_ranges, scan_range_labels, primary_range, config, scan_run):
     if (
         scan_run.ip_range != primary_range
         or scan_run.scan_ranges != scan_ranges

@@ -12,6 +12,7 @@ from django.db.models import F
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
+from ..database_writes import serialized_database_write
 from ..models import (
     AdGuardUnmatchedClient,
     AppSettings,
@@ -335,6 +336,11 @@ def cleanup_adguard_activity(retention_days, provider="adguard"):
 
 
 def sync_adguard_query_log(config=None, max_entries=MAX_SYNC_ENTRIES):
+    with serialized_database_write():
+        return _sync_adguard_query_log(config=config, max_entries=max_entries)
+
+
+def _sync_adguard_query_log(config=None, max_entries=MAX_SYNC_ENTRIES):
     config = config or AppSettings.load()
     if not config.adguard_enabled:
         return {"status": "disabled", "processed": 0, "matched": 0, "unmatched": 0}

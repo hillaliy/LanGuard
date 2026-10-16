@@ -151,6 +151,19 @@ class ScanCommandTests(TestCase):
             source=ScanRun.Source.COMMAND,
         )
 class ScanLockTests(TestCase):
+    @patch("core.scanning.orchestration.serialized_database_write")
+    def test_active_scan_is_rejected_before_waiting_for_database_writer(self, write_lock):
+        active_scan = ScanRun.objects.create(
+            ip_range="192.168.1.0/24",
+            source=ScanRun.Source.MANUAL,
+        )
+
+        with self.assertRaises(ScanAlreadyRunning) as context:
+            scan(["192.168.1.0/24"], source=ScanRun.Source.SCHEDULED)
+
+        self.assertEqual(context.exception.active_scan.id, active_scan.id)
+        write_lock.assert_not_called()
+
     def test_only_one_network_scan_can_be_claimed(self):
         first_scan = claim_scan_run(
             ["192.168.1.0/24"],
