@@ -2,7 +2,7 @@ import { Badge, Box, Group, SimpleGrid, Stack, Table, Text, Title } from '@manti
 
 import { formatDate } from '../utils/date';
 import { formatRoleLabel } from '../utils/device';
-import { DeviceField } from './DeviceDetailFields';
+import { DeviceField, formatAvailabilityDuration } from './DeviceDetailFields';
 
 function statusColor(status) {
   if (status === 'up') return 'teal';
@@ -16,6 +16,20 @@ export default function DeviceSnmpInventory({ device, timeZone }) {
   const interfaces = Array.isArray(inventory.interfaces) ? inventory.interfaces : [];
   const neighbors = Array.isArray(inventory.neighbors) ? inventory.neighbors : [];
   if (!Object.keys(inventory).length) return null;
+  const uptimeTicks = system.uptime_ticks;
+  const hasUptime = uptimeTicks !== null && uptimeTicks !== undefined
+    && String(uptimeTicks).trim() !== ''
+    && Number.isFinite(Number(uptimeTicks)) && Number(uptimeTicks) >= 0;
+  const fields = [
+    ['System name', system.name !== device.hostname ? system.name : null],
+    ['Vendor', inventory.vendor !== device.vendor ? inventory.vendor : null],
+    ['Location', system.location],
+    ['Contact', system.contact],
+    ['SNMP uptime (at last query)', hasUptime
+      ? formatAvailabilityDuration(Number(uptimeTicks) / 100) : null],
+    ['Last queried', device.snmp_last_seen ? formatDate(device.snmp_last_seen, timeZone) : null],
+  ].filter(([, value]) => value !== null && value !== undefined && String(value).trim());
+  if (!fields.length && !system.description && !interfaces.length && !neighbors.length) return null;
 
   return (
     <section className="device-detail-section device-snmp-section">
@@ -26,12 +40,11 @@ export default function DeviceSnmpInventory({ device, timeZone }) {
         </Badge>
       </Group>
 
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mt="md">
-        <DeviceField label="System name" value={system.name || '-'} />
-        <DeviceField label="Vendor" value={inventory.vendor || '-'} />
-        <DeviceField label="Location" value={system.location || '-'} />
-        <DeviceField label="Last queried" value={formatDate(device.snmp_last_seen, timeZone)} />
-      </SimpleGrid>
+      {fields.length > 0 && (
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} mt="md">
+          {fields.map(([label, value]) => <DeviceField key={label} label={label} value={value} />)}
+        </SimpleGrid>
+      )}
       {system.description && (
         <Box mt="md">
           <Text size="xs" c="dimmed">System description</Text>
@@ -39,9 +52,9 @@ export default function DeviceSnmpInventory({ device, timeZone }) {
         </Box>
       )}
 
-      <Stack gap="xs" mt="lg">
-        <Text fw={700} size="sm">Interfaces</Text>
-        {interfaces.length ? (
+      {interfaces.length > 0 && (
+        <Stack gap="xs" mt="lg">
+          <Text fw={700} size="sm">Interfaces</Text>
           <Table.ScrollContainer minWidth={720}>
             <Table verticalSpacing="xs" highlightOnHover>
               <Table.Thead>
@@ -75,10 +88,8 @@ export default function DeviceSnmpInventory({ device, timeZone }) {
               </Table.Tbody>
             </Table>
           </Table.ScrollContainer>
-        ) : (
-          <Text size="sm" c="dimmed">No interface table was reported.</Text>
-        )}
-      </Stack>
+        </Stack>
+      )}
 
       {neighbors.length > 0 && (
         <Stack gap="xs" mt="lg">

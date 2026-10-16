@@ -16,6 +16,7 @@ import {
   RiskBadge,
 } from '../components/DeviceBadges';
 import DeviceIconStack from '../components/DeviceIconStack';
+import DevicePresenceStatus from '../components/DevicePresenceStatus';
 import { displayDeviceName } from '../utils/device';
 
 export default function DeviceDetailsHeader({
@@ -64,25 +65,21 @@ export default function DeviceDetailsHeader({
           </Group>
           {device && (
             <Stack className="device-detail-subtitle" gap={0}>
-              {String(device.hostname || '').trim() && (
-                <Text c="dimmed">{device.hostname}</Text>
-              )}
               {String(device.vendor || '').trim() && (
                 <Text c="dimmed">{device.vendor}</Text>
               )}
-              {!String(device.hostname || '').trim() && !String(device.vendor || '').trim() && (
+              {!String(device.vendor || '').trim() && (
                 <Text c="dimmed">-</Text>
               )}
             </Stack>
           )}
           {currentStatus && (
-            <Group gap="xs" mt={4}>
-              <span className={`status-dot ${currentStatus.dot}`} />
-              <Text size="sm">{currentStatus.label}</Text>
-              {device?.status_source_display && (
-                <Text size="sm" c="dimmed">via {device.status_source_display}</Text>
-              )}
-            </Group>
+            <Box mt={4}>
+              <DevicePresenceStatus
+                device={{ ...device, status: currentStatus.value }}
+                inline
+              />
+            </Box>
           )}
         </Box>
       </Group>

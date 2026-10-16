@@ -229,13 +229,13 @@ export default function DeviceDetailsView({
               {...form.controller}
               activeUrl={activeUrl}
               canEditDevices={canEditDevices}
-              currentStatus={currentStatus}
               deleteConfirm={deleteConfirm}
               detectedWebUrl={detectedWebUrl}
               detectingWebUrl={detectingWebUrl}
               device={device}
               roomOptions={roomOptions}
               onSeparateInterface={interfaces.confirmSeparate}
+              onShowHistory={() => setActiveDeviceTab('history')}
               onError={onError}
               relatedLinks={relatedLinks}
               setRelatedLinks={setRelatedLinks}

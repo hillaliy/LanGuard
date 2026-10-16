@@ -13,6 +13,7 @@ from ..models import (
     Device,
     DevicePort,
     DeviceRelatedLink,
+    NetworkEvent,
 )
 from ..device_merging import device_interfaces, effective_device_state
 from ..port_guidance import port_attention, port_guidance
@@ -410,6 +411,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     last_status_check = UTCDateTimeField(read_only=True)
     last_port_scan = UTCDateTimeField(read_only=True)
     snmp_last_seen = UTCDateTimeField(read_only=True)
+    last_network_change = serializers.SerializerMethodField()
     identity_conflict_detected_at = UTCDateTimeField(read_only=True)
     open_ports = serializers.SerializerMethodField()
     risk_level = serializers.SerializerMethodField()
@@ -484,7 +486,32 @@ class DeviceSerializer(serializers.ModelSerializer):
             data.pop("snmp_last_seen", None)
         if not self.context.get("include_interfaces"):
             data.pop("interfaces", None)
+            data.pop("last_network_change", None)
         return data
+
+    @extend_schema_field(serializers.DictField(allow_null=True))
+    def get_last_network_change(self, obj):
+        if not self.context.get("include_interfaces"):
+            return None
+        event = NetworkEvent.objects.filter(
+            device_id__in=[interface.pk for interface in device_interfaces(obj)],
+            event_type__in=[
+                NetworkEvent.EventType.IP_CHANGED,
+                NetworkEvent.EventType.PORT_OPENED,
+                NetworkEvent.EventType.PORT_CLOSED,
+                NetworkEvent.EventType.DEVICE_INTERFACES_MERGED,
+                NetworkEvent.EventType.DEVICE_INTERFACE_SEPARATED,
+            ],
+        ).order_by("-created_at", "-pk").first()
+        if event is None:
+            return None
+        return {
+            "id": event.pk,
+            "event_type": event.event_type,
+            "event_type_display": event.get_event_type_display(),
+            "message": event.message,
+            "created_at": UTCDateTimeField().to_representation(event.created_at),
+        }
 
     @extend_schema_field(serializers.IntegerField)
     def get_interface_count(self, obj):
