@@ -419,6 +419,65 @@ class DeviceApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["counters"]["open_ports"], 1)
+        self.assertEqual(response.data["counters"]["devices_with_open_ports"], 1)
+
+    def test_open_ports_filter_counts_logical_devices_and_all_interfaces(self):
+        DevicePort.objects.create(device=self.device, port=80, protocol="tcp", open=True)
+        DevicePort.objects.create(device=self.device, port=443, protocol="tcp", open=True)
+        secondary = Device.objects.create(
+            name="Laptop Wi-Fi", ip="192.168.1.21", mac="aa:aa:aa:aa:aa:ab",
+            merged_into=self.device,
+        )
+        DevicePort.objects.create(device=secondary, port=8080, protocol="tcp", open=True)
+        root = Device.objects.create(
+            name="Server", ip="192.168.1.30", mac="aa:aa:aa:aa:aa:ac",
+        )
+        child = Device.objects.create(
+            name="Server Wi-Fi", ip="192.168.1.31", mac="aa:aa:aa:aa:aa:ad",
+            merged_into=root,
+        )
+        DevicePort.objects.create(device=child, port=22, protocol="tcp", open=True)
+        closed = Device.objects.create(
+            name="Closed ports", ip="192.168.1.40", mac="aa:aa:aa:aa:aa:ae",
+        )
+        DevicePort.objects.create(device=closed, port=80, protocol="tcp", open=False)
+
+        response = self.client.get("/api/v1/device/", {"has_open_ports": "true", "limit": 1})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["pagination"]["count"], 2)
+        self.assertEqual(len(response.data["data"]), 1)
+        self.assertEqual(response.data["counters"]["devices_with_open_ports"], 2)
+        self.assertEqual(response.data["counters"]["open_ports"], 4)
+
+        merged_match = self.client.get(
+            "/api/v1/device/", {"has_open_ports": "true", "open_port": "22"}
+        )
+        self.assertEqual([item["id"] for item in merged_match.data["data"]], [root.pk])
+        no_open_ports = self.client.get("/api/v1/device/", {"has_open_ports": "false"})
+        self.assertEqual([item["id"] for item in no_open_ports.data["data"]], [closed.pk])
+
+    def test_open_ports_counter_and_default_filter_include_visitors_not_archives(self):
+        visitor = Device.objects.create(
+            name="Visitor", ip="192.168.1.40", mac="aa:aa:aa:aa:aa:40",
+            known=True, is_visitor=True,
+        )
+        archived = Device.objects.create(
+            name="Archived", ip="192.168.1.50", mac="aa:aa:aa:aa:aa:50", archived=True,
+        )
+        for device in [visitor, archived]:
+            DevicePort.objects.create(device=device, port=443, protocol="tcp", open=True)
+        response = self.client.get("/api/v1/device/", {"has_open_ports": "true"})
+        self.assertEqual([item["id"] for item in response.data["data"]], [visitor.pk])
+        self.assertEqual(response.data["counters"]["devices_with_open_ports"], 1)
+        archived_response = self.client.get(
+            "/api/v1/device/", {"has_open_ports": "true", "archived": "true"}
+        )
+        self.assertEqual([item["id"] for item in archived_response.data["data"]], [archived.pk])
+
+    def test_open_ports_filter_rejects_invalid_boolean(self):
+        response = self.client.get("/api/v1/device/", {"has_open_ports": "invalid"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("has_open_ports", response.data)
 
     def test_device_endpoint_separates_visitors_from_primary_counters(self):
         online_visitor = Device.objects.create(

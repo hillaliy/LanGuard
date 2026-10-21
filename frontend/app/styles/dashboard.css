@@ -26,6 +26,24 @@
   color: #228be6;
 }
 
+.dashboard-status-card-link {
+  appearance: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.dashboard-status-card-link:hover {
+  border-color: var(--mantine-color-blue-5);
+}
+
+.dashboard-status-card-link:focus-visible {
+  outline: 2px solid var(--mantine-color-blue-5);
+  outline-offset: 3px;
+}
+
 .dashboard-status-icon.green {
   background: rgba(64, 192, 87, 0.18);
   color: #40c057;

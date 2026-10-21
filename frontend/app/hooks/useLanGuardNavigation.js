@@ -124,23 +124,33 @@ export function useLanGuardNavigation({
     window.setTimeout(() => window.scrollTo({ top: 0 }), 0);
   }
 
-  function openAttentionDevices() {
+  function openFilteredDevices(status) {
     tableStateRef.current = {
       ...tableStateRef.current,
       search: '',
-      deviceStatus: 'attention',
+      deviceStatus: status,
+      inventoryView: 'table',
       networkRangeFilter: [],
       firstSeenPeriod: '',
       homeBoxLinkStatus: '',
       deviceOffset: 0,
     };
     setSearch('');
-    setDeviceStatus('attention');
+    setDeviceStatus(status);
+    setInventoryView('table');
     setNetworkRangeFilter([]);
     setFirstSeenPeriod('');
     setHomeBoxLinkStatus('');
     setDeviceOffset(0);
     navigateToView('devices');
+  }
+
+  function openAttentionDevices() {
+    openFilteredDevices('attention');
+  }
+
+  function openOpenPortDevices() {
+    openFilteredDevices('open_ports');
   }
 
   function openRecentChanges() {
@@ -310,7 +320,7 @@ export function useLanGuardNavigation({
   }, [devicePageId, devicesLength, inventoryView, loading, mainView]);
 
   return {
-    mainView, devicePageId, openDevicePage, navigateToView, openAttentionDevices,
+    mainView, devicePageId, openDevicePage, navigateToView, openAttentionDevices, openOpenPortDevices,
     openRecentChanges, returnFromDevicePage, returnAfterDeviceDeleted,
   };
 }

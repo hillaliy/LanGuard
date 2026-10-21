@@ -17,12 +17,13 @@ export default function DashboardView({
   devices,
   onSelectDevice,
   onOpenAttentionDevices,
+  onOpenOpenPortDevices,
   onOpenRecentChanges,
   onError,
 }) {
   return (
     <>
-      <DashboardStatusCards counters={counters} />
+      <DashboardStatusCards counters={counters} onOpenOpenPortDevices={onOpenOpenPortDevices} />
 
       <DashboardSummaryCards
         appSettings={appSettings}

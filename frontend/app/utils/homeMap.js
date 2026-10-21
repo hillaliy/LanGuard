@@ -56,7 +56,7 @@ function buildRoomSections(devices) {
 }
 
 export function homeMapDeviceStatusClass(device) {
-  const risk = String(device.risk || '').toLowerCase();
+  const risk = String(device.risk_level || device.risk || '').toLowerCase();
   if (risk === 'high') return 'high-risk';
   if (risk === 'medium') return 'medium-risk';
   if (!device.online) return 'offline';
@@ -64,18 +64,14 @@ export function homeMapDeviceStatusClass(device) {
 }
 
 function homeMapAttentionCount(devices = []) {
-  return devices.filter((device) => {
-    const risk = String(device.risk || '').toLowerCase();
-    return !device.online || risk === 'medium' || risk === 'high';
-  }).length;
+  return devices.filter((device) => device.needs_attention).length;
 }
 
 function homeMapDeviceMatchesFilter(device, filter) {
-  const risk = String(device.risk || '').toLowerCase();
   if (filter === 'online') return Boolean(device.online);
   if (filter === 'offline') return !device.online;
   if (filter === 'attention') {
-    return !device.online || risk === 'medium' || risk === 'high';
+    return Boolean(device.needs_attention);
   }
   return true;
 }
