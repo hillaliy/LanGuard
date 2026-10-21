@@ -6,7 +6,7 @@ import { homeMapDeviceStatusClass } from '../utils/homeMap';
 
 export default function HomeMapDeviceButton({ device, onSelectDevice }) {
   const status = deviceStatus(device);
-  const risk = String(device.risk || '').toLowerCase();
+  const risk = String(device.risk_level || device.risk || '').toLowerCase();
   const vendor = String(device.vendor || '').trim();
   const hostname = String(device.hostname || '').trim();
   const deviceName = displayDeviceName(device);

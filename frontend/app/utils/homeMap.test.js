@@ -6,15 +6,40 @@ import {
   buildHomeMapRooms,
   filterHomeMapRoomTree,
   getHomeMapVisualDropIndex,
+  homeMapDeviceStatusClass,
   moveHomeMapRoomToSlot,
   normalizeHomeMapLayout,
 } from './homeMap.js';
 
 const devices = [
-  { id: 1, name: 'Online laptop', room: 'Office', online: true, risk: 'low' },
-  { id: 2, name: 'Offline printer', room: 'Office', online: false, risk: 'low' },
-  { id: 3, name: 'Risky server', room: 'Lab', online: true, risk: 'high' },
+  { id: 1, name: 'Online laptop', room: 'Office', online: true, risk_level: 'low', needs_attention: false },
+  { id: 2, name: 'Offline printer', room: 'Office', online: false, risk_level: 'low', needs_attention: true },
+  { id: 3, name: 'Risky server', room: 'Lab', online: true, risk_level: 'high', needs_attention: true },
 ];
+
+test('attention uses server decisions independently of offline status and risk', () => {
+  const inventory = [
+    { id: 1, room: 'Office', online: false, needs_attention: false, risk_level: 'low' },
+    { id: 2, room: 'Office', online: false, needs_attention: true, risk_level: 'low' },
+    { id: 3, room: 'Office', online: true, needs_attention: true, risk_level: 'high' },
+    { id: 4, room: 'Office', online: true, needs_attention: false, risk_level: 'high', attention_acknowledged: true },
+    { id: 5, room: 'Office', online: true, needs_attention: true, risk_level: 'low' },
+    { id: 6, room: 'Office', online: true, needs_attention: true, is_visitor: true },
+  ];
+  const attention = buildHomeMapRooms(inventory, 'attention')[0];
+  const offline = buildHomeMapRooms(inventory, 'offline')[0];
+  assert.deepEqual(attention.visibleDevices.map((device) => device.id), [2, 3, 5]);
+  assert.deepEqual(offline.visibleDevices.map((device) => device.id), [1, 2]);
+  assert.equal(attention.attentionCount, 3);
+  assert.equal(offline.attentionCount, 3);
+  assert.equal(attention.devices.length, 5);
+});
+
+test('home map risk indicators read the API risk_level field', () => {
+  assert.equal(homeMapDeviceStatusClass({ online: true, risk_level: 'high' }), 'high-risk');
+  assert.equal(homeMapDeviceStatusClass({ online: true, risk_level: 'medium' }), 'medium-risk');
+  assert.equal(homeMapDeviceStatusClass({ online: false, risk_level: 'low' }), 'offline');
+});
 
 test('buildHomeMapRooms keeps full room counts while filtering visible devices', () => {
   const rooms = buildHomeMapRooms(devices, 'attention');
