@@ -1,13 +1,19 @@
 import { Box, Paper, Text, ThemeIcon } from '@mantine/core';
 import { IconDeviceDesktop, IconNetwork, IconQuestionMark, IconWifi } from '@tabler/icons-react';
 
-function DashboardStatusCard({ icon, label, value, secondaryItems = [], color }) {
+function DashboardStatusCard({ icon, label, value, secondaryItems = [], color, onClick }) {
   const visibleSecondaryItems = secondaryItems
     .map((item) => ({ ...item, value: Number(item.value) || 0 }))
-    .filter((item) => item.value > 0);
+    .filter((item) => item.value > 0 || item.showZero);
 
   return (
-    <Paper className="dashboard-status-card">
+    <Paper
+      component={onClick ? 'button' : 'div'}
+      type={onClick ? 'button' : undefined}
+      className={`dashboard-status-card${onClick ? ' dashboard-status-card-link' : ''}`}
+      onClick={onClick}
+      aria-label={onClick ? 'Show devices with open ports' : undefined}
+    >
       <ThemeIcon
         className={`dashboard-status-icon ${color}`}
         color={color}
@@ -24,7 +30,7 @@ function DashboardStatusCard({ icon, label, value, secondaryItems = [], color })
           <Text component="div" className="dashboard-status-secondary" c="dimmed" fw={700}>
             {visibleSecondaryItems.map((item) => (
               <span className="dashboard-status-secondary-item" key={item.singular}>
-                {item.value.toLocaleString()} {item.value === 1 ? item.singular : item.plural}
+                {item.prefix}{item.value.toLocaleString()} {item.value === 1 ? item.singular : item.plural}
               </span>
             ))}
           </Text>
@@ -34,7 +40,7 @@ function DashboardStatusCard({ icon, label, value, secondaryItems = [], color })
   );
 }
 
-export default function DashboardStatusCards({ counters = {} }) {
+export default function DashboardStatusCards({ counters = {}, onOpenOpenPortDevices }) {
   return (
     <div className="dashboard-status-grid">
       <DashboardStatusCard
@@ -66,7 +72,11 @@ export default function DashboardStatusCards({ counters = {} }) {
         icon={<IconNetwork size={30} />}
         label="Open Ports"
         value={counters.open_ports ?? 0}
+        secondaryItems={[
+          { value: counters.devices_with_open_ports, singular: 'device', plural: 'devices', prefix: 'in ', showZero: true },
+        ]}
         color="purple"
+        onClick={onOpenOpenPortDevices}
       />
     </div>
   );

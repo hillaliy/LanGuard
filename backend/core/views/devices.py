@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from drf_spectacular.utils import OpenApiTypes, extend_schema, inline_serializer
@@ -323,6 +323,16 @@ def device_availability_payload(device_item, period, now=None):
     }
 
 
+def filter_devices_by_open_ports(devices, has_open_ports=True):
+    open_ports = DevicePort.objects.filter(
+        Q(device_id=OuterRef("pk")) | Q(device__merged_into_id=OuterRef("pk")),
+        open=True,
+    )
+    return devices.alias(_has_open_ports=Exists(open_ports)).filter(
+        _has_open_ports=has_open_ports
+    )
+
+
 def active_device_counters():
     active_devices = Device.objects.prefetch_related("merged_interfaces").filter(
         archived=False,
@@ -345,6 +355,7 @@ def active_device_counters():
             open=True,
             device__archived=False,
         ).count(),
+        "devices_with_open_ports": filter_devices_by_open_ports(active_devices).count(),
         "visitor_devices": len(visitor_states),
         "online_visitors": sum(
             item["status"] != Device.Status.OFFLINE for item in visitor_states
@@ -399,6 +410,7 @@ def device(request):
             is_visitor = parse_bool_param(request.query_params, "is_visitor")
             search = request.query_params.get("search")
             open_port = request.query_params.get("open_port")
+            has_open_ports = parse_bool_param(request.query_params, "has_open_ports")
             first_seen = request.query_params.get("first_seen")
             network_ranges = request.query_params.get("network_ranges")
             homebox_linked = parse_bool_param(request.query_params, "homebox_linked")
@@ -430,6 +442,8 @@ def device(request):
                     | Q(merged_interfaces__hostname__icontains=search)
                     | Q(merged_interfaces__vendor__icontains=search)
                 ).distinct()
+            if has_open_ports is not None:
+                devices = filter_devices_by_open_ports(devices, has_open_ports)
             if open_port:
                 port = parse_int_param(
                     request.query_params,

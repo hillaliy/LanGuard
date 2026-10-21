@@ -126,6 +126,7 @@ export default function AppRouteContent({ controller }) {
         devices={c.mapDevices}
         onSelectDevice={c.openDevicePage}
         onOpenAttentionDevices={c.openAttentionDevices}
+        onOpenOpenPortDevices={c.openOpenPortDevices}
         onOpenRecentChanges={c.openRecentChanges}
         onError={showErrorNotification}
       />

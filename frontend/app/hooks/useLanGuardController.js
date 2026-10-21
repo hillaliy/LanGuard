@@ -84,12 +84,13 @@ export function useLanGuardController({
         search: currentTableState.search,
         status:
           currentTableState.deviceStatus
-            && !['attention', 'new', 'visitors', 'archived'].includes(
+            && !['attention', 'open_ports', 'new', 'visitors', 'archived'].includes(
               currentTableState.deviceStatus
             )
             ? currentTableState.deviceStatus
             : undefined,
         needs_attention: currentTableState.deviceStatus === 'attention' ? 'true' : undefined,
+        has_open_ports: currentTableState.deviceStatus === 'open_ports' ? 'true' : undefined,
         known: currentTableState.deviceStatus === 'new' ? 'false' : undefined,
         is_visitor: currentTableState.deviceStatus === 'visitors' ? 'true' : undefined,
         archived: currentTableState.deviceStatus === 'archived' ? 'true' : undefined,
@@ -313,6 +314,7 @@ export function useLanGuardController({
     openDevicePage: navigation.openDevicePage,
     navigateToView: navigation.navigateToView,
     openAttentionDevices: navigation.openAttentionDevices,
+    openOpenPortDevices: navigation.openOpenPortDevices,
     openRecentChanges: navigation.openRecentChanges,
     returnFromDevicePage: navigation.returnFromDevicePage,
     returnAfterDeviceDeleted: navigation.returnAfterDeviceDeleted,

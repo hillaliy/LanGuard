@@ -13,6 +13,7 @@ const deviceStatusOptions = [
   { value: 'online', label: 'Online' },
   { value: 'offline', label: 'Offline' },
   { value: 'attention', label: 'Needs attention' },
+  { value: 'open_ports', label: 'Open ports' },
   { value: 'new', label: 'New devices' },
   { value: 'visitors', label: 'Visitors' },
   { value: 'archived', label: 'Archived' },
