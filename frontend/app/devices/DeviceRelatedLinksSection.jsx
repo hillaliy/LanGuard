@@ -166,23 +166,33 @@ export default function DeviceRelatedLinksSection({
         <Stack gap="xs">
           {links.map((link, index) => (
             <Group key={link.id} className="device-related-link-row" wrap="nowrap">
-              <UnstyledButton
-                component="a"
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="device-related-link-anchor"
-                aria-label={`Open ${link.label} in a new tab`}
+              <Tooltip
+                label={link.url}
+                disabled={editing}
+                events={{ hover: true, focus: true, touch: false }}
+                multiline
+                withArrow
+                maw="min(360px, calc(100vw - 32px))"
+                styles={{ tooltip: { overflowWrap: 'anywhere' } }}
               >
-                <Box className="device-related-link-icon">
-                  <IconWorld size={19} aria-hidden="true" />
-                </Box>
-                <Box className="device-related-link-copy">
-                  <Text fw={700} truncate>{link.label}</Text>
-                  <Text size="xs" c="dimmed" truncate>{link.url}</Text>
-                </Box>
-                <IconExternalLink size={17} aria-hidden="true" />
-              </UnstyledButton>
+                <UnstyledButton
+                  component="a"
+                  href={link.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="device-related-link-anchor"
+                  aria-label={`Open ${link.label} in a new tab`}
+                >
+                  <Box className="device-related-link-icon">
+                    <IconWorld size={19} aria-hidden="true" />
+                  </Box>
+                  <Box className="device-related-link-copy">
+                    <Text fw={700} truncate>{link.label}</Text>
+                    {editing && <Text size="xs" c="dimmed" truncate>{link.url}</Text>}
+                  </Box>
+                  <IconExternalLink size={17} aria-hidden="true" />
+                </UnstyledButton>
+              </Tooltip>
               {editing && (
                 <Group gap={4} wrap="nowrap" className="device-related-link-actions">
                   <Tooltip label="Move link up">
