@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 1.25.0 - 2026-10-24
+
+- Unified device-header and interface-table presence displays with compact icons, clearer discovery descriptions, and Likely sleeping labels for inferred sleep. Kept detailed grace-period and other status explanations beside the status while removing redundant bottom-of-page messages.
+- Removed repeated device identity and network fields, displayed single-interface addresses and ports once in Network, and limited the Network interfaces table to devices with multiple interfaces.
+- Displayed relative interface Last seen times with full timestamp tooltips and automatic minute-by-minute updates.
+- Added the latest retained IP, port, or interface configuration change to device details with a History shortcut, including merged-interface events without allowing routine presence events to hide configuration changes.
+- Displayed available SNMP agent uptime at the last query and contact information, while hiding empty inventory sections and duplicate system-name and vendor fields.
+- Added an Open ports device filter and a clickable dashboard port card with a separate count of devices with open ports. Counted merged interfaces as one logical device and cleared previous filters when navigating from the dashboard.
+- Fixed Home Map Attention filtering and room counts to use the server's needs_attention decision, respecting acknowledged alerts and avoiding treating every offline device as requiring attention. Corrected map risk indicators to read the API risk_level field.
+- Hid related-link URLs in device view mode, retaining labels and icons with wrapping URL tooltips on hover and keyboard focus. Kept URLs visible during editing.
+- Added an independent DHCPv4 lease source integration for read-only dnsmasq, Kea memfile CSV, and ISC DHCP lease files, with admin-only source testing, manual and scheduled synchronization, opt-in Unknown-device creation, and sync summaries and errors.
+- Preserved Known-device identity, stronger controller hostnames, newer IP observations, and identity-conflict evidence during DHCP imports. Handled journal updates, releases, expiry, infinite leases, ambiguous MAC records, malformed files, and bounded file reads without inferring Online presence or deleting devices on lease expiry.
+- Added Network controllers to integration settings with DHCP source controls, dedicated router and address-book icons, and save support. Ordered integration categories as Network services, Infrastructure, and Network controllers, and documented read-only mounts and remote-file-copy setup.
+- Updated Mantine core, hooks, and notifications from 9.7.1 to 9.7.2, Next.js and eslint-config-next from 16.4.0 to 16.4.2, React and React DOM from 19.3.0 to 19.3.1, and Ruff from 0.16.10 to 0.17.1.
+
 ## 1.24.0 - 2026-10-16
 
 - Serialized network scans and DNS integration synchronization across backend and scheduler containers to prevent SQLite lock failures during overlapping writes.
