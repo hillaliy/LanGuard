@@ -1,4 +1,5 @@
 from django.urls import path
+from .views.dhcp import sync_dhcp_now, test_dhcp_source
 from .views.homebox import test_homebox, search_homebox
 from .views.docker import (
     docker_device_context,
@@ -92,6 +93,8 @@ urlpatterns = [
     path("integrations/adguard/test/", test_adguard, name="test-adguard"),
     path("integrations/adguard/sync/", sync_adguard, name="sync-adguard"),
     path("integrations/pihole/test/", test_pihole, name="test-pihole"),
+    path("integrations/dhcp/test/", test_dhcp_source, name="test-dhcp-source"),
+    path("integrations/dhcp/sync/", sync_dhcp_now, name="sync-dhcp-source"),
     path("integrations/pihole/sync/", sync_pihole_now, name="sync-pihole"),
     path(
         "integrations/technitium/test/",

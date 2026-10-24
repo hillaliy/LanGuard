@@ -2,8 +2,10 @@ import { useState } from 'react';
 import { notifications } from '@mantine/notifications';
 import { apiRequest } from '../api';
 import { showErrorNotification, showServerNotification } from '../utils/notifications';
+import useDhcpIntegrationSettings from './useDhcpIntegrationSettings';
 
 export default function useIntegrationSettings({ onSaved, reloadSettings, setError, timeZone }) {
+  const dhcp = useDhcpIntegrationSettings({ runAction, reloadSettings });
   const [adguardEnabled, setAdguardEnabled] = useState(false);
   const [adguardConfigured, setAdguardConfigured] = useState(false);
   const [adguardUrl, setAdguardUrl] = useState('');
@@ -53,6 +55,7 @@ export default function useIntegrationSettings({ onSaved, reloadSettings, setErr
   const [testingHomebox, setTestingHomebox] = useState(false);
 
   function hydrate(data) {
+    dhcp.hydrate(data);
     setAdguardEnabled(Boolean(data.adguard_enabled));
     setAdguardConfigured(Boolean(data.adguard_configured));
     setAdguardUrl(data.adguard_url || '');
@@ -95,6 +98,7 @@ export default function useIntegrationSettings({ onSaved, reloadSettings, setErr
 
   function buildPayload() {
     const payload = {
+      ...dhcp.buildPayload(),
       adguard_enabled: adguardEnabled,
       adguard_url: adguardUrl.trim(),
       adguard_username: adguardUsername.trim(),
@@ -227,6 +231,7 @@ export default function useIntegrationSettings({ onSaved, reloadSettings, setErr
     buildPayload,
     integrationCategory,
     controller: {
+      ...dhcp.controller,
       adguardConfigured, adguardEnabled, adguardLastError, adguardLastSyncAt,
       adguardPassword, adguardRetentionDays, adguardSyncInterval, adguardUrl,
       adguardUsername, homeboxConfigured, homeboxEnabled, homeboxToken, homeboxUrl,

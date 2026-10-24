@@ -51,6 +51,7 @@ class Device(models.Model):
         IMPORTED = "imported", "Imported inventory"
         PIHOLE = "pihole", "Pi-hole DHCP"
         TECHNITIUM = "technitium", "Technitium DHCP"
+        DHCP = "dhcp", "DHCP lease source"
 
     class Status(models.TextChoices):
         ONLINE = "online", "Online"
@@ -811,6 +812,18 @@ class AppSettings(models.Model):
     technitium_last_query_row = models.BigIntegerField(blank=True, null=True)
     technitium_last_sync_summary = models.JSONField(default=dict, blank=True)
     technitium_last_error = models.TextField(blank=True, default="")
+    dhcp_enabled = models.BooleanField(default=False)
+    dhcp_format = models.CharField(
+        max_length=16,
+        choices=(("dnsmasq", "dnsmasq"), ("kea", "Kea DHCPv4"), ("isc", "ISC DHCPv4")),
+        default="dnsmasq",
+    )
+    dhcp_lease_file = models.CharField(max_length=512, blank=True, default="")
+    dhcp_create_devices = models.BooleanField(default=False)
+    dhcp_sync_interval = models.PositiveIntegerField(default=5)
+    dhcp_last_sync_at = models.DateTimeField(blank=True, null=True)
+    dhcp_last_sync_summary = models.JSONField(default=dict, blank=True)
+    dhcp_last_error = models.TextField(blank=True, default="")
     speedtest_tracker_enabled = models.BooleanField(default=False)
     homebox_enabled = models.BooleanField(default=False)
     homebox_url = models.URLField(max_length=2048, blank=True, default="")

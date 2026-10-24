@@ -192,6 +192,10 @@ def scan_status(request):
                         app_config.technitium_url and app_config.technitium_api_token
                     ),
                 },
+                "dhcp": {
+                    "enabled": app_config.dhcp_enabled,
+                    "configured": bool(app_config.dhcp_lease_file),
+                },
                 "speedtest_tracker": {
                     "enabled": app_config.speedtest_tracker_enabled,
                     "configured": bool(

@@ -14,6 +14,8 @@ services:
     volumes:
       - languard_database:/data
       - languard_static:/static
+      # Optional DHCP lease source (mount the same directory in backend and scanner):
+      # - ./dhcp:/data/dhcp:ro
     healthcheck:
       test: ["CMD", "python", "-c", "import os, urllib.request; port = os.environ.get('BACKEND_LISTEN_PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/api/v1/health/', timeout=3).read()"]
       interval: 10s
@@ -38,6 +40,7 @@ services:
       - languard_database:/data
       - languard_static:/static
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # - ./dhcp:/data/dhcp:ro
     restart: unless-stopped
     depends_on:
       backend:

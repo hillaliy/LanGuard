@@ -19,6 +19,8 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     adguard_last_sync_at = UTCDateTimeField(read_only=True)
     pihole_last_sync_at = UTCDateTimeField(read_only=True)
     technitium_last_sync_at = UTCDateTimeField(read_only=True)
+    dhcp_last_sync_at = UTCDateTimeField(read_only=True)
+    dhcp_configured = serializers.SerializerMethodField()
     scan_max_hosts = serializers.SerializerMethodField()
     snmp_max_devices = serializers.SerializerMethodField()
     discord_configured = serializers.SerializerMethodField()
@@ -199,6 +201,15 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "technitium_last_sync_at",
             "technitium_last_sync_summary",
             "technitium_last_error",
+            "dhcp_enabled",
+            "dhcp_format",
+            "dhcp_lease_file",
+            "dhcp_create_devices",
+            "dhcp_sync_interval",
+            "dhcp_last_sync_at",
+            "dhcp_last_sync_summary",
+            "dhcp_last_error",
+            "dhcp_configured",
             "speedtest_tracker_enabled",
             "homebox_enabled",
             "homebox_url",
@@ -226,6 +237,8 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "technitium_last_sync_at": {"read_only": True},
             "technitium_last_sync_summary": {"read_only": True},
             "technitium_last_error": {"read_only": True},
+            "dhcp_last_sync_summary": {"read_only": True},
+            "dhcp_last_error": {"read_only": True},
             "speedtest_tracker_url": {"required": False, "allow_blank": True},
             "updated_at": {"read_only": True},
         }
@@ -293,11 +306,33 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return bool(obj.technitium_url and obj.technitium_api_token)
 
     @extend_schema_field(serializers.BooleanField)
+    def get_dhcp_configured(self, obj):
+        return bool(obj.dhcp_lease_file)
+
+    def validate_dhcp_lease_file(self, value):
+        if not value:
+            return ""
+        from ..integrations.dhcp import DhcpError, lease_path
+        try:
+            lease_path(value)
+        except DhcpError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+        return value.strip()
+
+    def validate_dhcp_sync_interval(self, value):
+        if not 1 <= value <= 1440:
+            raise serializers.ValidationError("DHCP sync interval must be between 1 and 1440 minutes.")
+        return value
+
+    @extend_schema_field(serializers.BooleanField)
     def get_speedtest_tracker_configured(self, obj):
         return bool(obj.speedtest_tracker_url and obj.speedtest_tracker_api_token)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        if attrs.get("dhcp_enabled", getattr(self.instance, "dhcp_enabled", False)):
+            if not attrs.get("dhcp_lease_file", getattr(self.instance, "dhcp_lease_file", "")):
+                raise serializers.ValidationError({"dhcp_lease_file": "Choose a lease file before enabling DHCP sync."})
         if attrs.get("homebox_enabled", getattr(self.instance, "homebox_enabled", False)):
             if not attrs.get("homebox_url", getattr(self.instance, "homebox_url", "")):
                 raise serializers.ValidationError({"homebox_url": "Enter the HomeBox URL."})

@@ -22,6 +22,7 @@ from core.scheduler_runtime import (
 from core.integrations.adguard import sync_adguard_query_log
 from core.integrations.pihole import sync_pihole
 from core.integrations.technitium import sync_technitium
+from core.integrations.dhcp import sync_dhcp
 from core.versioning import check_for_version_update
 from core.integrations.speedtest_tracker import (
     HEALTH_CHECK_INTERVAL_SECONDS,
@@ -251,6 +252,23 @@ class Command(BaseCommand):
             finally:
                 close_old_connections()
 
+        def dhcp_sync_loop():
+            while not stop_event.is_set():
+                close_old_connections()
+                interval_seconds = 60
+                try:
+                    config = AppSettings.load()
+                    interval_seconds = max(config.dhcp_sync_interval, 1) * 60
+                    if config.dhcp_enabled:
+                        result = sync_dhcp()
+                        LOGGER.info("DHCP source sync completed: %s", result)
+                except Exception:
+                    LOGGER.exception("DHCP source sync failed")
+                finally:
+                    close_old_connections()
+                if stop_event.wait(interval_seconds):
+                    break
+
         def run_speedtest_health_check():
             close_old_connections()
             try:
@@ -437,6 +455,8 @@ class Command(BaseCommand):
             daemon=True,
         )
         technitium_sync_thread.start()
+        dhcp_sync_thread = threading.Thread(target=dhcp_sync_loop, daemon=True)
+        dhcp_sync_thread.start()
         version_update_thread = threading.Thread(target=version_update_loop, daemon=True)
         version_update_thread.start()
         speedtest_health_thread = threading.Thread(
