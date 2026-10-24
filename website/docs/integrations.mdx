@@ -15,9 +15,52 @@ Docker installations can connect optional services from **Settings > Integration
 | AdGuard Home | Network-wide and per-device DNS destinations and blocked totals | Stores aggregate counters, not raw DNS responses |
 | Pi-hole v6 | DNS destinations, blocked totals, and DHCP client discovery | Stores aggregate counters and current lease identity data, not raw DNS responses |
 | Technitium DNS Server v15+ | DNS destinations and blocked totals, with optional DHCP enrichment | Stores aggregate counters and selected lease identity data, not raw DNS responses |
+| DHCP lease source | IPv4 address and hostname evidence from dnsmasq, Kea, or ISC DHCP files | Imports active leases; does not infer online presence or delete devices on expiry |
 | Speedtest Tracker | Latest internet result and health on the dashboard | Stores settings and latest processed health state, not result history |
 | HomeBox | Search and link an existing inventory item to a device | Stores the linked item ID; does not synchronize inventory |
 | Docker inventory | Running containers, health, addresses, restarts, and published ports | Reads the local Docker engine from the scheduler |
+
+## DHCP lease source
+
+This independent integration reads a DHCPv4 lease file. It works alongside any DNS provider and does not require a Pi-hole or Technitium installation. It supports:
+
+- dnsmasq lease files with Unix expiry timestamps; zero means no expiry.
+- Kea DHCPv4 memfile CSV files, including appended updates and released or reclaimed entries.
+- ISC `dhcpd.leases` files, including UTC or epoch end times and leases ending `never`.
+
+For Kea and ISC journals, the last record for an IP address wins, including records that release it. Expired, released, invalid, public, multicast, and IPv6 entries are not imported. The integration supports standard timestamp-based dnsmasq files, not builds that store relative lifetimes with `HAVE_BROKEN_RTC`.
+
+### Mount the lease directory
+
+Mount a dedicated directory read-only into both the backend and scanner services. Mount the directory rather than an individual file so DHCP file replacement and rotation remain visible:
+
+```yaml
+services:
+  backend:
+    volumes:
+      - ./dhcp:/data/dhcp:ro
+  scanner:
+    volumes:
+      - ./dhcp:/data/dhcp:ro
+```
+
+These entries are additional volumes; keep the existing database and static volumes. Files must be UTF-8, regular files, no larger than 5 MiB, and contain at most 50,000 records. Paths are relative to `/data/dhcp`; absolute paths and symlinks escaping that directory are rejected. To use a different directory, set `DHCP_LEASE_DIRECTORY` to the same absolute directory in both services.
+
+A remote DHCP server can periodically copy or export its lease file to this directory. Preserve its modification timestamp and replace the copy atomically. The integration does not connect over SSH or call remote DHCP APIs.
+
+### Configure and synchronize
+
+1. Open **Settings > Integrations > Network controllers > DHCP lease source**.
+2. Enable it, choose the file format, and enter the relative filename, such as `dnsmasq.leases`, `kea-leases4.csv`, or `dhcpd.leases`.
+3. Choose the synchronization interval (1 to 1440 minutes). Leave **Create devices from leases** off to enrich existing devices only.
+4. **Test source** validates the current filename and format without saving settings or changing devices.
+5. Save settings, then select **Sync now**, or let the scheduler synchronize automatically. The latest result shows active lease, created, updated, and conflict counts.
+
+Only active IPv4 leases with valid unicast MAC addresses provide evidence. Optional new devices are Unknown and are not marked Online. Known device names and hostnames are preserved. Existing controller-provided and direct-discovery hostnames take priority over this generic source. Existing identities are matched by MAC, so the same lease reported by a controller does not create another device.
+
+The file modification time is used as the observation time. Older snapshots do not replace newer IP observations. Recent competing MAC addresses on the same IP are flagged using LanGuard's identity-conflict handling, without reassigning that IP or closing the competing assignment. Ambiguous multiple active IPs for one MAC are skipped. Lease expiry or disappearance never deletes a device or changes its presence; normal scanning remains responsible for availability.
+
+The integration is disabled by default. Saved configuration, the last sync result, and a sanitized error are stored; raw lease files are not copied into the database. A malformed, oversized, unreadable, or changing file fails before modifying devices. No extra network scan is started by a DHCP sync.
 
 ## Docker inventory
 

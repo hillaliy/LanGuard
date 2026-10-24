@@ -28,7 +28,7 @@ export default function useSettingsController({ onSaved }) {
     settingsCategory === 'scanning'
     || settingsCategory === 'notifications'
     || (settingsCategory === 'integrations'
-      && integration.integrationCategory === 'network-services');
+      && ['network-services', 'network-controllers'].includes(integration.integrationCategory));
   const settingsSaveLabel = settingsCategory === 'integrations'
     ? 'Save integration settings'
     : 'Save changes';

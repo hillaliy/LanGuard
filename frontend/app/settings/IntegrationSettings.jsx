@@ -1,11 +1,12 @@
 import { Badge, Box, Group, Stack, Tabs, Text, Title } from '@mantine/core';
-import { IconServer, IconWorldSearch } from '@tabler/icons-react';
+import { IconRouter, IconServer, IconWorldSearch } from '@tabler/icons-react';
 import AdGuardIntegrationSettings from './AdGuardIntegrationSettings';
 import DockerIntegrationSettings from './DockerIntegrationSettings';
 import HomeBoxIntegrationSettings from './HomeBoxIntegrationSettings';
 import PiHoleIntegrationSettings from './PiHoleIntegrationSettings';
 import SpeedtestTrackerIntegrationSettings from './SpeedtestTrackerIntegrationSettings';
 import TechnitiumIntegrationSettings from './TechnitiumIntegrationSettings';
+import DhcpIntegrationSettings from './DhcpIntegrationSettings';
 
 export default function IntegrationSettings({ controller }) {
   const { integrationCategory, onSaved, setIntegrationCategory, timeZone } = controller;
@@ -18,7 +19,7 @@ export default function IntegrationSettings({ controller }) {
             <Title order={3}>Integrations</Title>
             <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
           </Box>
-          <Badge variant="light">6 available</Badge>
+          <Badge variant="light">7 available</Badge>
         </Group>
         <Tabs
           value={integrationCategory}
@@ -33,6 +34,9 @@ export default function IntegrationSettings({ controller }) {
             <Tabs.Tab value="infrastructure" leftSection={<IconServer size={17} />}>
               Infrastructure
             </Tabs.Tab>
+            <Tabs.Tab value="network-controllers" leftSection={<IconRouter size={17} />}>
+              Network controllers
+            </Tabs.Tab>
           </Tabs.List>
           <Tabs.Panel value="network-services" pt="lg">
             <Stack gap="xl">
@@ -45,6 +49,9 @@ export default function IntegrationSettings({ controller }) {
               <SpeedtestTrackerIntegrationSettings controller={controller} />
               <HomeBoxIntegrationSettings controller={controller} />
             </Stack>
+          </Tabs.Panel>
+          <Tabs.Panel value="network-controllers" pt="lg">
+            <DhcpIntegrationSettings controller={controller} />
           </Tabs.Panel>
           <Tabs.Panel value="infrastructure" pt="lg">
             <Stack gap="xl">
