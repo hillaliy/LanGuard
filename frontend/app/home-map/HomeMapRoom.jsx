@@ -4,6 +4,7 @@ import {
   IconArrowUpRight,
   IconArrowsHorizontal,
   IconGripVertical,
+  IconTrash,
 } from '@tabler/icons-react';
 
 import HomeMapDeviceButton from './HomeMapDeviceButton';
@@ -35,6 +36,8 @@ export default function HomeMapRoom({
   placementSlot = 0,
   placements = {},
   sizes = {},
+  customRooms = [],
+  onRemoveRoom,
 }) {
   const roomRef = useRef(null);
   const [roomRowSpan, setRoomRowSpan] = useState(8);
@@ -233,6 +236,20 @@ export default function HomeMapRoom({
         </Box>
         {editMode && (
           <Group className="home-map-room-actions" gap={2} wrap="nowrap">
+            {customRooms.includes(section.room) && deviceCount === 0 && (
+              <Tooltip label="Delete room" withArrow>
+                <ActionIcon
+                  aria-label={`Delete ${section.room}`}
+                  color="red"
+                  size="sm"
+                  variant="subtle"
+                  onClick={(event) => { event.stopPropagation(); onRemoveRoom(section.room); }}
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <IconTrash size={16} />
+                </ActionIcon>
+              </Tooltip>
+            )}
             {isNested && (
               <Tooltip label="Move to top level" withArrow>
                 <ActionIcon
@@ -277,6 +294,8 @@ export default function HomeMapRoom({
               placementSlot={slot}
               placements={placements}
               sizes={sizes}
+              customRooms={customRooms}
+              onRemoveRoom={onRemoveRoom}
               dropTarget={dropTarget}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added persistent empty Home Map rooms and floor containers with optional parent selection, existing drag-and-drop nesting, and safe deletion that preserves child rooms and device assignments. Kept custom rooms when resetting the layout.
+
 ## 1.25.0 - 2026-10-24
 
 - Unified device-header and interface-table presence displays with compact icons, clearer discovery descriptions, and Likely sleeping labels for inferred sleep. Kept detailed grace-period and other status explanations beside the status while removing redundant bottom-of-page messages.

@@ -5,9 +5,11 @@ import { apiRequest } from '../api';
 import {
   homeMapLayoutStorageKey,
   isHomeMapDescendant,
+  mergeHomeMapRooms,
   moveHomeMapRoomToSlot,
   normalizeHomeMapLayout,
   orderHomeMapRooms,
+  removeHomeMapCustomRoom,
 } from '../utils/homeMap';
 
 function getRoomDropPosition(event) {
@@ -39,8 +41,8 @@ export default function useHomeMapLayout({
     [assignedRooms, layout]
   );
   const orderedRooms = useMemo(
-    () => orderHomeMapRooms(assignedRooms, normalizedLayout.order),
-    [assignedRooms, normalizedLayout.order]
+    () => orderHomeMapRooms(mergeHomeMapRooms(assignedRooms, normalizedLayout), normalizedLayout.order),
+    [assignedRooms, normalizedLayout]
   );
   const roomTree = useMemo(() => {
     const sectionsByRoom = new Map(orderedRooms.map((section) => [
@@ -114,6 +116,7 @@ export default function useHomeMapLayout({
       || JSON.stringify(nextLayout.icons) !== JSON.stringify(layout.icons)
       || JSON.stringify(nextLayout.placements) !== JSON.stringify(layout.placements)
       || JSON.stringify(nextLayout.sizes) !== JSON.stringify(layout.sizes)
+      || JSON.stringify(nextLayout.customRooms) !== JSON.stringify(layout.customRooms)
     ) {
       setLayout(nextLayout);
     }
@@ -250,7 +253,7 @@ export default function useHomeMapLayout({
   function moveRoomToSlot(sourceRoom, targetParent, targetSlot, targetSpan = null) {
     updateLayout((currentLayout) => moveHomeMapRoomToSlot(
       currentLayout,
-      assignedRooms,
+      mergeHomeMapRooms(assignedRooms, currentLayout),
       sourceRoom,
       targetParent,
       targetSlot,
@@ -321,18 +324,30 @@ export default function useHomeMapLayout({
   function resetLayout() {
     setDraggedRoom(null);
     setDropTarget(null);
-    setLayout({ order: [], parents: {}, icons: {}, placements: {}, sizes: {} });
-    try {
-      localStorage.setItem(homeMapLayoutStorageKey, JSON.stringify({
-        order: [], parents: {}, icons: {}, placements: {}, sizes: {},
-      }));
-    } catch {
-      // The reset will still be persisted when the user selects Done.
-    }
+    updateLayout((current) => ({
+      order: [], parents: {}, icons: {}, placements: {}, sizes: {}, customRooms: current.customRooms,
+    }));
     resetModal.close();
   }
 
+  function addRoom(name, parent = null) {
+    updateLayout((current) => ({
+      ...current,
+      customRooms: [...current.customRooms, name],
+      parents: parent ? { ...current.parents, [name]: parent } : current.parents,
+    }));
+  }
+
+  function removeRoom(room) {
+    updateLayout((current) => removeHomeMapCustomRoom(current, assignedRooms, room));
+  }
+
   return {
+    addRoom,
+    removeRoom,
+    rooms: orderedRooms,
+    customRooms: normalizedLayout.customRooms,
+    layoutLoaded,
     draggedRoom,
     dropTarget,
     handleDragLeaveRoom,

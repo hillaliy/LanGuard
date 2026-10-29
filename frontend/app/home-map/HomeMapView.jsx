@@ -9,10 +9,12 @@ import {
   Modal,
   Paper,
   SegmentedControl,
+  Select,
   Text,
+  TextInput,
   Title,
 } from '@mantine/core';
-import { IconGripVertical, IconNetwork, IconRestore, IconSmartHome } from '@tabler/icons-react';
+import { IconGripVertical, IconNetwork, IconPlus, IconRestore, IconSmartHome } from '@tabler/icons-react';
 
 import {
   buildHomeMapGridSlots,
@@ -35,6 +37,11 @@ export default function HomeMapView({
   onSuccess,
 }) {
   const [deviceFilter, setDeviceFilter] = useState('all');
+  const [addRoomOpened, setAddRoomOpened] = useState(false);
+  const [roomName, setRoomName] = useState('');
+  const [parentRoom, setParentRoom] = useState(null);
+  const [roomError, setRoomError] = useState(null);
+  const [roomToRemove, setRoomToRemove] = useState(null);
   const rooms = useMemo(
     () => buildHomeMapRooms(devices, deviceFilter),
     [deviceFilter, devices]
@@ -79,6 +86,25 @@ export default function HomeMapView({
     [deviceFilter, layout.layoutEditMode, layout.placements, visibleRoomTree]
   );
 
+  function createRoom(event) {
+    event.preventDefault();
+    const name = roomName.trim();
+    if (!name || name.length > 100 || name === unassignedRoomLabel) {
+      setRoomError('Enter a room name of 1 to 100 characters. Unassigned is reserved.');
+      return;
+    }
+    if (layout.rooms.some((section) => section.room === name)) {
+      setRoomError('A room with this name already exists.');
+      return;
+    }
+    if (layout.customRooms.length >= 100) {
+      setRoomError('A maximum of 100 custom rooms is supported.');
+      return;
+    }
+    layout.addRoom(name, parentRoom);
+    setAddRoomOpened(false);
+  }
+
   return (
     <>
       <Paper className="home-map-panel" radius="md">
@@ -93,12 +119,12 @@ export default function HomeMapView({
             </Box>
           </Group>
           <Group gap="xs">
-            <Badge variant="light" color="indigo">{assignedRooms.length} rooms</Badge>
+            <Badge variant="light" color="indigo">{layout.rooms.length} rooms</Badge>
             <Badge variant="light" color="blue">{deviceCount} devices</Badge>
           </Group>
         </Group>
 
-        {deviceCount ? (
+        {(deviceCount > 0 || layout.rooms.length > 0 || canEditLayout) ? (
           <div className="home-map-house">
             <Group justify="space-between" className="home-map-controls" wrap="wrap">
               <SegmentedControl
@@ -110,6 +136,22 @@ export default function HomeMapView({
               />
               {canEditLayout && (
                 <Group gap="xs">
+                  {layout.layoutEditMode && (
+                    <Button
+                      variant="light"
+                      size="xs"
+                      leftSection={<IconPlus size={16} />}
+                      disabled={!layout.layoutLoaded || !devicesLoaded || layout.layoutSaving}
+                      onClick={() => {
+                        setRoomName('');
+                        setParentRoom(null);
+                        setRoomError(null);
+                        setAddRoomOpened(true);
+                      }}
+                    >
+                      Add room
+                    </Button>
+                  )}
                   {layout.layoutEditMode && (
                     <Button
                       variant="subtle"
@@ -126,6 +168,7 @@ export default function HomeMapView({
                     size="xs"
                     leftSection={<IconGripVertical size={16} />}
                     loading={layout.layoutSaving}
+                    disabled={!layout.layoutLoaded || !devicesLoaded}
                     onClick={layout.toggleEditMode}
                   >
                     {layout.layoutEditMode ? 'Done' : 'Edit layout'}
@@ -166,6 +209,8 @@ export default function HomeMapView({
                       onMoveToRoot={layout.moveRoomToRoot}
                       onRoomIconChange={layout.setRoomIcon}
                       onRoomSizeChange={layout.setRoomSize}
+                      customRooms={layout.customRooms}
+                      onRemoveRoom={setRoomToRemove}
                       onSelectDevice={onSelectDevice}
                     />
                   ) : (
@@ -192,7 +237,7 @@ export default function HomeMapView({
                   ))}
                   {visibleRoomTree.length === 0 && (
                     <Text className="home-map-empty-filter" c="dimmed" ta="center">
-                      No devices match this filter.
+                      {deviceFilter === 'all' ? 'No rooms to show.' : 'No devices match this filter.'}
                     </Text>
                   )}
                 </div>
@@ -222,6 +267,43 @@ export default function HomeMapView({
           <Text c="dimmed" ta="center" py="xl">No devices to show.</Text>
         )}
       </Paper>
+      <Modal opened={addRoomOpened} onClose={() => setAddRoomOpened(false)} title="Add room" centered size="sm">
+        <form onSubmit={createRoom}>
+          <TextInput
+            label="Room name"
+            value={roomName}
+            onChange={(event) => { setRoomName(event.currentTarget.value); setRoomError(null); }}
+            error={roomError}
+            maxLength={100}
+            required
+            data-autofocus
+          />
+          <Select
+            label="Parent room"
+            placeholder="Top level"
+            data={layout.rooms.map((section) => section.room)}
+            value={parentRoom}
+            onChange={setParentRoom}
+            searchable
+            clearable
+            mt="md"
+          />
+          <Group justify="flex-end" mt="lg">
+            <Button variant="default" onClick={() => setAddRoomOpened(false)}>Cancel</Button>
+            <Button type="submit">Add room</Button>
+          </Group>
+        </form>
+      </Modal>
+      <Modal opened={roomToRemove !== null} onClose={() => setRoomToRemove(null)} title="Delete room?" centered size="sm">
+        <Text mb="lg">Delete {roomToRemove}? Nested rooms will be moved up one level. Devices will not be changed.</Text>
+        <Group justify="flex-end">
+          <Button variant="default" onClick={() => setRoomToRemove(null)}>Cancel</Button>
+          <Button color="red" onClick={() => {
+            layout.removeRoom(roomToRemove);
+            setRoomToRemove(null);
+          }}>Delete room</Button>
+        </Group>
+      </Modal>
       <Modal
         opened={layout.resetModalOpened}
         onClose={layout.resetModal.close}
@@ -230,7 +312,7 @@ export default function HomeMapView({
         size="sm"
       >
         <Text c="dimmed" mb="lg">
-          This will reset the room order, positions, sizes, nesting, and icons to the automatic arrangement.
+          This will reset the room order, positions, sizes, nesting, and icons to the automatic arrangement. Custom rooms will be kept.
         </Text>
         <Group justify="flex-end">
           <Button variant="default" onClick={layout.resetModal.close}>Cancel</Button>

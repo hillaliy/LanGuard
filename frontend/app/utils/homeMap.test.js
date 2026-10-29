@@ -9,6 +9,8 @@ import {
   homeMapDeviceStatusClass,
   moveHomeMapRoomToSlot,
   normalizeHomeMapLayout,
+  mergeHomeMapRooms,
+  removeHomeMapCustomRoom,
 } from './homeMap.js';
 
 const devices = [
@@ -125,7 +127,70 @@ test('normalizeHomeMapLayout upgrades layouts that predate room icons', () => {
     icons: {},
     placements: {},
     sizes: {},
+    customRooms: [],
   });
+});
+
+test('custom rooms survive normalization without devices and support nesting', () => {
+  const layout = normalizeHomeMapLayout({
+    customRooms: ['Floor', 'Empty bedroom'],
+    parents: { Office: 'Floor', 'Empty bedroom': 'Floor' },
+    icons: { Floor: 'home' },
+    placements: { Floor: 2 },
+    sizes: { Floor: 8 },
+  }, buildHomeMapRooms(devices));
+  const restored = normalizeHomeMapLayout(JSON.parse(JSON.stringify(layout)), []);
+  assert.deepEqual(restored.customRooms, ['Floor', 'Empty bedroom']);
+  assert.equal(restored.parents['Empty bedroom'], 'Floor');
+  assert.equal(layout.parents.Office, 'Floor');
+  assert.equal(restored.sizes.Floor, 8);
+  assert.equal(restored.placements.Floor, 2);
+});
+
+test('custom rooms merge with device rooms without duplicating devices or counts', () => {
+  const rooms = mergeHomeMapRooms(buildHomeMapRooms(devices), { customRooms: ['Office', 'Floor'] });
+  assert.equal(rooms.filter((room) => room.room === 'Office').length, 1);
+  assert.equal(rooms.reduce((count, room) => count + room.devices.length, 0), 3);
+  assert.deepEqual(rooms.find((room) => room.room === 'Floor'), {
+    room: 'Floor', devices: [], visibleDevices: [], onlineCount: 0, attentionCount: 0,
+  });
+});
+
+test('custom room names are bounded, trimmed, deduplicated and exclude Unassigned', () => {
+  const layout = normalizeHomeMapLayout({ customRooms: [' Floor ', 'Floor', '', null, 'Unassigned', 'x'.repeat(101)] }, []);
+  assert.deepEqual(layout.customRooms, ['Floor']);
+  assert.deepEqual(normalizeHomeMapLayout({ customRooms: 'Floor' }, []).customRooms, []);
+});
+
+test('removing an empty container promotes children and clears only its metadata', () => {
+  const layout = normalizeHomeMapLayout({
+    customRooms: ['Floor', 'Wing'],
+    parents: { Wing: 'Floor', Office: 'Wing' },
+    icons: { Wing: 'home', Office: 'office' },
+    placements: { Wing: 2, Office: 3 },
+    sizes: { Wing: 8, Office: 4 },
+  }, buildHomeMapRooms(devices));
+  const removed = removeHomeMapCustomRoom(layout, buildHomeMapRooms(devices), 'Wing');
+  assert.deepEqual(removed.customRooms, ['Floor']);
+  assert.deepEqual(removed.parents, { Office: 'Floor' });
+  assert.deepEqual(removed.placements, {});
+  assert.deepEqual(removed.icons, { Office: 'office' });
+  assert.deepEqual(removed.sizes, { Office: 4 });
+  const rootRemoved = removeHomeMapCustomRoom(removed, buildHomeMapRooms(devices), 'Floor');
+  assert.deepEqual(rootRemoved.parents, {});
+});
+
+test('a custom room with devices cannot be deleted', () => {
+  const layout = normalizeHomeMapLayout({ customRooms: ['Office'] }, buildHomeMapRooms(devices));
+  assert.equal(removeHomeMapCustomRoom(layout, buildHomeMapRooms(devices), 'Office'), layout);
+});
+
+test('custom containers can receive devices rooms using existing drag placement', () => {
+  const rooms = buildHomeMapRooms(devices);
+  const layout = normalizeHomeMapLayout({ customRooms: ['Floor'] }, rooms);
+  const moved = moveHomeMapRoomToSlot(layout, mergeHomeMapRooms(rooms, layout), 'Office', 'Floor', 0);
+  assert.equal(moved.parents.Office, 'Floor');
+  assert.deepEqual(moved.customRooms, ['Floor']);
 });
 
 test('normalizeHomeMapLayout keeps parent rooms wide enough for nested rooms', () => {

@@ -30,6 +30,23 @@ def validate_home_map_layout_value(value):
     icons = value.get("icons", {})
     placements = value.get("placements", {})
     sizes = value.get("sizes", {})
+    custom_rooms = value.get("customRooms", [])
+    if (
+        not isinstance(custom_rooms, list)
+        or len(custom_rooms) > 100
+        or not all(
+            isinstance(room, str)
+            and room == room.strip()
+            and 0 < len(room) <= 100
+            and room != "Unassigned"
+            for room in custom_rooms
+        )
+        or len(set(custom_rooms)) != len(custom_rooms)
+    ):
+        raise serializers.ValidationError(
+            "Custom rooms must be up to 100 unique, non-empty room names of at most 100 characters; "
+            "Unassigned is reserved."
+        )
     if not isinstance(order, list) or not all(isinstance(item, str) for item in order):
         raise serializers.ValidationError("Home map layout order must be a list of strings.")
     if not isinstance(parents, dict) or not all(
