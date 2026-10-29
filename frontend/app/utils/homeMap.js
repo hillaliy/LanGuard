@@ -29,6 +29,50 @@ export const homeMapRoomSpanOptions = Array.from({ length: 11 }, (_, index) => i
 export const unassignedRoomLabel = 'Unassigned';
 export const homeMapLayoutStorageKey = 'languard_home_map_layout_v1';
 
+export function getHomeMapCustomRooms(layout) {
+  if (!Array.isArray(layout?.customRooms)) return [];
+  return [...new Set(layout.customRooms.filter((room) =>
+    typeof room === 'string' && room.trim() && room.trim().length <= 100
+    && room.trim() !== unassignedRoomLabel
+  ).map((room) => room.trim()))].slice(0, 100);
+}
+
+export function mergeHomeMapRooms(rooms, layout) {
+  const sections = new Map(rooms.map((section) => [section.room, section]));
+  getHomeMapCustomRooms(layout).forEach((room) => {
+    if (!sections.has(room)) {
+      sections.set(room, {
+        room, devices: [], visibleDevices: [], onlineCount: 0, attentionCount: 0,
+      });
+    }
+  });
+  return [...sections.values()];
+}
+
+export function removeHomeMapCustomRoom(layout, rooms, room) {
+  if (!getHomeMapCustomRooms(layout).includes(room)
+    || rooms.some((section) => section.room === room && section.devices.length > 0)) return layout;
+  const next = {
+    ...layout,
+    customRooms: getHomeMapCustomRooms(layout).filter((name) => name !== room),
+    order: layout.order.filter((name) => name !== room),
+    parents: { ...layout.parents },
+    icons: { ...layout.icons },
+    placements: { ...layout.placements },
+    sizes: { ...layout.sizes },
+  };
+  // Removing a container promotes its children instead of removing their rooms.
+  Object.entries(next.parents).forEach(([child, parent]) => {
+    if (parent === room) {
+      if (layout.parents[room]) next.parents[child] = layout.parents[room];
+      else delete next.parents[child];
+      delete next.placements[child];
+    }
+  });
+  ['parents', 'icons', 'placements', 'sizes'].forEach((key) => delete next[key][room]);
+  return next;
+}
+
 function getDeviceRoomLabel(device) {
   const room = String(device.room || '').trim();
   return room || unassignedRoomLabel;
@@ -98,6 +142,8 @@ export function filterHomeMapRoomTree(roomTree, filter, editMode = false) {
 }
 
 export function normalizeHomeMapLayout(layout, rooms) {
+  const customRooms = getHomeMapCustomRooms(layout);
+  rooms = mergeHomeMapRooms(rooms, { customRooms });
   const roomNames = new Set(rooms.map((section) => section.room));
   const order = Array.isArray(layout?.order)
     ? layout.order.filter((room, index, values) =>
@@ -165,7 +211,7 @@ export function normalizeHomeMapLayout(layout, rooms) {
       }
     });
   }
-  return { order, parents, icons, placements, sizes };
+  return { order, parents, icons, placements, sizes, customRooms };
 }
 
 export function buildHomeMapGridSlots(

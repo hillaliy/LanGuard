@@ -162,3 +162,36 @@ class HomeMapApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    def test_empty_rooms_and_nesting_survive_server_save(self):
+        layout = {
+            "customRooms": ["Top floor", "Bedroom"],
+            "order": ["Top floor", "Bedroom"],
+            "parents": {"Bedroom": "Top floor"},
+            "icons": {"Bedroom": "bedroom"},
+            "sizes": {"Top floor": 8},
+            "placements": {"Bedroom": 2},
+        }
+        response = self.client.put(
+            "/api/v1/home-map-layout/", {"layout": layout}, format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(AppSettings.load().home_map_layout, layout)
+        self.assertEqual(self.client.get("/api/v1/home-map-layout/").data["data"]["layout"], layout)
+        self.device.refresh_from_db()
+        self.assertEqual(self.device.room, "")
+
+    def test_invalid_custom_rooms_are_rejected(self):
+        for rooms in ("Floor", [None], [{}], [""], [" Floor"], ["Floor", "Floor"],
+                      ["Unassigned"], ["x" * 101], [f"Room {i}" for i in range(101)]):
+            with self.subTest(rooms=rooms):
+                response = self.client.put(
+                    "/api/v1/home-map-layout/", {"layout": {"customRooms": rooms}}, format="json",
+                )
+                self.assertEqual(response.status_code, 400)
+
+    def test_settings_endpoint_validates_custom_rooms_too(self):
+        response = self.client.put(
+            "/api/v1/settings/", {"home_map_layout": {"customRooms": [""]}}, format="json",
+        )
+        self.assertEqual(response.status_code, 400)
