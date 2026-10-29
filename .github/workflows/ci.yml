@@ -27,6 +27,9 @@ jobs:
       - name: Lint Python files
         run: ruff check backend
 
+      - name: Test download badge tooling
+        run: python -m unittest discover -s scripts -p 'test_download_badge.py'
+
       - name: Run Django checks
         working-directory: backend
         run: python manage.py check
