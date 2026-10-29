@@ -1,0 +1,52 @@
+name: Update Docker pulls badge
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/download_badge.py'
+      - '.github/workflows/download-badge.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: docker-pulls-badge
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+      - name: Fetch public package downloads
+        run: python scripts/download_badge.py --output /tmp/backend-downloads.json
+      - name: Publish badge data without changing the source branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh api "repos/$REPOSITORY/git/ref/heads/badges" > /dev/null; then
+            gh api "repos/$REPOSITORY/git/refs" -X POST \
+              -f ref=refs/heads/badges -f sha="$GITHUB_SHA"
+          fi
+          current_sha=$(gh api "repos/$REPOSITORY/contents/backend-downloads.json?ref=badges" --jq .sha 2>/dev/null || true)
+          if [ "$current_sha" = "$(git hash-object /tmp/backend-downloads.json)" ]; then
+            exit 0
+          fi
+          args=()
+          if [ -n "$current_sha" ]; then args+=(-f "sha=$current_sha"); fi
+          gh api "repos/$REPOSITORY/contents/backend-downloads.json" -X PUT \
+            -f branch=badges -f message='Update Docker pulls badge' \
+            -f "content=$(base64 -w 0 /tmp/backend-downloads.json)" "${args[@]}"

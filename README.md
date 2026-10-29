@@ -13,7 +13,8 @@
     <img alt="Latest version" src="https://img.shields.io/github/v/release/hillaliy/LanGuard?style=for-the-badge&label=version">
   </a>
   <a href="https://github.com/hillaliy/LanGuard/pkgs/container/languard-backend">
-    <img alt="Docker pulls" src="https://ghcr-badge.elias.eu.org/shield/hillaliy/LanGuard/languard-backend">
+    <!-- Refreshed daily by .github/workflows/download-badge.yml; retains the last successful count. -->
+    <img alt="Docker pulls" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fhillaliy%2FLanGuard%2Fbadges%2Fbackend-downloads.json">
   </a>
   <a href="https://www.paypal.me/hillaliy">
     <img alt="Donate through PayPal" src="https://img.shields.io/badge/PayPal-Donate-blue.svg?logo=paypal&style=for-the-badge">

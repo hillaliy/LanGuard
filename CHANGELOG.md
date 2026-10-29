@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replaced the unavailable third-party Docker pulls badge source with a daily GitHub Actions update of the public backend package download count, preserving the last successful count if fetching fails.
+
 - Added persistent empty Home Map rooms and floor containers with optional parent selection, existing drag-and-drop nesting, and safe deletion that preserves child rooms and device assignments. Kept custom rooms when resetting the layout.
 
 ## 1.25.0 - 2026-10-24
