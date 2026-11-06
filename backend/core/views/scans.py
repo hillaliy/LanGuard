@@ -196,6 +196,10 @@ def scan_status(request):
                     "enabled": app_config.dhcp_enabled,
                     "configured": bool(app_config.dhcp_lease_file),
                 },
+                "asuswrt": {
+                    "enabled": app_config.asuswrt_enabled,
+                    "configured": bool(app_config.asuswrt_url and app_config.asuswrt_username and app_config.asuswrt_password),
+                },
                 "speedtest_tracker": {
                     "enabled": app_config.speedtest_tracker_enabled,
                     "configured": bool(

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added an opt-in ASUSWRT integration under Network controllers, with read-only HTTP(S) client discovery, connection testing, manual and scheduled synchronization, optional Unknown-device creation, and timestamped router connection observations on device pages. Protected saved credentials, user-managed identity, scanner presence, and IP ownership, and paused automatic login after authentication failures.
+
 - Replaced the unavailable third-party Docker pulls badge source with a daily GitHub Actions update of the public backend package download count, preserving the last successful count if fetching fails.
 
 - Added persistent empty Home Map rooms and floor containers with optional parent selection, existing drag-and-drop nesting, and safe deletion that preserves child rooms and device assignments. Kept custom rooms when resetting the layout.

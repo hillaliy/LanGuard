@@ -26,6 +26,7 @@ import {
   formatOfflineAttention,
 } from './DeviceDetailFields';
 import DeviceSnmpInventory from './DeviceSnmpInventory';
+import DeviceAsuswrtObservation from './DeviceAsuswrtObservation';
 import DeviceInterfacesSection from './DeviceInterfacesSection';
 import DeviceRelatedLinksSection from './DeviceRelatedLinksSection';
 import DeviceNetworkChange from './DeviceNetworkChange';
@@ -368,6 +369,7 @@ export default function DeviceOverviewTab({
           )}
 
           <DeviceSnmpInventory device={device} timeZone={timeZone} />
+          <DeviceAsuswrtObservation device={device} timeZone={timeZone} />
 
           <Divider />
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">

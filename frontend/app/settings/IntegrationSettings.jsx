@@ -7,6 +7,7 @@ import PiHoleIntegrationSettings from './PiHoleIntegrationSettings';
 import SpeedtestTrackerIntegrationSettings from './SpeedtestTrackerIntegrationSettings';
 import TechnitiumIntegrationSettings from './TechnitiumIntegrationSettings';
 import DhcpIntegrationSettings from './DhcpIntegrationSettings';
+import AsuswrtIntegrationSettings from './AsuswrtIntegrationSettings';
 
 export default function IntegrationSettings({ controller }) {
   const { integrationCategory, onSaved, setIntegrationCategory, timeZone } = controller;
@@ -19,7 +20,7 @@ export default function IntegrationSettings({ controller }) {
             <Title order={3}>Integrations</Title>
             <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
           </Box>
-          <Badge variant="light">7 available</Badge>
+          <Badge variant="light">8 available</Badge>
         </Group>
         <Tabs
           value={integrationCategory}
@@ -51,7 +52,10 @@ export default function IntegrationSettings({ controller }) {
             </Stack>
           </Tabs.Panel>
           <Tabs.Panel value="network-controllers" pt="lg">
-            <DhcpIntegrationSettings controller={controller} />
+            <Stack gap="xl">
+              <AsuswrtIntegrationSettings controller={controller} />
+              <DhcpIntegrationSettings controller={controller} />
+            </Stack>
           </Tabs.Panel>
           <Tabs.Panel value="infrastructure" pt="lg">
             <Stack gap="xl">

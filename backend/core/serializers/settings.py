@@ -21,6 +21,10 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     technitium_last_sync_at = UTCDateTimeField(read_only=True)
     dhcp_last_sync_at = UTCDateTimeField(read_only=True)
     dhcp_configured = serializers.SerializerMethodField()
+    asuswrt_last_sync_at = UTCDateTimeField(read_only=True)
+    asuswrt_configured = serializers.SerializerMethodField()
+    asuswrt_password = serializers.CharField(write_only=True, required=False, allow_blank=True,
+                                             max_length=255, trim_whitespace=False)
     scan_max_hosts = serializers.SerializerMethodField()
     snmp_max_devices = serializers.SerializerMethodField()
     discord_configured = serializers.SerializerMethodField()
@@ -210,6 +214,18 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "dhcp_last_sync_summary",
             "dhcp_last_error",
             "dhcp_configured",
+            "asuswrt_enabled",
+            "asuswrt_url",
+            "asuswrt_username",
+            "asuswrt_password",
+            "asuswrt_verify_ssl",
+            "asuswrt_create_devices",
+            "asuswrt_sync_interval",
+            "asuswrt_last_sync_at",
+            "asuswrt_last_sync_summary",
+            "asuswrt_last_error",
+            "asuswrt_auth_failed",
+            "asuswrt_configured",
             "speedtest_tracker_enabled",
             "homebox_enabled",
             "homebox_url",
@@ -239,6 +255,9 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "technitium_last_error": {"read_only": True},
             "dhcp_last_sync_summary": {"read_only": True},
             "dhcp_last_error": {"read_only": True},
+            "asuswrt_last_sync_summary": {"read_only": True},
+            "asuswrt_last_error": {"read_only": True},
+            "asuswrt_auth_failed": {"read_only": True},
             "speedtest_tracker_url": {"required": False, "allow_blank": True},
             "updated_at": {"read_only": True},
         }
@@ -325,11 +344,45 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return value
 
     @extend_schema_field(serializers.BooleanField)
+    def get_asuswrt_configured(self, obj):
+        return bool(obj.asuswrt_url and obj.asuswrt_username and obj.asuswrt_password)
+
+    def validate_asuswrt_url(self, value):
+        from ..integrations.asuswrt import AsuswrtError, normalize_asuswrt_url
+        if not value:
+            return ""
+        try:
+            return normalize_asuswrt_url(value)
+        except AsuswrtError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+    def validate_asuswrt_username(self, value):
+        if ":" in value or any(not char.isprintable() for char in value):
+            raise serializers.ValidationError("Enter a valid router username without colons or control characters.")
+        return value.strip()
+
+    def validate_asuswrt_sync_interval(self, value):
+        if not 1 <= value <= 1440:
+            raise serializers.ValidationError("ASUSWRT sync interval must be between 1 and 1440 minutes.")
+        return value
+
+    @extend_schema_field(serializers.BooleanField)
     def get_speedtest_tracker_configured(self, obj):
         return bool(obj.speedtest_tracker_url and obj.speedtest_tracker_api_token)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        asus_enabled = attrs.get("asuswrt_enabled", getattr(self.instance, "asuswrt_enabled", False))
+        for field in ("asuswrt_url", "asuswrt_username", "asuswrt_password"):
+            effective = attrs.get(field, getattr(self.instance, field, ""))
+            if field == "asuswrt_password":
+                effective = effective or getattr(self.instance, field, "")
+            if asus_enabled and not effective:
+                raise serializers.ValidationError({field: "Enter the ASUSWRT router connection details before enabling sync."})
+        if self.instance and self.instance.asuswrt_password and not attrs.get("asuswrt_password"):
+            for field in ("asuswrt_url", "asuswrt_username"):
+                if field in attrs and attrs[field] != getattr(self.instance, field):
+                    raise serializers.ValidationError({"asuswrt_password": "Re-enter the router password when changing its URL or username."})
         if attrs.get("dhcp_enabled", getattr(self.instance, "dhcp_enabled", False)):
             if not attrs.get("dhcp_lease_file", getattr(self.instance, "dhcp_lease_file", "")):
                 raise serializers.ValidationError({"dhcp_lease_file": "Choose a lease file before enabling DHCP sync."})
@@ -608,6 +661,14 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             validated_data.setdefault("adguard_password", "")
         if not validated_data.get("pihole_password"):
             validated_data.pop("pihole_password", None)
+        if validated_data.get("asuswrt_password") or any(
+            field in validated_data and validated_data[field] != getattr(instance, field)
+            for field in ("asuswrt_url", "asuswrt_username")
+        ):
+            validated_data["asuswrt_auth_failed"] = False
+            validated_data["asuswrt_last_error"] = ""
+        if not validated_data.get("asuswrt_password"):
+            validated_data.pop("asuswrt_password", None)
         if not validated_data.get("technitium_api_token"):
             validated_data.pop("technitium_api_token", None)
         if not validated_data.get("telegram_token"):

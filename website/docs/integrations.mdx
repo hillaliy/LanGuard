@@ -1,6 +1,6 @@
 ---
 title: Integrations
-description: Connect LanGuard to Docker hosts, AdGuard Home, Pi-hole, Technitium DNS Server, Speedtest Tracker, HomeBox, and automation services.
+description: Connect LanGuard to ASUSWRT routers, DHCP sources, Docker hosts, DNS providers, Speedtest Tracker, HomeBox, and automation services.
 slug: /integrations
 ---
 
@@ -16,9 +16,36 @@ Docker installations can connect optional services from **Settings > Integration
 | Pi-hole v6 | DNS destinations, blocked totals, and DHCP client discovery | Stores aggregate counters and current lease identity data, not raw DNS responses |
 | Technitium DNS Server v15+ | DNS destinations and blocked totals, with optional DHCP enrichment | Stores aggregate counters and selected lease identity data, not raw DNS responses |
 | DHCP lease source | IPv4 address and hostname evidence from dnsmasq, Kea, or ISC DHCP files | Imports active leases; does not infer online presence or delete devices on expiry |
+| ASUSWRT | Router client discovery, IPv4/hostname/vendor enrichment, and available connection details | Reads structured client data; preserves user-managed identity and scanner presence |
 | Speedtest Tracker | Latest internet result and health on the dashboard | Stores settings and latest processed health state, not result history |
 | HomeBox | Search and link an existing inventory item to a device | Stores the linked item ID; does not synchronize inventory |
 | Docker inventory | Running containers, health, addresses, restarts, and published ports | Reads the local Docker engine from the scheduler |
+
+## ASUSWRT
+
+ASUSWRT appears under **Settings > Integrations > Network controllers**. It reads the router's local HTTP(S) client-list interface, using the same login and read-hook protocol used by the [AsusRouter project](https://github.com/Vaskivskyi/asusrouter). No SSH, shell commands, HTML/JavaScript scraping, router configuration changes, or firmware-specific scripts are used.
+
+### Router and firmware compatibility
+
+The integration targets stock ASUSWRT and ASUSWRT-Merlin firmware that expose JSON `login.cgi` and `appGet.cgi` endpoints with the `get_clientlist()` hook. This is a firmware-dependent interface, not an ASUS-guaranteed public API. Not every model or firmware version exposes the same fields; unsupported responses fail without changing devices. Compatibility has been tested against representative structured responses, not every physical router model.
+
+### Setup and authentication
+
+1. Enable ASUSWRT, enter the router's base URL (for example `https://192.168.50.1:8443`), and enter its local administrator username and password. Do not use an ASUS cloud account, a URL containing credentials, or a web-panel page path.
+2. Keep **Verify TLS certificate** enabled. For self-signed HTTPS, trust the router certificate in both backend and scheduler containers. Disabling verification is an explicit option for a trusted LAN only. HTTP sends the login authorization without encryption and should never be used over an untrusted network. Do not expose the router management interface to the internet for this integration.
+3. Select **Test connection**. Testing authenticates, reads the client list and available router model/firmware, then logs out without modifying devices.
+4. Optionally enable **Create devices from router clients**. This is off by default; otherwise only matching existing devices are enriched.
+5. Save integration settings, then choose **Sync now**. The scheduler repeats sync at the saved interval (1 to 1440 minutes, default 5).
+
+The integration performs only read operations but the router account itself can have administrator privileges. Protect the LanGuard database and its backups accordingly. Passwords are write-only in API responses, session tokens are kept in memory, and diagnostics do not store credentials or raw responses. Changing the router URL or username requires re-entering its password; a connection test will not reuse a saved password for a different target. Redirects are not followed. Each attempt uses one login without automatic authentication retries and closes the session afterwards. After a login refusal, automatic attempts pause to avoid worsening router lockout. Resolve credentials, CAPTCHA, or lockout in the router, then explicitly test and sync manually, or save corrected credentials.
+
+### Imported data and limitations
+
+Only clients explicitly reported as active with valid private IPv4 and unicast MAC addresses are imported. Cached/offline entries, invalid records, ambiguous duplicate IPs/MACs, and IPv6 entries are skipped. User-managed Known-device identity, archived devices, stronger hostname sources, newer IP observations, and IP-conflict evidence are preserved. Existing merged interfaces remain matched by their individual MACs rather than creating another logical device.
+
+Available router-reported name, model, Ethernet/Wi-Fi band, SSID, signal strength, and observation time appear on the device page. These are timestamped observations, not a live link monitor or a verified topology. Missing optional fields are not invented. A router record never marks an existing device online/offline, advances its scan last-seen time, or removes it when it disappears; new devices start as Unknown and not Online until LanGuard verifies presence.
+
+This integration does **not** collect DNS query history, blocked-domain statistics, or DHCP lease expiry information. Continue using AdGuard Home, Pi-hole, or Technitium for DNS activity, or the independent DHCP lease source when actual lease-file evidence is needed. Client-list responses are limited to 5 MiB and 5,000 entries. Only selected normalized observations and sync summaries are stored.
 
 ## DHCP lease source
 

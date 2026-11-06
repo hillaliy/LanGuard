@@ -46,6 +46,7 @@ application or locally as a native macOS scanner.
 - Organize regular, visitor, and archived devices by room, role, icon, and notes.
 - Send Discord, Telegram, ntfy, or signed automation webhook notifications.
 - Connect AdGuard Home, Pi-hole, or Technitium DNS Server for DNS context, plus Speedtest Tracker and HomeBox.
+- Discover and enrich router clients through a read-only ASUSWRT HTTP(S) integration, independently of DNS activity providers.
 - Run scheduled scans, on-demand detailed port scans, and Wake-on-LAN actions.
 - Install the Docker interface as a web app on supported phones, tablets, and computers.
 - Inventory running containers and published ports from the local Docker engine through the scheduler.
