@@ -52,6 +52,7 @@ class Device(models.Model):
         PIHOLE = "pihole", "Pi-hole DHCP"
         TECHNITIUM = "technitium", "Technitium DHCP"
         DHCP = "dhcp", "DHCP lease source"
+        ASUSWRT = "asuswrt", "ASUSWRT router"
 
     class Status(models.TextChoices):
         ONLINE = "online", "Online"
@@ -132,6 +133,7 @@ class Device(models.Model):
     last_status_check = models.DateTimeField(blank=True, null=True)
     last_port_scan = models.DateTimeField(blank=True, null=True)
     snmp_data = models.JSONField(default=dict, blank=True)
+    asuswrt_data = models.JSONField(default=dict, blank=True)
     snmp_last_seen = models.DateTimeField(blank=True, null=True)
     missed_scans = models.PositiveIntegerField(default=0)
     known = models.BooleanField(default=False)
@@ -824,6 +826,17 @@ class AppSettings(models.Model):
     dhcp_last_sync_at = models.DateTimeField(blank=True, null=True)
     dhcp_last_sync_summary = models.JSONField(default=dict, blank=True)
     dhcp_last_error = models.TextField(blank=True, default="")
+    asuswrt_enabled = models.BooleanField(default=False)
+    asuswrt_url = models.URLField(max_length=2048, blank=True, default="")
+    asuswrt_username = models.CharField(max_length=255, blank=True, default="")
+    asuswrt_password = models.CharField(max_length=255, blank=True, default="")
+    asuswrt_verify_ssl = models.BooleanField(default=True)
+    asuswrt_create_devices = models.BooleanField(default=False)
+    asuswrt_sync_interval = models.PositiveIntegerField(default=5)
+    asuswrt_last_sync_at = models.DateTimeField(blank=True, null=True)
+    asuswrt_last_sync_summary = models.JSONField(default=dict, blank=True)
+    asuswrt_last_error = models.TextField(blank=True, default="")
+    asuswrt_auth_failed = models.BooleanField(default=False)
     speedtest_tracker_enabled = models.BooleanField(default=False)
     homebox_enabled = models.BooleanField(default=False)
     homebox_url = models.URLField(max_length=2048, blank=True, default="")

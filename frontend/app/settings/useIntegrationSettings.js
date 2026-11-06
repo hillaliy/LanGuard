@@ -3,9 +3,11 @@ import { notifications } from '@mantine/notifications';
 import { apiRequest } from '../api';
 import { showErrorNotification, showServerNotification } from '../utils/notifications';
 import useDhcpIntegrationSettings from './useDhcpIntegrationSettings';
+import useAsuswrtIntegrationSettings from './useAsuswrtIntegrationSettings';
 
 export default function useIntegrationSettings({ onSaved, reloadSettings, setError, timeZone }) {
   const dhcp = useDhcpIntegrationSettings({ runAction, reloadSettings });
+  const asuswrt = useAsuswrtIntegrationSettings({ runAction, reloadSettings });
   const [adguardEnabled, setAdguardEnabled] = useState(false);
   const [adguardConfigured, setAdguardConfigured] = useState(false);
   const [adguardUrl, setAdguardUrl] = useState('');
@@ -56,6 +58,7 @@ export default function useIntegrationSettings({ onSaved, reloadSettings, setErr
 
   function hydrate(data) {
     dhcp.hydrate(data);
+    asuswrt.hydrate(data);
     setAdguardEnabled(Boolean(data.adguard_enabled));
     setAdguardConfigured(Boolean(data.adguard_configured));
     setAdguardUrl(data.adguard_url || '');
@@ -99,6 +102,7 @@ export default function useIntegrationSettings({ onSaved, reloadSettings, setErr
   function buildPayload() {
     const payload = {
       ...dhcp.buildPayload(),
+      ...asuswrt.buildPayload(),
       adguard_enabled: adguardEnabled,
       adguard_url: adguardUrl.trim(),
       adguard_username: adguardUsername.trim(),
@@ -232,6 +236,7 @@ export default function useIntegrationSettings({ onSaved, reloadSettings, setErr
     integrationCategory,
     controller: {
       ...dhcp.controller,
+      ...asuswrt.controller,
       adguardConfigured, adguardEnabled, adguardLastError, adguardLastSyncAt,
       adguardPassword, adguardRetentionDays, adguardSyncInterval, adguardUrl,
       adguardUsername, homeboxConfigured, homeboxEnabled, homeboxToken, homeboxUrl,

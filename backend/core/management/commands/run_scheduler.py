@@ -23,6 +23,7 @@ from core.integrations.adguard import sync_adguard_query_log
 from core.integrations.pihole import sync_pihole
 from core.integrations.technitium import sync_technitium
 from core.integrations.dhcp import sync_dhcp
+from core.integrations.asuswrt import sync_asuswrt
 from core.versioning import check_for_version_update
 from core.integrations.speedtest_tracker import (
     HEALTH_CHECK_INTERVAL_SECONDS,
@@ -269,6 +270,23 @@ class Command(BaseCommand):
                 if stop_event.wait(interval_seconds):
                     break
 
+        def asuswrt_sync_loop():
+            while not stop_event.is_set():
+                close_old_connections()
+                interval_seconds = 60
+                try:
+                    config = AppSettings.load()
+                    interval_seconds = max(config.asuswrt_sync_interval, 1) * 60
+                    if config.asuswrt_enabled:
+                        sync_asuswrt()
+                except Exception:
+                    # Router exceptions can contain request objects; keep credentials out of logs.
+                    LOGGER.error("ASUSWRT sync failed; see integration settings for safe diagnostics")
+                finally:
+                    close_old_connections()
+                if stop_event.wait(interval_seconds):
+                    break
+
         def run_speedtest_health_check():
             close_old_connections()
             try:
@@ -457,6 +475,8 @@ class Command(BaseCommand):
         technitium_sync_thread.start()
         dhcp_sync_thread = threading.Thread(target=dhcp_sync_loop, daemon=True)
         dhcp_sync_thread.start()
+        asuswrt_sync_thread = threading.Thread(target=asuswrt_sync_loop, daemon=True)
+        asuswrt_sync_thread.start()
         version_update_thread = threading.Thread(target=version_update_loop, daemon=True)
         version_update_thread.start()
         speedtest_health_thread = threading.Thread(
