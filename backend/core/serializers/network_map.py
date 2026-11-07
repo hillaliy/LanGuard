@@ -58,3 +58,11 @@ class NetworkLayoutSerializer(serializers.Serializer):
 
 class NetworkRevisionSerializer(serializers.Serializer):
     revision = serializers.IntegerField(min_value=1)
+
+
+class NetworkMapPreferenceSerializer(serializers.Serializer):
+    show_lldp_suggestions = serializers.BooleanField(required=True)
+
+
+class NetworkBulkLinksSerializer(serializers.Serializer):
+    connections = serializers.ListField(child=serializers.DictField(), min_length=1, max_length=200)

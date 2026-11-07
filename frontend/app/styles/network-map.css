@@ -1,4 +1,15 @@
 .network-map-panel { min-width: 0; }
+.network-map-workspace { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 16px; min-width: 0; }
+.network-inventory { min-width: 0; display: flex; flex-direction: column; gap: 12px; max-height: min(70vh, 780px); }
+.network-inventory-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; min-height: 0; }
+.network-inventory-device { display: flex; align-items: center; gap: 8px; padding: 10px 2px; border-bottom: 1px solid var(--border-color); min-width: 0; }
+.network-inventory-device.dragging { opacity: 0.4; }
+.network-inventory-name { flex: 1; min-width: 0; }
+.network-inventory-name p { overflow-wrap: anywhere; }
+.network-inventory-grip { flex: 0 0 28px; touch-action: none; cursor: grab; }
+.network-drag-preview { max-width: 240px; padding: 12px; border: 1px solid var(--brand); border-radius: 4px; background: var(--panel-strong-bg); color: var(--app-text); overflow-wrap: anywhere; box-shadow: 0 3px 10px rgb(0 0 0 / 15%); }
+.topology-device-node.unconnected { border-style: dashed; }
+.topology-device-node.drop-target, .network-inventory-device.drop-target { outline: 2px solid var(--brand); outline-offset: -2px; background: var(--muted-panel-bg); }
 .network-map-canvas {
   width: 100%; height: min(70vh, 780px); min-height: 440px; position: relative;
   border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden;
@@ -51,6 +62,13 @@
 .network-map-device-list li { padding: 8px 0; border-bottom: 1px solid var(--border-color); min-width: 0; overflow-wrap: anywhere; }
 .network-map-device-list button { width: 100%; }
 .network-observation-row { border-bottom: 1px solid var(--border-color); padding: 10px 0; overflow-wrap: anywhere; }
+@media (max-width: 1000px) {
+  .network-map-workspace { grid-template-columns: 220px minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .network-map-workspace { grid-template-columns: minmax(0, 1fr); }
+  .network-inventory { max-height: 300px; }
+}
 @media (max-width: 600px) {
   .network-map-panel { padding: 12px; }
   .network-map-canvas { min-height: 420px; height: 62vh; }

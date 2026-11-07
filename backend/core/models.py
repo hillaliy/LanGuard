@@ -40,6 +40,11 @@ class NetworkMapLayout(models.Model):
     revision = models.PositiveIntegerField(default=0)
 
 
+class NetworkMapPreference(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="network_map_preference")
+    show_lldp_suggestions = models.BooleanField(default=False)
+
+
 class NetworkLinkDismissal(models.Model):
     key = models.CharField(max_length=64, primary_key=True)
     created_at = models.DateTimeField(auto_now_add=True)

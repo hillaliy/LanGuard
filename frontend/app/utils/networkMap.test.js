@@ -13,6 +13,18 @@ test('Dagre places connected devices without overlapping', () => {
   assert.ok(Object.values(positions).every((point) => Number.isFinite(point.x) && Number.isFinite(point.y)));
 });
 
+test('unconnected devices populate a separate grid without invented links', () => {
+  const data = Array.from({ length: 9 }, (_, index) => ({ id: index + 1 }));
+  const positions = networkMapPositions(data, []);
+  assert.equal(Object.keys(positions).length, 9);
+  assert.equal(new Set(Object.values(positions).map(({ x, y }) => `${x}:${y}`)).size, 9);
+  assert.equal(positions[1].y, positions[2].y);
+  assert.ok(positions[4].y > positions[1].y);
+  const mixed = networkMapPositions(data, links);
+  assert.ok(mixed[4].x > Math.max(mixed[1].x, mixed[2].x, mixed[3].x) + 244);
+  assert.deepEqual(networkMapPositions([], []), {});
+});
+
 test('saved positions remain exact and new nodes do not cover them', () => {
   const first = networkMapPositions(devices, links);
   const saved = { 1: { ...first[2] } };

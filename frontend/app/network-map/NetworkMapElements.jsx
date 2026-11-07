@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { Handle, Position, BaseEdge, EdgeLabelRenderer } from '@xyflow/react';
 import { IconGripVertical } from '@tabler/icons-react';
+import { useDroppable } from '@dnd-kit/core';
 
 import DeviceIconStack from '../components/DeviceIconStack';
 import { formatRoleLabel } from '../utils/device';
@@ -8,8 +9,11 @@ import { networkLinkTitle } from '../utils/networkMap';
 
 export const NetworkDeviceNode = memo(function NetworkDeviceNode({ data, isConnectable }) {
   const device = data.device;
+  const { setNodeRef, isOver } = useDroppable({
+    id: `network-node-${device.id}`, data: { deviceId: device.id }, disabled: !data.canDrop,
+  });
   return (
-    <article className={`topology-device-node ${device.online ? 'online' : 'offline'}`}>
+    <article ref={setNodeRef} className={`topology-device-node ${device.online ? 'online' : 'offline'} ${data.connected ? '' : 'unconnected'} ${isOver ? 'drop-target' : ''}`}>
       <Handle type="target" position={Position.Top} isConnectable={isConnectable} />
       <div className="network-node-heading">
         {data.editing && <span className="network-node-grip" aria-label="Move device"><IconGripVertical size={16} /></span>}
@@ -18,7 +22,7 @@ export const NetworkDeviceNode = memo(function NetworkDeviceNode({ data, isConne
       </div>
       <div className="network-node-address">{device.ip}</div>
       <div className="network-node-footer">
-        <span>{formatRoleLabel(device.role)}</span>
+        <span>{data.connected ? formatRoleLabel(device.role) : 'Unconnected'}</span>
         <span><i className={`network-presence-dot ${device.online ? 'online' : ''}`} />{device.online ? 'Online' : 'Not online'}</span>
       </div>
       <Handle type="source" position={Position.Bottom} isConnectable={isConnectable} />
