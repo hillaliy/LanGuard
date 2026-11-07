@@ -1,6 +1,10 @@
 .network-map-panel { min-width: 0; }
 .network-map-workspace { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 16px; min-width: 0; }
-.network-inventory { min-width: 0; display: flex; flex-direction: column; gap: 12px; max-height: min(70vh, 780px); }
+.network-map-sidebar { min-width: 0; height: min(70vh, 780px); min-height: 440px; display: flex; flex-direction: column; gap: 16px; }
+.network-inventory { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 12px; }
+.network-overview { flex: 0 0 132px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--border-color); border-radius: 4px;
+  --xy-minimap-background-color: var(--muted-panel-bg); --xy-minimap-mask-background-color: transparent; --xy-minimap-node-background-color: var(--subtle-text); }
+.network-overview .react-flow__minimap { position: relative; inset: auto; margin: 0; }
 .network-inventory-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; min-height: 0; }
 .network-inventory-device { display: flex; align-items: center; gap: 8px; padding: 10px 2px; border-bottom: 1px solid var(--border-color); min-width: 0; }
 .network-inventory-device.dragging { opacity: 0.4; }
@@ -36,6 +40,7 @@
   font: inherit; font-size: 14px; font-weight: 700; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .network-node-name:focus-visible { outline: 2px solid var(--brand); }
 .network-node-grip { flex: 0 0 16px; color: var(--subtle-text); cursor: grab; }
+.network-branch-toggle { flex: 0 0 24px; margin-left: auto; }
 .network-node-address { font-size: 12px; color: var(--muted-text); margin-top: 6px; }
 .network-node-footer { display: flex; justify-content: space-between; gap: 6px; color: var(--muted-text); margin-top: 8px; font-size: 11px; }
 .network-node-footer > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -52,6 +57,8 @@
 .network-connection-label.suggested { border-color: #d08a14; }
 .network-connection-label.lldp { border-color: #0ca678; }
 .network-connection-label.stale { border-style: dashed; }
+.network-connection-label.quiet { opacity: 0; pointer-events: none; }
+.network-connection-label:focus-visible { opacity: 1; pointer-events: all; outline: 2px solid var(--brand); }
 .network-map-legend { font-size: 11px; color: var(--muted-text); }
 .network-map-legend > span::before { content: ''; display: inline-block; width: 20px; border-top: 2px solid var(--muted-text); margin-right: 5px; vertical-align: middle; }
 .network-map-legend > .lldp::before { border-color: #0ca678; }
@@ -67,7 +74,9 @@
 }
 @media (max-width: 700px) {
   .network-map-workspace { grid-template-columns: minmax(0, 1fr); }
-  .network-inventory { max-height: 300px; }
+  .network-map-sidebar { height: auto; min-height: 0; }
+  .network-overview { display: none; }
+  .network-inventory { flex: none; max-height: 300px; }
 }
 @media (max-width: 600px) {
   .network-map-panel { padding: 12px; }

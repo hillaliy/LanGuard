@@ -1,4 +1,5 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -7,6 +8,7 @@ from rest_framework.test import APIClient
 
 from ..models import Device, NetworkLink, NetworkLinkDismissal, NetworkMapLayout, NetworkMapPreference, UserAccess
 from ..network_map import record_network_observations
+from ..database_writes import _PROCESS_WRITE_LOCK
 from ..serializers.network_map import NetworkLayoutSerializer
 
 
@@ -47,6 +49,40 @@ class NetworkMapTests(TestCase):
     def test_preferences_default_without_creating_database_rows(self):
         self.assertEqual(self.get_map()["preferences"], {"show_lldp_suggestions": False})
         self.assertFalse(NetworkMapPreference.objects.exists())
+
+    def test_all_map_writes_return_busy_without_changes_during_a_scan(self):
+        created = self.create_link().data["data"]
+        suggestion = self.report_neighbor(local_port="LAN 2", port_id="eth1")[0]
+        NetworkLinkDismissal.objects.create(key="existing-dismissal")
+        requests = [
+            ("post", "links/", {"source": self.router.pk, "target": self.laptop.pk}),
+            ("post", "links/bulk/", {"connections": [{"source": self.router.pk, "target": self.laptop.pk}]}),
+            ("put", f"links/{created['id']}/", {"source": self.router.pk, "target": self.laptop.pk, "revision": 1}),
+            ("delete", f"links/{created['id']}/", {"revision": 1}),
+            ("put", "layout/", {"revision": 0, "positions": {}}),
+            ("post", f"suggestions/{suggestion['key']}/accept/", {}),
+            ("post", f"suggestions/{suggestion['key']}/dismiss/", {}),
+            ("delete", "suggestions/restored/", {}),
+        ]
+        _PROCESS_WRITE_LOCK.acquire()
+        try:
+            with patch("core.views.network_map.NETWORK_MAP_WRITE_WAIT_SECONDS", 0.01):
+                for method, path, body in requests:
+                    with self.subTest(path=path, method=method):
+                        response = getattr(self.client, method)(f"/api/v1/network-map/{path}", body, format="json")
+                        self.assertEqual(response.status_code, 503)
+                        self.assertEqual(response["Retry-After"], "1")
+            response = self.client.put("/api/v1/network-map/preferences/", {"show_lldp_suggestions": True}, format="json")
+            self.assertEqual(response.status_code, 200)
+        finally:
+            _PROCESS_WRITE_LOCK.release()
+        self.assertEqual(NetworkLink.objects.count(), 1)
+        self.assertEqual(NetworkLink.objects.get().revision, 1)
+        self.assertFalse(NetworkMapLayout.objects.exists())
+        self.assertEqual(NetworkLinkDismissal.objects.count(), 1)
+        response = self.client.post("/api/v1/network-map/links/bulk/", requests[1][2], format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(NetworkLink.objects.count(), 2)
 
     def test_preferences_persist_for_the_account_across_clients(self):
         for enabled in (True, False):
