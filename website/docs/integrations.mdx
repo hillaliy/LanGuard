@@ -17,7 +17,7 @@ Docker installations can connect optional services from **Settings > Integration
 | Technitium DNS Server v15+ | DNS destinations and blocked totals, with optional DHCP enrichment | Stores aggregate counters and selected lease identity data, not raw DNS responses |
 | DHCP lease source | IPv4 address and hostname evidence from dnsmasq, Kea, or ISC DHCP files | Imports active leases; does not infer online presence or delete devices on expiry |
 | ASUSWRT | Router client discovery, IPv4/hostname/vendor enrichment, and available connection details | Reads structured client data; preserves user-managed identity and scanner presence |
-| Speedtest Tracker | Latest internet result and health on the dashboard | Stores settings and latest processed health state, not result history |
+| Speedtest Tracker | Latest internet result and health on the dashboard and Network Map Internet tile | Stores settings and latest processed health state, not result history |
 | HomeBox | Search and link an existing inventory item to a device | Stores the linked item ID; does not synchronize inventory |
 | Docker inventory | Running containers, health, addresses, restarts, and published ports | Reads the local Docker engine from the scheduler |
 
@@ -173,6 +173,8 @@ DNS queries are imported incrementally and attributed using LanGuard's historica
 LanGuard displays download, upload, ping, packet loss, health, and test time. Dashboard responses use a five-minute in-memory cache; a manual dashboard refresh requests fresh data. When health notifications are enabled, the scheduler checks for a newly scored result every five minutes.
 
 Configure thresholds in Speedtest Tracker first. Unscored results and temporary connection failures do not send a health-change notification.
+
+The [Network Map Internet node](/docs/network-map#internet-and-speedtest) reuses the latest measurement, including its timestamp. A positive completed test no older than 15 minutes can verify access at test time; enabling the integration alone does not prove connectivity. Older measurements remain labeled as historical, and a failed API request does not mean the Internet is offline. This is not a live or per-WAN reachability probe.
 
 ## HomeBox
 

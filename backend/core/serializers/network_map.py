@@ -1,4 +1,5 @@
 import math
+import re
 
 from rest_framework import serializers
 
@@ -35,6 +36,7 @@ class NetworkLinkSerializer(serializers.ModelSerializer):
 
 
 class NetworkLayoutSerializer(serializers.Serializer):
+    mode = serializers.ChoiceField(choices=["full", "infrastructure"], default="full")
     revision = serializers.IntegerField(min_value=0)
     positions = serializers.JSONField()
 
@@ -42,22 +44,39 @@ class NetworkLayoutSerializer(serializers.Serializer):
         if not isinstance(value, dict) or len(value) > 10000:
             raise serializers.ValidationError("Positions must be an object with at most 10,000 devices.")
         result = {}
+        device_ids = set()
         for key, position in value.items():
-            if (not isinstance(key, str) or len(key) > 19 or not key.isascii() or not key.isdecimal()
-                    or not 0 < int(key) <= 9223372036854775807 or key != str(int(key))
+            numeric = isinstance(key, str) and re.fullmatch(r"[1-9][0-9]{0,18}", key)
+            group = isinstance(key, str) and re.fullmatch(r"(?:internet|mobile-(?:unassigned|([1-9][0-9]{0,18})-(wifi|ethernet|unknown)))", key)
+            reference = int(key) if numeric else int(group[1]) if group and group[1] else None
+            if ((not numeric and not group) or (reference is not None and reference > 9223372036854775807)
                     or not isinstance(position, dict) or set(position) != {"x", "y"}):
                 raise serializers.ValidationError("Each device ID must have an x and y position.")
             if any(isinstance(v, bool) or not isinstance(v, (float, int)) or not math.isfinite(v) or abs(v) > 1_000_000
                    for v in position.values()):
                 raise serializers.ValidationError("Coordinates must be finite numbers within the supported canvas.")
-            result[str(int(key))] = position
-        if Device.objects.filter(pk__in=[int(key) for key in result]).count() != len(result):
+            result[key] = position
+            if reference is not None:
+                device_ids.add(reference)
+        if Device.objects.filter(pk__in=device_ids).count() != len(device_ids):
             raise serializers.ValidationError("Positions must refer to inventoried devices.")
         return result
 
 
 class NetworkRevisionSerializer(serializers.Serializer):
     revision = serializers.IntegerField(min_value=1)
+
+
+class NetworkInternetSerializer(serializers.Serializer):
+    revision = serializers.IntegerField(min_value=0)
+    target = serializers.PrimaryKeyRelatedField(queryset=Device.objects.filter(archived=False, is_visitor=False))
+    kind = serializers.ChoiceField(choices=NetworkLink.Kind.choices, default='unknown')
+
+    def validate_target(self, value):
+        _, interfaces = endpoint_registry()
+        if value.pk not in interfaces:
+            raise serializers.ValidationError('Choose an interface of an active regular device.')
+        return value
 
 
 class NetworkMapPreferenceSerializer(serializers.Serializer):

@@ -45,6 +45,16 @@ class NetworkMapPreference(models.Model):
     show_lldp_suggestions = models.BooleanField(default=False)
 
 
+class NetworkInternetConnection(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    enabled = models.BooleanField(default=False)
+    target = models.ForeignKey('Device', null=True, blank=True, on_delete=models.SET_NULL, related_name='internet_uplinks')
+    kind = models.CharField(max_length=16, default='unknown', choices=[
+        ('ethernet', 'Ethernet'), ('wifi', 'Wi-Fi'), ('unknown', 'Unknown'),
+    ])
+    revision = models.PositiveIntegerField(default=0)
+
+
 class NetworkLinkDismissal(models.Model):
     key = models.CharField(max_length=64, primary_key=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -597,6 +607,25 @@ class SchedulerRuntimeState(models.Model):
 
     def __str__(self):
         return "Scheduler runtime state"
+
+
+class NetworkMapCommand(models.Model):
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    request_id = models.UUIDField()
+    path = models.CharField(max_length=160)
+    method = models.CharField(max_length=6)
+    body = models.JSONField(default=dict)
+    status = models.CharField(max_length=12, default="queued", choices=[
+        ("queued", "Queued"), ("succeeded", "Succeeded"), ("failed", "Failed"),
+    ])
+    result = models.JSONField(default=dict)
+    created_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [models.UniqueConstraint(fields=["requested_by", "request_id"], name="unique_map_command_request")]
+        indexes = [models.Index(fields=["status", "id"], name="map_command_queue_idx")]
 
 
 class DetailedPortScan(models.Model):

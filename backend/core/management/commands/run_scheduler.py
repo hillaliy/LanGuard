@@ -393,6 +393,19 @@ class Command(BaseCommand):
                 if stop_event.wait(HEALTH_CHECK_INTERVAL_SECONDS):
                     break
 
+        def network_map_command_loop():
+            from core.network_map_commands import process_next_network_map_command
+            while not stop_event.is_set():
+                close_old_connections()
+                try:
+                    process_next_network_map_command()
+                except Exception:
+                    LOGGER.exception("Network map save worker failed")
+                finally:
+                    close_old_connections()
+                if stop_event.wait(1):
+                    break
+
         def detailed_port_scan_loop():
             close_old_connections()
             try:
@@ -489,6 +502,7 @@ class Command(BaseCommand):
             daemon=True,
         )
         detailed_port_scan_thread.start()
+        threading.Thread(target=network_map_command_loop, daemon=True).start()
         docker_inventory_thread = threading.Thread(
             target=docker_inventory_loop,
             daemon=True,
