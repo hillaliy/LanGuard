@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.26.0 - 2026-11-07
+
 - Added a separate Network Map with interface-level manual connections, explicit review of exact-MAC LLDP suggestions, stale-observation indicators, parallel links, merged-device nodes, unconnected-device lists, and independently saved draggable positions. Included automatic layout, zoom, search, permission checks, and conflict-safe editing without inferring topology from names or shared IP ranges.
 
 - Added an opt-in ASUSWRT integration under Network controllers, with read-only HTTP(S) client discovery, connection testing, manual and scheduled synchronization, optional Unknown-device creation, and timestamped router connection observations on device pages. Protected saved credentials, user-managed identity, scanner presence, and IP ownership, and paused automatic login after authentication failures.
@@ -9,6 +11,8 @@
 - Replaced the unavailable third-party Docker pulls badge source with a daily GitHub Actions update of the public backend package download count, preserving the last successful count if fetching fails.
 
 - Added persistent empty Home Map rooms and floor containers with optional parent selection, existing drag-and-drop nesting, and safe deletion that preserves child rooms and device assignments. Kept custom rooms when resetting the layout.
+
+- Updated the Docker Python base from 3.14 to 3.15, Granian from 2.8.4 to 2.8.7, Ruff from 0.17.1 to 0.17.3, Mantine from 9.7.2 to 9.7.4, Tabler icons from 3.49.0 to 3.50.0, and Next.js and eslint-config-next from 16.4.2 to 16.4.3. Added React Flow and Dagre for the Network Map.
 
 ## 1.25.0 - 2026-10-24
 
