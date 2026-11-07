@@ -5,6 +5,7 @@ const mainViewPaths = {
   dashboard: '/dashboard',
   devices: '/devices',
   'home-map': '/home-map',
+  'network-map': '/network-map',
   docker: '/docker',
   events: '/events',
   history: '/scan-history',

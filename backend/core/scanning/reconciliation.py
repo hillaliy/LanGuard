@@ -307,6 +307,10 @@ def sync_discovered_device(
                 update_fields.append("icon")
         device.save(update_fields=update_fields)
 
+        from ..network_map import record_network_observations
+
+        record_network_observations()
+
     return {
         "new_devices": new_devices,
         "ports_opened": ports_opened,

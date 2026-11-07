@@ -1,11 +1,13 @@
 import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
+import '@xyflow/react/dist/style.css';
 import './globals.css';
 import './styles/shell.css';
 import './styles/pages.css';
 import './styles/dashboard.css';
 import './styles/devices.css';
 import './styles/maps.css';
+import './styles/network-map.css';
 import './styles/device-details.css';
 import './styles/responsive.css';
 import { ColorSchemeScript, MantineProvider } from '@mantine/core';

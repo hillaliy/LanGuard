@@ -38,6 +38,10 @@ from .views.scans import scan_now, scan_status
 from .views.port_scans import cancel_detailed_port_scan, detailed_port_scan
 from .views.health import health_status
 from .views.home_map import home_map_layout
+from .views.network_map import (
+    network_map, network_links, network_link, network_layout,
+    accept_network_suggestion, dismiss_network_suggestion, restore_network_suggestions,
+)
 from .views.maintenance import maintenance_cleanup
 from .views.diagnostics import export_diagnostics
 from .views.devices import (
@@ -60,6 +64,13 @@ from .views.inventory import (
 )
 
 urlpatterns = [
+    path("network-map/", network_map, name="network-map"),
+    path("network-map/links/", network_links, name="network-links"),
+    path("network-map/links/<int:link_id>/", network_link, name="network-link"),
+    path("network-map/layout/", network_layout, name="network-map-layout"),
+    path("network-map/suggestions/restored/", restore_network_suggestions, name="network-suggestions-restore"),
+    path("network-map/suggestions/<slug:key>/accept/", accept_network_suggestion, name="network-suggestion-accept"),
+    path("network-map/suggestions/<slug:key>/dismiss/", dismiss_network_suggestion, name="network-suggestion-dismiss"),
     path(
         "integrations/docker/inventory/",
         docker_inventory_overview,
