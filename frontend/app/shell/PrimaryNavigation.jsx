@@ -9,6 +9,7 @@ import {
   IconShieldLock,
   IconSmartHome,
   IconWorldSearch,
+  IconTopologyStar,
 } from '@tabler/icons-react';
 
 import { getAdminUrl } from '../api';
@@ -17,6 +18,7 @@ export const viewTitles = {
   dashboard: 'Dashboard',
   devices: 'Devices',
   'home-map': 'Home Map',
+  'network-map': 'Network Map',
   docker: 'Docker',
   events: 'Events',
   history: 'Scan history',
@@ -60,6 +62,7 @@ export default function PrimaryNavigation({
       {navigationButton('dashboard', 'Dashboard', <IconLayoutDashboard size={18} />)}
       {navigationButton('devices', 'Devices', <IconNetwork size={18} />)}
       {navigationButton('home-map', 'Home Map', <IconSmartHome size={18} />)}
+      {navigationButton('network-map', 'Network Map', <IconTopologyStar size={18} />)}
       {showDockerInventory
         && navigationButton('docker', 'Docker', <IconBrandDocker size={18} />)}
       <Divider my={4} />

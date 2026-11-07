@@ -5,6 +5,7 @@ import DevicesView from '../devices/DevicesView';
 import DockerView from '../docker/DockerView';
 import EventsView from '../events/EventsView';
 import HomeMapView from '../home-map/HomeMapView';
+import NetworkMapView from '../network-map/NetworkMapView';
 import NotificationsView from '../notifications/NotificationsView';
 import ScanHistoryView from '../scan-history/ScanHistoryView';
 import SettingsView from '../settings/SettingsView';
@@ -38,10 +39,16 @@ export default function AppRouteContent({ controller }) {
         devicesLoaded={!c.loading}
         onSelectDevice={c.openDevicePage}
         canEditLayout={c.canEditHomeMap}
+        onOpenNetworkMap={() => c.navigateToView('network-map')}
         onError={showErrorNotification}
         onSuccess={showServerNotification}
       />
     );
+  }
+
+  if (c.mainView === 'network-map') {
+    return <NetworkMapView canEditLinks={c.canEditDevices} canEditLayout={c.canEditHomeMap}
+      onSelectDevice={c.openDevicePage} timeZone={c.displayTimeZone} />;
   }
 
   if (c.mainView === 'docker') {

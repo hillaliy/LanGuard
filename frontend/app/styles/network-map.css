@@ -1,0 +1,58 @@
+.network-map-panel { min-width: 0; }
+.network-map-canvas {
+  width: 100%; height: min(70vh, 780px); min-height: 440px; position: relative;
+  border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden;
+  background: var(--input-panel-bg);
+  --xy-background-color: var(--input-panel-bg);
+  --xy-edge-stroke: var(--muted-text);
+  --xy-controls-button-background-color: var(--panel-strong-bg);
+  --xy-controls-button-background-color-hover: var(--muted-panel-bg);
+  --xy-controls-button-color: var(--app-text);
+  --xy-controls-button-color-hover: var(--app-text);
+  --xy-controls-button-border-color: var(--border-color);
+  --xy-minimap-background-color: var(--muted-panel-bg);
+  --xy-minimap-mask-background-color: transparent;
+  --xy-minimap-node-background-color: var(--subtle-text);
+}
+.topology-device-node {
+  width: 244px; height: 116px; padding: 12px; border: 1px solid var(--border-color);
+  border-radius: 6px; background: var(--panel-strong-bg); color: var(--app-text);
+  box-shadow: 0 2px 5px rgb(0 0 0 / 5%);
+}
+.react-flow__node.selected .topology-device-node { outline: 2px solid var(--brand); outline-offset: 2px; }
+.network-node-heading { display: flex; align-items: center; gap: 8px; height: 40px; }
+.network-node-name { min-width: 0; background: none; border: none; padding: 0; color: inherit; text-align: start; cursor: pointer;
+  font: inherit; font-size: 14px; font-weight: 700; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+.network-node-name:focus-visible { outline: 2px solid var(--brand); }
+.network-node-grip { flex: 0 0 16px; color: var(--subtle-text); cursor: grab; }
+.network-node-address { font-size: 12px; color: var(--muted-text); margin-top: 6px; }
+.network-node-footer { display: flex; justify-content: space-between; gap: 6px; color: var(--muted-text); margin-top: 8px; font-size: 11px; }
+.network-node-footer > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.network-presence-dot { display: inline-block; width: 6px; height: 6px; background: #8c929b; border-radius: 50%; margin-right: 4px; }
+.network-presence-dot.online { background: #12b886; }
+.network-map-canvas .react-flow__handle { background: var(--brand); border-color: var(--panel-strong-bg); width: 8px; height: 8px; }
+.network-connection.manual { stroke: var(--muted-text); stroke-width: 2; }
+.network-connection.lldp { stroke: #0ca678; stroke-width: 2; }
+.network-connection.suggested { stroke: #d08a14; stroke-width: 2; stroke-dasharray: 6 5; }
+.network-connection.stale { stroke: #8c929b; stroke-width: 2; stroke-dasharray: 3 5; }
+.network-connection.selected { stroke-width: 3; }
+.network-connection-label { position: absolute; pointer-events: all; max-width: 190px; padding: 3px 7px; border: 1px solid var(--border-color); border-radius: 4px;
+  background: var(--panel-strong-bg); color: var(--muted-text); font: inherit; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.network-connection-label.suggested { border-color: #d08a14; }
+.network-connection-label.lldp { border-color: #0ca678; }
+.network-connection-label.stale { border-style: dashed; }
+.network-map-legend { font-size: 11px; color: var(--muted-text); }
+.network-map-legend > span::before { content: ''; display: inline-block; width: 20px; border-top: 2px solid var(--muted-text); margin-right: 5px; vertical-align: middle; }
+.network-map-legend > .lldp::before { border-color: #0ca678; }
+.network-map-legend > .suggested::before { border-color: #d08a14; border-top-style: dashed; }
+.network-map-legend > .stale::before { border-color: #8c929b; border-top-style: dashed; }
+.network-map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; color: var(--subtle-text); pointer-events: none; }
+.network-map-device-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 0 20px; }
+.network-map-device-list li { padding: 8px 0; border-bottom: 1px solid var(--border-color); min-width: 0; overflow-wrap: anywhere; }
+.network-map-device-list button { width: 100%; }
+.network-observation-row { border-bottom: 1px solid var(--border-color); padding: 10px 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .network-map-panel { padding: 12px; }
+  .network-map-canvas { min-height: 420px; height: 62vh; }
+  .network-map-minimap { display: none; }
+}

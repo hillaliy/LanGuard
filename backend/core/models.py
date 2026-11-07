@@ -9,6 +9,42 @@ from django.utils import timezone
 QUIET_HOURS_DAY_KEYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 
+class NetworkLink(models.Model):
+    class Kind(models.TextChoices):
+        ETHERNET = "ethernet", "Ethernet"
+        WIFI = "wifi", "Wi-Fi"
+        UNKNOWN = "unknown", "Unknown"
+
+    source = models.ForeignKey("Device", on_delete=models.CASCADE, related_name="outgoing_network_links")
+    target = models.ForeignKey("Device", on_delete=models.CASCADE, related_name="incoming_network_links")
+    source_port = models.CharField(max_length=128, blank=True, default="")
+    target_port = models.CharField(max_length=128, blank=True, default="")
+    kind = models.CharField(max_length=16, choices=Kind.choices, default=Kind.UNKNOWN)
+    label = models.CharField(max_length=100, blank=True, default="")
+    origin = models.CharField(max_length=16, choices=[("manual", "Manual"), ("lldp", "LLDP")], default="manual")
+    evidence_key = models.CharField(max_length=64, blank=True, default="")
+    observed_at = models.DateTimeField(blank=True, null=True)
+    signature = models.CharField(max_length=64, unique=True, editable=False)
+    revision = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["pk"]
+        constraints = [models.CheckConstraint(condition=~models.Q(source=models.F("target")), name="network_link_distinct_interfaces")]
+
+
+class NetworkMapLayout(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    positions = models.JSONField(default=dict, blank=True)
+    revision = models.PositiveIntegerField(default=0)
+
+
+class NetworkLinkDismissal(models.Model):
+    key = models.CharField(max_length=64, primary_key=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 def default_quiet_hours_days():
     return list(QUIET_HOURS_DAY_KEYS)
 

@@ -107,3 +107,15 @@ Users with the corresponding permission can edit room order and nesting, drag ro
 To create a floor or room without devices, choose **Edit layout > Add room**, enter a unique name, and optionally select a parent room. Existing rooms can also be dragged into the new room. Choose **Done** to save the rooms and layout to the server. Each device still belongs to one room; nesting does not assign it to multiple rooms or duplicate its counts.
 
 Custom rooms remain visible in **All**, even when empty. Other filters retain a container only when it or its descendants have matching devices. Empty custom rooms can be deleted while editing; their children move up one level and device assignments are unchanged. Rooms containing devices cannot be deleted from the map. **Reset layout** keeps custom rooms while resetting their arrangement.
+
+## Network Map
+
+The separate **Network Map** shows connections between devices, not room membership. Open it from navigation or the Home Map shortcut. Devices without saved connections remain in **Unconnected devices** until connected; the map does not invent an Internet gateway or infer links from names, subnets, or router client lists.
+
+Choose **Edit map > Add connection** and select both devices, their network interfaces, optional port names, connection type, and label. Multiple links between the same devices are supported when their interfaces or ports differ. A merged device appears once, while each link retains its actual MAC-level endpoint. Editing or deleting a connection does not alter device inventory or scanner presence.
+
+Manual links, confirmed LLDP links, unconfirmed LLDP suggestions, and stale observations use distinct line styles. LLDP suggestions require an exact match between a reported neighbor chassis MAC and an inventoried interface; names alone are not sufficient. Review suggestions explicitly before accepting them. Unmatched neighbors are listed separately. Missing or older-than-24-hour LLDP observations mark accepted links stale instead of deleting them. LLDP does not establish whether a connection is Ethernet or Wi-Fi, so its initial type is **Unknown**.
+
+Pan, zoom, search for a device, or select a connection to inspect its endpoints and evidence timestamp. During editing, drag a device by its grip or choose automatic layout, then **Done** to save positions. Position changes are independent of the Home Map and survive refreshes. Creating, editing, confirming, dismissing, or deleting connections saves immediately. Concurrent edits are rejected rather than silently overwriting another user's changes.
+
+Connection editing requires device-edit permission; saving positions requires Home Map edit permission. Visitors and archived devices are omitted. Connections hidden by archiving or merging are retained and can reappear when their endpoints are visible again.

@@ -14,7 +14,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { IconGripVertical, IconNetwork, IconPlus, IconRestore, IconSmartHome } from '@tabler/icons-react';
+import { IconGripVertical, IconNetwork, IconPlus, IconRestore, IconSmartHome, IconTopologyStar } from '@tabler/icons-react';
 
 import {
   buildHomeMapGridSlots,
@@ -35,6 +35,7 @@ export default function HomeMapView({
   canEditLayout,
   onError,
   onSuccess,
+  onOpenNetworkMap,
 }) {
   const [deviceFilter, setDeviceFilter] = useState('all');
   const [addRoomOpened, setAddRoomOpened] = useState(false);
@@ -119,6 +120,7 @@ export default function HomeMapView({
             </Box>
           </Group>
           <Group gap="xs">
+            {onOpenNetworkMap && <Button size="xs" variant="subtle" leftSection={<IconTopologyStar size={16} />} onClick={onOpenNetworkMap}>Network Map</Button>}
             <Badge variant="light" color="indigo">{layout.rooms.length} rooms</Badge>
             <Badge variant="light" color="blue">{deviceCount} devices</Badge>
           </Group>

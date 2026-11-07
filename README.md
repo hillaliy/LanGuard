@@ -44,6 +44,7 @@ application or locally as a native macOS scanner.
 - Optionally inventory managed switches, access points, printers, interfaces, and LLDP neighbor hints through read-only SNMP v2c.
 - Track online state, scan history, IP changes, availability, and attention findings.
 - Organize regular, visitor, and archived devices by room, role, icon, and notes.
+- Map interface-level network connections with manual links, reviewed LLDP suggestions, and a saved draggable layout.
 - Send Discord, Telegram, ntfy, or signed automation webhook notifications.
 - Connect AdGuard Home, Pi-hole, or Technitium DNS Server for DNS context, plus Speedtest Tracker and HomeBox.
 - Discover and enrich router clients through a read-only ASUSWRT HTTP(S) integration, independently of DNS activity providers.
