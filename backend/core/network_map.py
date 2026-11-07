@@ -8,7 +8,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from .datetime_utils import utc_isoformat
-from .models import Device, NetworkLink, NetworkLinkDismissal, NetworkMapLayout
+from .models import Device, NetworkLink, NetworkLinkDismissal, NetworkMapLayout, NetworkInternetConnection
 
 STALE_AFTER = timedelta(hours=24)
 
@@ -84,6 +84,8 @@ def network_map_data():
             "id": root.pk, "name": root.name or root.hostname or root.ip, "ip": root.ip, "mac": root.mac,
             "icon": root.icon, "secondary_icon": root.secondary_icon, "role": root.role, "room": root.room,
             "online": any(device.online for device in members),
+            "is_gateway": any(device.is_gateway for device in members),
+            "last_seen": utc_isoformat(max(device.lastseen for device in members)),
             "interfaces": [{"id": device.pk, "mac": device.mac, "ip": device.ip} for device in members],
         })
     evidence, unresolved = lldp_evidence(interfaces)
@@ -117,10 +119,16 @@ def network_map_data():
         suggestions.append({**item, "observed_at": utc_isoformat(item["observed_at"]),
                             "stale": now - item["observed_at"] > STALE_AFTER})
     layout = NetworkMapLayout.objects.filter(pk=1).first()
+    internet = NetworkInternetConnection.objects.filter(pk=1).first()
+    internet_target = interfaces.get(internet.target_id) if internet else None
     return {
         "devices": devices, "links": links, "suggestions": suggestions, "unresolved": unresolved,
         "hidden_links": hidden, "dismissed_count": len(dismissed),
-        "layout": {"positions": layout.positions if layout else {}, "revision": layout.revision if layout else 0},
+        "internet": {"enabled": internet.enabled, "target": internet.target_id,
+                     "target_device": logical_id(internet_target) if internet_target else None,
+                     "kind": internet.kind, "revision": internet.revision} if internet else None,
+        "layout": {"positions": layout.positions if layout else {},
+                   "revision": layout.revision if layout else 0},
     }
 
 

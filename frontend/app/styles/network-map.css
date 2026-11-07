@@ -1,5 +1,51 @@
 .network-map-panel { min-width: 0; }
-.network-map-workspace { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 16px; min-width: 0; }
+.topology-device-node.infrastructure-node { height: 156px; line-height: 1.3; }
+.network-node-summary { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; font-size: 11px; color: var(--muted-text); }
+.network-mobile-band { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 12px 0; border-block: 1px solid var(--border-color); }
+.network-devices-dialog-title { min-width: 0; overflow-wrap: anywhere; padding-inline-end: 12px; }
+.network-devices-dialog-body { min-width: 0; }
+.network-clients-table { table-layout: fixed; width: 100%; }
+.network-clients-device-column { width: 32%; }
+.network-clients-ip-column { width: 156px; }
+.network-clients-status-column { width: 128px; }
+.network-clients-seen-column { width: 192px; }
+.network-clients-actions-column { width: 56px; }
+.network-clients-table th, .network-clients-table td { overflow-wrap: anywhere; white-space: normal; }
+.network-clients-table td:last-child { text-align: center; }
+.network-clients-table .device-icon-stack { flex-shrink: 0; }
+.network-clients-table td p, .network-client-name { overflow-wrap: anywhere; }
+.network-clients-table td:nth-child(4) .mantine-ActionIcon-root { flex-shrink: 0; }
+.network-client-name { min-width: 0; }
+.network-client-link { min-width: 0; background: none; border: 0; padding: 0; text-align: start; color: var(--brand); font: inherit; font-size: 12px; cursor: pointer; overflow-wrap: anywhere; }
+.network-client-link:focus-visible { outline: 2px solid var(--brand); }
+.network-map-workspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
+.network-map-workspace.has-inventory { grid-template-columns: 270px minmax(0, 1fr); }
+.network-mobile-node { border-color: var(--brand); border-style: dashed; }
+.network-roaming-indicator { display: inline-flex; align-items: center; color: var(--brand); vertical-align: middle; }
+.network-roaming-indicator:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.network-internet-node { border-color: #12b886; }
+.topology-device-node.network-internet-node { height: 196px; }
+.network-internet-node .network-node-heading > svg { color: #0ca678; flex-shrink: 0; }
+.network-internet-target { font-size: 13px; margin: 8px 0; color: var(--muted-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.network-internet-speeds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px 6px; font-size: 11px; color: var(--muted-text); }
+.network-internet-speeds > span { display: flex; align-items: center; gap: 3px; white-space: nowrap; min-width: 0; }
+.network-internet-speeds strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--app-text); font-size: 11px; }
+.network-internet-tested { margin-top: 6px; font-size: 10px; color: var(--muted-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.network-internet-no-result { color: var(--muted-text); font-size: 11px; margin-block: 8px; }
+.internet-verification.teal { color: #0ca678; }
+.internet-verification.orange { color: #e67700; }
+.network-presence-dot.degraded { background: #e67700; }
+.internet-verification:focus-visible { outline: 2px solid var(--brand); }
+.network-mobile-icons { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--brand); }
+.network-mobile-icons .offline { color: var(--muted-text); opacity: 0.65; }
+.network-connection.kind-wifi.manual { stroke: #228be6; }
+.network-connection.mobile-group-link { stroke-width: 2.5; }
+.network-connection.kind-unknown { stroke-dasharray: 2 5; }
+.network-connection.stale { opacity: 0.55; }
+.network-connection-label { display: flex; align-items: center; gap: 4px; }
+.network-transport-legend > .wifi::before { border-color: #228be6; border-top-style: dashed; }
+.network-transport-legend > .unknown::before { border-top-style: dotted; }
+.network-transport-legend > p { display: flex; align-items: center; gap: 4px; }
 .network-map-sidebar { min-width: 0; height: min(70vh, 780px); min-height: 440px; display: flex; flex-direction: column; gap: 16px; }
 .network-inventory { min-width: 0; min-height: 0; flex: 1; display: flex; flex-direction: column; gap: 12px; }
 .network-overview { flex: 0 0 132px; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--border-color); border-radius: 4px;
@@ -62,18 +108,18 @@
 .network-map-legend { font-size: 11px; color: var(--muted-text); }
 .network-map-legend > span::before { content: ''; display: inline-block; width: 20px; border-top: 2px solid var(--muted-text); margin-right: 5px; vertical-align: middle; }
 .network-map-legend > .lldp::before { border-color: #0ca678; }
-.network-map-legend > .suggested::before { border-color: #d08a14; border-top-style: dashed; }
-.network-map-legend > .stale::before { border-color: #8c929b; border-top-style: dashed; }
+.network-map-legend > .suggested::before { border-color: #d08a14; }
+.network-map-legend > .stale::before { border-color: #8c929b; opacity: 0.55; }
 .network-map-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px; color: var(--subtle-text); pointer-events: none; }
 .network-map-device-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 0 20px; }
 .network-map-device-list li { padding: 8px 0; border-bottom: 1px solid var(--border-color); min-width: 0; overflow-wrap: anywhere; }
 .network-map-device-list button { width: 100%; }
 .network-observation-row { border-bottom: 1px solid var(--border-color); padding: 10px 0; overflow-wrap: anywhere; }
 @media (max-width: 1000px) {
-  .network-map-workspace { grid-template-columns: 220px minmax(0, 1fr); }
+  .network-map-workspace.has-inventory { grid-template-columns: 220px minmax(0, 1fr); }
 }
 @media (max-width: 700px) {
-  .network-map-workspace { grid-template-columns: minmax(0, 1fr); }
+  .network-map-workspace.has-inventory { grid-template-columns: minmax(0, 1fr); }
   .network-map-sidebar { height: auto; min-height: 0; }
   .network-overview { display: none; }
   .network-inventory { flex: none; max-height: 300px; }

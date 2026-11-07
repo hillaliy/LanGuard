@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 1.26.3 - 2026-11-07
+
+- Widened all Network Map device-list dialogs, reserved readable address/status/date/action columns, corrected the screen-reader-only actions heading, and wrapped long device/connection text without clipping while retaining horizontal scrolling on smaller screens.
+
+- Added existing Speedtest Tracker download/upload, ping, packet-loss and timestamp data to the Internet map tile, with recent-test verification, degraded/historical/unverified states and no false live-WAN or offline claims. Added an illustrated Network Map documentation page, linked it in navigation and replaced the obsolete map guide. Added actual-interface Home Map and Network Map screenshots using English sample data without exposing a user's inventory.
+
+- Added an optional Internet globe node with an explicitly assigned interface, editable uplink type and background save/remove actions without creating a fake inventory device or claiming Internet availability. Replaced unknown-access-point text with an accessible roaming indicator and made saved connections editable directly from their lines and device lists.
+
+- Replaced the expanded Network Map with an infrastructure overview including routers, switches, access points and network/smart-home hubs. Added searchable direct-connection detail windows, automatic mobile-device grouping and presence summaries without guessing access-point associations or changing existing connections. Consolidated layouts with a one-time migration, packed disconnected infrastructure into multiple columns, made the unconnected inventory collapsible, and added desktop mobile-group nodes with transport-specific connection lines.
+
+- Added durable background Network Map saves processed by the scheduler after scan contention clears. Save requests use per-user idempotency keys, survive refreshes/restarts, retain atomic bulk updates and revision/permission checks, and expose pending/saved/failed history instead of asking users to retry during scans.
+
 ## 1.26.2 - 2026-11-07
 
 - Hid already-connected devices by default in the bulk connection picker, added an explicit Show connected devices option with accessible explanatory help for additional links, and removed picked devices from the dropdown while keeping their selected chips visible.

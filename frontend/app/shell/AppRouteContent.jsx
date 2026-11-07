@@ -48,7 +48,7 @@ export default function AppRouteContent({ controller }) {
 
   if (c.mainView === 'network-map') {
     return <NetworkMapView canEditLinks={c.canEditDevices} canEditLayout={c.canEditHomeMap}
-      onSelectDevice={c.openDevicePage} timeZone={c.displayTimeZone} />;
+      onSelectDevice={c.openDevicePage} timeZone={c.displayTimeZone} speedtestTrackerPayload={c.speedtestTrackerPayload} />;
   }
 
   if (c.mainView === 'docker') {

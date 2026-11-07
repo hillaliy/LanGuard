@@ -39,7 +39,7 @@ from .views.port_scans import cancel_detailed_port_scan, detailed_port_scan
 from .views.health import health_status
 from .views.home_map import home_map_layout
 from .views.network_map import (
-    network_map, network_links, network_link, network_layout, network_map_preferences, network_links_bulk,
+    network_map, network_links, network_link, network_layout, network_map_preferences, network_links_bulk, network_map_commands, network_internet,
     accept_network_suggestion, dismiss_network_suggestion, restore_network_suggestions,
 )
 from .views.maintenance import maintenance_cleanup
@@ -65,6 +65,8 @@ from .views.inventory import (
 
 urlpatterns = [
     path("network-map/", network_map, name="network-map"),
+    path("network-map/internet/", network_internet, name="network-map-internet"),
+    path("network-map/commands/", network_map_commands, name="network-map-commands"),
     path("network-map/preferences/", network_map_preferences, name="network-map-preferences"),
     path("network-map/links/", network_links, name="network-links"),
     path("network-map/links/bulk/", network_links_bulk, name="network-links-bulk"),
