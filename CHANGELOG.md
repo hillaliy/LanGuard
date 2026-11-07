@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 1.26.2 - 2026-11-07
+
+- Hid already-connected devices by default in the bulk connection picker, added an explicit Show connected devices option with accessible explanatory help for additional links, and removed picked devices from the dropdown while keeping their selected chips visible.
+
+- Packed Network Map endpoint devices into compact branch grids around a Dagre-laid-out infrastructure backbone, added optional endpoint-group collapse with search-driven expansion, and quieted repeated connection labels until hover, focus, or selection. Preserved existing saved positions and viewport zoom; explicit Fit map and compact automatic layout controls replace repeated automatic zoom-outs.
+
+- Decoupled personal Network Map display preferences from the long-running scan lock, bounded SQLite write retries, and added request deadlines with server-state reconciliation so a delayed or lost save response cannot leave the interface spinning indefinitely.
+
+- Limited scan-lock and SQLite contention waits for all Network Map edits, including bulk connections, layout saves, and LLDP actions, while retaining shared locking and atomic batches. Added bounded refreshes and read-back verification of unconfirmed writes so lost responses do not encourage duplicate submissions or discard unsaved layout drafts.
+
 ## 1.26.1 - 2026-11-07
 
 - Made all Network Map devices visible immediately, separated unconnected devices into a searchable selection list and graph staging grid, enabled automatic layout before connections exist, and added atomic bulk connections, mouse/touch/keyboard drag-to-connect, and inline connection type, port, and label editing. Kept manual connections distinct from LLDP evidence.

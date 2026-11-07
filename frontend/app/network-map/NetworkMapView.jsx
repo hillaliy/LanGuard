@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Accordion, ActionIcon, Alert, Badge, Box, Button, Drawer, Group, Loader, Modal,
   Paper, Select, SimpleGrid, Stack, Switch, Text, Title, Tooltip, UnstyledButton,
@@ -11,12 +11,12 @@ import {
 import { DndContext, DragOverlay, KeyboardSensor, MouseSensor, TouchSensor,
   pointerWithin, rectIntersection, useSensor, useSensors, MeasuringStrategy } from '@dnd-kit/core';
 import { IconArrowUpRight, IconCheck, IconLayoutDistributeHorizontal, IconPencil, IconPlus,
-  IconRefresh, IconRestore, IconTopologyStar, IconTrash, IconX } from '@tabler/icons-react';
+  IconRefresh, IconRestore, IconTopologyStar, IconTrash, IconX, IconFocus2, IconChevronsDown } from '@tabler/icons-react';
 
 import { DeviceField } from '../devices/DeviceDetailFields';
 import { formatDate } from '../utils/date';
 import { networkLinkTitle, networkMapConnections, networkMapPositions,
-  networkNodeHeight, networkNodeWidth, parallelLinkLanes } from '../utils/networkMap';
+  networkNodeHeight, networkNodeWidth, parallelLinkLanes, networkMapBranches } from '../utils/networkMap';
 import { NetworkConnectionEdge, NetworkDeviceNode } from './NetworkMapElements';
 import NetworkLinkForm from './NetworkLinkForm';
 import NetworkBulkForm from './NetworkBulkForm';
@@ -37,6 +37,9 @@ function MapWorkspace({ canEditLinks, canEditLayout, onSelectDevice, timeZone })
   const map = useNetworkMap();
   const flow = useReactFlow();
   const canvasRef = useRef(null);
+  const initializedViewport = useRef(false);
+  const canvasSize = useRef(null);
+  const [collapsed, setCollapsed] = useState([]);
   const [editing, setEditing] = useState(false);
   const showSuggestions = map.data.preferences.show_lldp_suggestions;
   const [selection, setSelection] = useState(null);
@@ -50,6 +53,9 @@ function MapWorkspace({ canEditLinks, canEditLayout, onSelectDevice, timeZone })
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const connections = useMemo(() => networkMapConnections(map.data, showSuggestions), [map.data, showSuggestions]);
   const graphDevices = map.data.devices;
+  const branches = useMemo(() => networkMapBranches(graphDevices, connections), [graphDevices, connections]);
+  const hiddenIds = useMemo(() => new Set(collapsed.flatMap((id) => branches.groups[id] || [])), [collapsed, branches]);
+  const toggleBranch = useCallback((id) => setCollapsed((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]), []);
   const renderedPositions = useMemo(() => networkMapPositions(graphDevices, connections, map.positions), [graphDevices, connections, map.positions]);
   const connectedIds = useMemo(() => new Set(map.data.links.flatMap((link) => [link.source_device, link.target_device])), [map.data.links]);
   const disconnected = map.data.devices.filter((device) => !connectedIds.has(device.id));
@@ -59,6 +65,15 @@ function MapWorkspace({ canEditLinks, canEditLayout, onSelectDevice, timeZone })
   const selectedLink = selection?.type === 'link' ? map.data.links.find((item) => item.id === selection.id)
     : selection?.type === 'suggestion' ? map.data.suggestions.find((item) => item.key === selection.id) : null;
   const selectedSuggestion = selection?.type === 'suggestion';
+
+  const focusLayoutStart = useCallback((positions) => {
+    const roots = graphDevices.filter((device) => connectedIds.has(device.id) && !branches.parents[device.id]);
+    const root = (roots.length ? roots : graphDevices).slice().sort((a, b) => positions[a.id].y - positions[b.id].y || positions[a.id].x - positions[b.id].x)[0];
+    if (!root) return;
+    const point = positions[root.id];
+    const width = canvasRef.current?.clientWidth || 600;
+    flow.setViewport({ x: roots.length ? width / 2 - point.x - networkNodeWidth / 2 : 16 - point.x, y: 32 - point.y, zoom: 1 });
+  }, [graphDevices, connectedIds, branches, flow]);
 
   useEffect(() => {
     if (!map.dirty) return undefined;
@@ -72,38 +87,57 @@ function MapWorkspace({ canEditLinks, canEditLayout, onSelectDevice, timeZone })
   }
 
   useEffect(() => {
-    setNodes(graphDevices.map((device) => ({
+    setNodes(graphDevices.filter((device) => !hiddenIds.has(device.id)).map((device) => ({
       id: String(device.id), type: 'device', position: renderedPositions[device.id],
       width: networkNodeWidth, height: networkNodeHeight,
-      data: { device, editing: editing && canEditLayout, connected: connectedIds.has(device.id), canDrop }, dragHandle: '.network-node-grip',
+      data: { device, editing: editing && canEditLayout, connected: connectedIds.has(device.id), canDrop,
+        clientCount: branches.groups[device.id]?.length || 0, collapsed: collapsed.includes(device.id), onToggleBranch: toggleBranch }, dragHandle: '.network-node-grip',
       ariaLabel: `${device.name}, ${device.ip}, ${device.online ? 'Online' : 'Not online'}`,
     })));
-  }, [graphDevices, renderedPositions, editing, canEditLayout, connectedIds, canDrop, setNodes]);
+  }, [graphDevices, renderedPositions, editing, canEditLayout, connectedIds, canDrop, setNodes, hiddenIds, branches, collapsed, toggleBranch]);
 
   const graphIdentity = `${graphDevices.map((device) => device.id).join(',')}|${connections.map((link) => link.graphId).join(',')}`;
   useEffect(() => {
-    if (!graphDevices.length) return undefined;
-    const timer = window.setTimeout(() => flow.fitView({ padding: 0.18, maxZoom: 1 }), 100);
+    if (!graphDevices.length || initializedViewport.current) return undefined;
+    const timer = window.setTimeout(() => {
+      focusLayoutStart(renderedPositions);
+      initializedViewport.current = true;
+    }, 100);
     return () => window.clearTimeout(timer);
-  }, [graphIdentity, graphDevices.length, flow]);
+  }, [graphIdentity, graphDevices.length, focusLayoutStart, renderedPositions]);
 
   useEffect(() => {
     if (!canvasRef.current) return undefined;
-    let timer;
-    const observer = new ResizeObserver(() => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => flow.fitView({ padding: 0.18, maxZoom: 1 }), 100);
+    const observer = new ResizeObserver(([entry]) => {
+      const size = { width: entry.contentRect.width, height: entry.contentRect.height };
+      const previous = canvasSize.current;
+      canvasSize.current = size;
+      if (initializedViewport.current && previous && size.width !== previous.width) {
+        const viewport = flow.getViewport();
+        flow.setViewport({ ...viewport, x: viewport.x + (size.width - previous.width) / 2 });
+      }
     });
     observer.observe(canvasRef.current);
-    return () => { observer.disconnect(); window.clearTimeout(timer); };
+    return () => observer.disconnect();
   }, [flow]);
 
   const lanes = parallelLinkLanes(connections);
-  const edges = connections.map((link) => ({
-    id: link.graphId, source: String(link.source_device), target: String(link.target_device), type: 'connection',
-    data: { link, lane: lanes[link.graphId], onSelect: selectLink },
-    ariaLabel: networkLinkTitle(link),
-  }));
+  const edges = connections.filter((link) => !hiddenIds.has(link.source_device) && !hiddenIds.has(link.target_device)).map((link) => {
+    const parent = branches.parents[link.target_device] === link.source_device ? link.source_device
+      : branches.parents[link.source_device] === link.target_device ? link.target_device : null;
+    const source = parent || (renderedPositions[link.source_device].y <= renderedPositions[link.target_device].y ? link.source_device : link.target_device);
+    const target = source === link.source_device ? link.target_device : link.source_device;
+    const sourceClients = branches.groups[source] || [];
+    const busX = parent ? Math.min(...sourceClients.map((id) => renderedPositions[id].x)) - 16
+      : sourceClients.length ? Math.max(...sourceClients.map((id) => renderedPositions[id].x + networkNodeWidth)) + 24 : null;
+    return {
+      id: link.graphId, source: String(source), target: String(target), type: 'connection',
+      selected: selection?.type === (link.suggested ? 'suggestion' : 'link') && selection.id === (link.suggested ? link.key : link.id),
+      data: { link, lane: lanes[link.graphId], onSelect: selectLink,
+        busX },
+      ariaLabel: networkLinkTitle(link),
+    };
+  });
 
   function endpointText(link, side) {
     const device = map.data.devices.find((item) => item.id === link[`${side}_device`]);
@@ -117,14 +151,19 @@ function MapWorkspace({ canEditLinks, canEditLayout, onSelectDevice, timeZone })
   }
 
   function arrange() {
-    map.changePositions({ ...map.positions, ...networkMapPositions(graphDevices, connections) });
-    window.setTimeout(() => flow.fitView({ padding: 0.18, maxZoom: 1 }), 100);
+    const next = { ...map.positions, ...networkMapPositions(graphDevices, connections) };
+    map.changePositions(next);
+    window.setTimeout(() => focusLayoutStart(next), 100);
   }
 
   function openDevice(device) {
+    const parent = branches.parents[device.id];
+    if (parent) setCollapsed((current) => current.filter((id) => id !== parent));
     setSelection({ type: 'device', id: device.id });
-    const node = flow.getNode(String(device.id));
-    if (node) flow.setCenter(node.position.x + networkNodeWidth / 2, node.position.y + networkNodeHeight / 2, { zoom: 1, duration: 250 });
+    const point = renderedPositions[device.id];
+    if (point && branches.groups[device.id]?.length) {
+      flow.setViewport({ x: (canvasRef.current?.clientWidth || 600) / 2 - point.x - networkNodeWidth / 2, y: 48 - point.y, zoom: 1 }, { duration: 250 });
+    } else if (point) flow.setCenter(point.x + networkNodeWidth / 2, point.y + networkNodeHeight / 2, { zoom: 1, duration: 250 });
   }
 
   async function connectDrop({ active, over }) {
@@ -179,8 +218,11 @@ function MapWorkspace({ canEditLinks, canEditLayout, onSelectDevice, timeZone })
               disabled={map.loading || map.busy} onChange={(event) => map.savePreference(event.currentTarget.checked)} />
             <Tooltip label="Refresh map"><ActionIcon variant="default" aria-label="Refresh map" loading={map.loading}
               disabled={map.busy} onClick={() => map.dirty ? setConfirmation('discard') : map.load()}><IconRefresh size={18} /></ActionIcon></Tooltip>
-            {editing && canEditLayout && (
-              <Tooltip label="Automatic layout"><ActionIcon variant="default" aria-label="Automatic layout" disabled={map.busy || !graphDevices.length} onClick={arrange}><IconLayoutDistributeHorizontal size={18} /></ActionIcon></Tooltip>
+            <Tooltip label="Fit visible map"><ActionIcon variant="default" aria-label="Fit map" disabled={!nodes.length}
+              onClick={() => flow.fitView({ padding: 0.18, maxZoom: 1 })}><IconFocus2 size={18} /></ActionIcon></Tooltip>
+            {hiddenIds.size > 0 && <Tooltip label="Expand all devices"><ActionIcon variant="default" aria-label="Expand all devices" onClick={() => setCollapsed([])}><IconChevronsDown size={18} /></ActionIcon></Tooltip>}
+            {canEditLayout && (
+              <Tooltip label="Compact automatic layout"><ActionIcon variant="default" aria-label="Automatic layout" disabled={map.busy || !graphDevices.length} onClick={() => { setEditing(true); arrange(); }}><IconLayoutDistributeHorizontal size={18} /></ActionIcon></Tooltip>
             )}
             {editing && canEditLinks && <Button size="xs" leftSection={<IconPlus size={16} />} disabled={map.busy || map.loading} onClick={() => setForm({})}>Add connection</Button>}
             {editing && canEditLinks && <Button size="xs" variant="light" leftSection={<IconPlus size={16} />} disabled={map.busy || map.loading || graphDevices.length < 2}
@@ -196,12 +238,16 @@ function MapWorkspace({ canEditLinks, canEditLayout, onSelectDevice, timeZone })
           <span className="manual">Manual</span><span className="lldp">LLDP confirmed</span>
           <span className="suggested">Suggestion</span><span className="stale">Stale observation</span>
           {map.dirty && <Badge color="orange" variant="light">Unsaved positions</Badge>}
+          {hiddenIds.size > 0 && <Badge variant="light" color="gray">{hiddenIds.size} hidden</Badge>}
         </Group>
         <div className="network-map-workspace">
+        <div className="network-map-sidebar">
         <NetworkDeviceInventory devices={disconnected} editable={editing && canEditLinks} busy={map.busy || map.loading}
           selected={selectedUnconnected} onSelect={(id) => setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id].slice(0, 200))}
           onSelectAll={(ids, checked) => setSelectedIds((current) => checked ? [...new Set([...current, ...ids])].slice(0, 200) : current.filter((id) => !ids.includes(id)))}
           onConnect={() => setBulk({ targets: selectedUnconnected })} onOpen={openDevice} />
+        <div className="network-overview"><MiniMap className="network-map-minimap" style={{ width: 200, height: 130 }} pannable zoomable /></div>
+        </div>
         <div className="network-map-canvas" ref={canvasRef}>
           <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} edgeTypes={edgeTypes}
             onNodesChange={onNodesChange} nodesDraggable={!draggingId && editing && canEditLayout} nodesConnectable={!draggingId && editing && canEditLinks}
@@ -212,10 +258,9 @@ function MapWorkspace({ canEditLinks, canEditLayout, onSelectDevice, timeZone })
             onConnect={({ source, target }) => {
               if (source !== target) setForm({ source: Number(source), target: Number(target) });
             }}
-            deleteKeyCode={null} minZoom={0.12} maxZoom={2} fitView fitViewOptions={{ padding: 0.18, maxZoom: 1 }}
+            deleteKeyCode={null} minZoom={0.08} maxZoom={2}
             onlyRenderVisibleElements aria-label="Network connections">
-            <Controls showInteractive={false} />
-            <MiniMap className="network-map-minimap" pannable zoomable />
+            <Controls showInteractive={false} showFitView={false} />
           </ReactFlow>
           {map.loading && !map.data.devices.length && <div className="network-map-empty"><Loader size="sm" /></div>}
           {!map.loading && !nodes.length && <div className="network-map-empty"><IconTopologyStar size={36} /><Text c="dimmed">No devices to display.</Text></div>}
@@ -281,7 +326,7 @@ function MapWorkspace({ canEditLinks, canEditLayout, onSelectDevice, timeZone })
         onClose={() => setForm(null)} onSave={async (body) => {
           if (await map.mutate(form.id ? `links/${form.id}/` : 'links/', form.id ? 'PUT' : 'POST', body)) setForm(null);
         }} />}
-      {bulk && <NetworkBulkForm initialSource={bulk.source} initialTargets={bulk.targets} devices={map.data.devices} busy={map.busy} error={map.error}
+      {bulk && <NetworkBulkForm initialSource={bulk.source} initialTargets={bulk.targets} devices={map.data.devices} connectedIds={connectedIds} busy={map.busy} error={map.error}
         onClose={() => setBulk(null)} onSave={async (body) => {
           if (await map.mutate('links/bulk/', 'POST', body)) { setBulk(null); setSelectedIds([]); }
         }} />}

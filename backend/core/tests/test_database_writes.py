@@ -1,12 +1,43 @@
 import threading
 import time
+import tempfile
+from pathlib import Path
+from unittest import skipUnless
+from unittest.mock import patch
 
 from django.test import SimpleTestCase
 
-from ..database_writes import serialized_database_write
+from ..database_writes import DatabaseWriteBusy, _PROCESS_WRITE_LOCK, fcntl, serialized_database_write
 
 
 class SerializedDatabaseWriteTests(SimpleTestCase):
+    def test_bounded_thread_lock_wait_does_not_enter_write_and_releases_cleanly(self):
+        _PROCESS_WRITE_LOCK.acquire()
+        try:
+            with self.assertRaises(DatabaseWriteBusy):
+                with serialized_database_write(timeout=0.01):
+                    self.fail("Busy write must not run")
+        finally:
+            _PROCESS_WRITE_LOCK.release()
+        with serialized_database_write(timeout=0.1):
+            pass
+
+    @skipUnless(fcntl, "Interprocess locking requires fcntl")
+    def test_bounded_file_lock_wait_releases_thread_lock_and_allows_later_writes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            lock_path = Path(directory) / "test.write.lock"
+            with lock_path.open("a+") as held, patch("core.database_writes._sqlite_lock_path", return_value=lock_path):
+                fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+                try:
+                    with self.assertRaises(DatabaseWriteBusy):
+                        with serialized_database_write(timeout=0.02):
+                            self.fail("A scanner-held file lock must not be bypassed")
+                    self.assertFalse(_PROCESS_WRITE_LOCK.locked())
+                finally:
+                    fcntl.flock(held.fileno(), fcntl.LOCK_UN)
+                with serialized_database_write(timeout=0.1):
+                    pass
+
     def test_lock_is_released_after_an_exception(self):
         with self.assertRaisesRegex(RuntimeError, "failed writer"):
             with serialized_database_write():

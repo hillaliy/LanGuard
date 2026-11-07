@@ -1,19 +1,45 @@
-from django.db import IntegrityError, transaction
+from contextlib import contextmanager
+
+from django.db import IntegrityError, OperationalError, connection, transaction
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import OpenApiTypes, extend_schema
 from rest_framework import permissions, serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.exceptions import APIException
 
 from ..access_control import CanEditDevices, CanEditHomeMap
-from ..database_writes import serialized_database_write
+from ..database_writes import DatabaseWriteBusy, serialized_database_write, sqlite_busy, sqlite_busy_timeout
 from ..models import NetworkLink, NetworkLinkDismissal, NetworkMapLayout, NetworkMapPreference
 from ..network_map import endpoint_registry, lldp_evidence, network_map_data
+from ..network_map_preferences import save_network_map_preference
 from ..serializers.network_map import (
     NetworkLayoutSerializer, NetworkLinkSerializer, NetworkRevisionSerializer, NetworkMapPreferenceSerializer,
     NetworkBulkLinksSerializer,
 )
 from ..user_messages import error_response, success_response
+
+NETWORK_MAP_WRITE_WAIT_SECONDS = 2
+
+
+class NetworkMapBusy(APIException):
+    status_code = 503
+    default_detail = "A scan or another update is using the database. No map changes were saved. Wait a moment and try again."
+    default_code = "network_map_busy"
+    wait = 1
+
+
+@contextmanager
+def network_map_write():
+    try:
+        with serialized_database_write(timeout=NETWORK_MAP_WRITE_WAIT_SECONDS), sqlite_busy_timeout(500):
+            yield
+    except DatabaseWriteBusy:
+        raise NetworkMapBusy from None
+    except OperationalError as exc:
+        if connection.vendor == "sqlite" and sqlite_busy(exc):
+            raise NetworkMapBusy from exc
+        raise
 
 
 def conflict():
@@ -38,14 +64,20 @@ def network_map(request):
     return Response({"data": data})
 
 
-@extend_schema(request=NetworkMapPreferenceSerializer, responses=NetworkMapPreferenceSerializer)
-@api_view(["PUT"])
+@extend_schema(methods=["PUT"], request=NetworkMapPreferenceSerializer, responses=NetworkMapPreferenceSerializer)
+@extend_schema(methods=["GET"], responses=NetworkMapPreferenceSerializer)
+@api_view(["GET", "PUT"])
 @permission_classes([permissions.IsAuthenticated])
 def network_map_preferences(request):
+    if request.method == "GET":
+        value = NetworkMapPreference.objects.filter(user=request.user).values_list("show_lldp_suggestions", flat=True).first()
+        return Response({"data": {"show_lldp_suggestions": bool(value)}})
     serializer = NetworkMapPreferenceSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    with serialized_database_write():
-        NetworkMapPreference.objects.update_or_create(user=request.user, defaults=serializer.validated_data)
+    if not save_network_map_preference(request.user.pk, serializer.validated_data["show_lldp_suggestions"]):
+        response = error_response("Database busy", "Your display preference could not be saved because the database is busy. Try again.", response_status=503)
+        response["Retry-After"] = "1"
+        return response
     return success_response(serializer.validated_data, "Preference saved", "Your Network Map display preference was saved.")
 
 
@@ -53,7 +85,7 @@ def network_map_preferences(request):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated, CanEditDevices])
 def network_links(request):
-    with serialized_database_write(), transaction.atomic():
+    with network_map_write(), transaction.atomic():
         serializer = NetworkLinkSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         save_link(serializer)
@@ -66,7 +98,7 @@ def network_links(request):
 def network_links_bulk(request):
     batch = NetworkBulkLinksSerializer(data=request.data)
     batch.is_valid(raise_exception=True)
-    with serialized_database_write(), transaction.atomic():
+    with network_map_write(), transaction.atomic():
         pending, signatures = [], set()
         for index, body in enumerate(batch.validated_data["connections"]):
             serializer = NetworkLinkSerializer(data=body)
@@ -90,7 +122,7 @@ def network_links_bulk(request):
 def network_link(request, link_id):
     version = NetworkRevisionSerializer(data=request.data)
     version.is_valid(raise_exception=True)
-    with serialized_database_write(), transaction.atomic():
+    with network_map_write(), transaction.atomic():
         link = get_object_or_404(NetworkLink.objects.select_for_update(), pk=link_id)
         if version.validated_data["revision"] != link.revision:
             return conflict()
@@ -111,7 +143,7 @@ def network_link(request, link_id):
 def network_layout(request):
     serializer = NetworkLayoutSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    with serialized_database_write(), transaction.atomic():
+    with network_map_write(), transaction.atomic():
         layout, _ = NetworkMapLayout.objects.select_for_update().get_or_create(pk=1)
         if layout.revision != serializer.validated_data["revision"]:
             return conflict()
@@ -128,7 +160,7 @@ def network_layout(request):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated, CanEditDevices])
 def accept_network_suggestion(request, key):
-    with serialized_database_write(), transaction.atomic():
+    with network_map_write(), transaction.atomic():
         _, interfaces = endpoint_registry()
         evidence, _ = lldp_evidence(interfaces)
         item = evidence.get(key)
@@ -145,7 +177,7 @@ def accept_network_suggestion(request, key):
 @api_view(["POST"])
 @permission_classes([permissions.IsAuthenticated, CanEditDevices])
 def dismiss_network_suggestion(request, key):
-    with serialized_database_write():
+    with network_map_write(), transaction.atomic():
         _, interfaces = endpoint_registry()
         evidence, _ = lldp_evidence(interfaces)
         if key not in evidence:
@@ -158,6 +190,6 @@ def dismiss_network_suggestion(request, key):
 @api_view(["DELETE"])
 @permission_classes([permissions.IsAuthenticated, CanEditDevices])
 def restore_network_suggestions(request):
-    with serialized_database_write():
+    with network_map_write(), transaction.atomic():
         NetworkLinkDismissal.objects.all().delete()
     return success_response({}, "Suggestions restored", "Dismissed LLDP observations can be suggested again.")

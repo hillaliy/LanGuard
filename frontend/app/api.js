@@ -18,6 +18,12 @@ function apiError(message, notification = null) {
   return error;
 }
 
+function responseError(response, message, notification) {
+  const error = apiError(message, notification);
+  error.status = response.status;
+  return error;
+}
+
 function getApiBase() {
   if (CONFIGURED_API_BASE) {
     return CONFIGURED_API_BASE;
@@ -109,7 +115,7 @@ function buildUrl(path, params = {}) {
   return url;
 }
 
-export async function apiRequest(path, options = {}) {
+async function performApiRequest(path, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
@@ -129,6 +135,7 @@ export async function apiRequest(path, options = {}) {
       headers,
       body: options.body ? JSON.stringify(options.body) : undefined,
       cache: 'no-store',
+      signal: options.signal,
     });
   } catch (error) {
     throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
@@ -143,14 +150,14 @@ export async function apiRequest(path, options = {}) {
       const contentType = response.headers.get('content-type') || '';
       if (contentType.includes('text/html') || text.trim().startsWith('<')) {
         if (!response.ok) {
-          throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
+          throw responseError(response, BACKEND_UNAVAILABLE_MESSAGE);
         }
-        throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
+        throw responseError(response, BACKEND_UNAVAILABLE_MESSAGE);
       }
       if (response.status >= 500) {
-        throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
+        throw responseError(response, BACKEND_UNAVAILABLE_MESSAGE);
       }
-      throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
+      throw responseError(response, BACKEND_UNAVAILABLE_MESSAGE);
     }
   }
 
@@ -161,13 +168,31 @@ export async function apiRequest(path, options = {}) {
       payload?.info ||
       payload?.notification?.message;
     if (message) {
-      throw apiError(message, payload?.notification);
+      throw responseError(response, message, payload?.notification);
     }
     if (response.status >= 500) {
-      throw apiError(BACKEND_UNAVAILABLE_MESSAGE);
+      throw responseError(response, BACKEND_UNAVAILABLE_MESSAGE);
     }
-    throw apiError('The request could not be completed.', payload?.notification);
+    throw responseError(response, 'The request could not be completed.', payload?.notification);
   }
 
   return payload;
+}
+
+export async function apiRequest(path, options = {}) {
+  if (!options.timeoutMs) return performApiRequest(path, options);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs);
+  try {
+    return await performApiRequest(path, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      const timeoutError = apiError('The server did not confirm the request in time. Refresh before trying again.');
+      timeoutError.code = 'request_timeout';
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 }
