@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiRequest } from '../api';
 
 const emptyMap = { devices: [], links: [], suggestions: [], unresolved: [], hidden_links: 0,
-  dismissed_count: 0, layout: { positions: {}, revision: 0 } };
+  dismissed_count: 0, layout: { positions: {}, revision: 0 }, preferences: { show_lldp_suggestions: false } };
 
 export default function useNetworkMap() {
   const [data, setData] = useState(emptyMap);
@@ -87,6 +87,21 @@ export default function useNetworkMap() {
     }
   }
 
+  async function savePreference(showSuggestions) {
+    setBusy(true);
+    try {
+      const payload = await apiRequest('network-map/preferences/', {
+        method: 'PUT', body: { show_lldp_suggestions: showSuggestions },
+      });
+      setData((current) => ({ ...current, preferences: payload.data }));
+      setError('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return { data, positions, changePositions, discardPositions, dirty, loading, busy, error,
-    load, savePositions, mutate };
+    load, savePositions, mutate, savePreference };
 }

@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from ..models import Device, NetworkLink, NetworkLinkDismissal, NetworkMapLayout, UserAccess
+from ..models import Device, NetworkLink, NetworkLinkDismissal, NetworkMapLayout, NetworkMapPreference, UserAccess
 from ..network_map import record_network_observations
 from ..serializers.network_map import NetworkLayoutSerializer
 
@@ -42,6 +42,47 @@ class NetworkMapTests(TestCase):
         self.assertEqual(NetworkMapLayout.objects.count(), 0)
         self.assertEqual(NetworkLink.objects.count(), 0)
         self.assertEqual(NetworkLinkDismissal.objects.count(), 0)
+        self.assertEqual(NetworkMapPreference.objects.count(), 0)
+
+    def test_preferences_default_without_creating_database_rows(self):
+        self.assertEqual(self.get_map()["preferences"], {"show_lldp_suggestions": False})
+        self.assertFalse(NetworkMapPreference.objects.exists())
+
+    def test_preferences_persist_for_the_account_across_clients(self):
+        for enabled in (True, False):
+            response = self.client.put("/api/v1/network-map/preferences/", {"show_lldp_suggestions": enabled}, format="json")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data["data"]["show_lldp_suggestions"], enabled)
+            self.assertEqual(NetworkMapPreference.objects.get(user=self.user).show_lldp_suggestions, enabled)
+            other_client = APIClient()
+            other_client.force_authenticate(User.objects.get(pk=self.user.pk))
+            self.assertEqual(other_client.get("/api/v1/network-map/").data["data"]["preferences"]["show_lldp_suggestions"], enabled)
+        self.assertEqual(NetworkMapPreference.objects.count(), 1)
+
+    def test_read_only_users_can_only_save_their_own_preferences(self):
+        NetworkMapPreference.objects.create(user=self.user, show_lldp_suggestions=True)
+        viewer = User.objects.create_user("map-viewer")
+        UserAccess.objects.create(user=viewer, can_edit_devices=False, can_edit_home_map=False, can_run_scans=False)
+        self.client.force_authenticate(viewer)
+        self.assertFalse(self.get_map()["preferences"]["show_lldp_suggestions"])
+        response = self.client.put("/api/v1/network-map/preferences/", {
+            "show_lldp_suggestions": False, "user": self.user.pk,
+        }, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(NetworkMapPreference.objects.get(user=self.user).show_lldp_suggestions)
+        self.assertFalse(NetworkMapPreference.objects.get(user=viewer).show_lldp_suggestions)
+        self.assertFalse(NetworkLink.objects.exists())
+
+    def test_preferences_require_authentication_and_valid_payload(self):
+        self.assertEqual(APIClient().put("/api/v1/network-map/preferences/", {"show_lldp_suggestions": True}, format="json").status_code, 401)
+        for body in ({}, {"show_lldp_suggestions": None}, {"show_lldp_suggestions": "invalid"}, {"show_lldp_suggestions": []}):
+            self.assertEqual(self.client.put("/api/v1/network-map/preferences/", body, format="json").status_code, 400)
+        self.assertFalse(NetworkMapPreference.objects.exists())
+
+    def test_user_deletion_removes_personal_preference(self):
+        NetworkMapPreference.objects.create(user=self.user, show_lldp_suggestions=True)
+        self.user.delete()
+        self.assertFalse(NetworkMapPreference.objects.exists())
 
     def test_manual_connection_round_trip(self):
         response = self.create_link()
@@ -51,6 +92,45 @@ class NetworkMapTests(TestCase):
         self.assertEqual(link["target_device"], self.switch.pk)
         self.assertEqual(link["origin"], "manual")
         self.assertFalse(link["stale"])
+
+    def test_bulk_connections_preserve_selected_interfaces_and_are_manual(self):
+        alias = Device.objects.create(mac="aa:bb:cc:dd:ee:40", ip="192.168.1.4", merged_into=self.laptop)
+        response = self.client.post("/api/v1/network-map/links/bulk/", {"connections": [
+            {"source": self.router.pk, "target": self.switch.pk, "kind": "ethernet"},
+            {"source": self.router.pk, "target": alias.pk, "kind": "wifi"},
+        ]}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["data"]["connections"]), 2)
+        self.assertEqual(set(NetworkLink.objects.values_list("origin", flat=True)), {"manual"})
+        self.assertTrue(NetworkLink.objects.filter(target=alias, kind="wifi").exists())
+        self.assertFalse(NetworkLink.objects.exclude(source_port="", target_port="").exists())
+
+    def test_invalid_bulk_and_reversed_duplicates_do_not_save_partial_batches(self):
+        valid = {"source": self.router.pk, "target": self.switch.pk}
+        for connections in ([], [valid, {"source": self.router.pk, "target": 999999}],
+                            [valid, {"source": self.switch.pk, "target": self.router.pk}],
+                            [valid] * 201, [valid, {"source": self.router.pk, "target": self.router.pk}]):
+            response = self.client.post("/api/v1/network-map/links/bulk/", {"connections": connections}, format="json")
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse(NetworkLink.objects.exists())
+
+    def test_bulk_existing_duplicate_preserves_database_and_retries_are_safe(self):
+        self.create_link(source_port="", target_port="")
+        response = self.client.post("/api/v1/network-map/links/bulk/", {"connections": [
+            {"source": self.router.pk, "target": self.laptop.pk},
+            {"source": self.router.pk, "target": self.switch.pk},
+        ]}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(NetworkLink.objects.count(), 1)
+
+    def test_bulk_requires_device_edit_permission(self):
+        body = {"connections": [{"source": self.router.pk, "target": self.switch.pk}]}
+        self.assertEqual(APIClient().post("/api/v1/network-map/links/bulk/", body, format="json").status_code, 401)
+        viewer = User.objects.create_user("bulk-viewer")
+        UserAccess.objects.create(user=viewer, can_edit_devices=False)
+        self.client.force_authenticate(viewer)
+        self.assertEqual(self.client.post("/api/v1/network-map/links/bulk/", body, format="json").status_code, 403)
+        self.assertFalse(NetworkLink.objects.exists())
 
     def test_reversed_duplicate_connection_is_rejected(self):
         self.create_link()

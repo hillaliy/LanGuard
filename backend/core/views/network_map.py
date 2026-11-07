@@ -7,9 +7,12 @@ from rest_framework.response import Response
 
 from ..access_control import CanEditDevices, CanEditHomeMap
 from ..database_writes import serialized_database_write
-from ..models import NetworkLink, NetworkLinkDismissal, NetworkMapLayout
+from ..models import NetworkLink, NetworkLinkDismissal, NetworkMapLayout, NetworkMapPreference
 from ..network_map import endpoint_registry, lldp_evidence, network_map_data
-from ..serializers.network_map import NetworkLayoutSerializer, NetworkLinkSerializer, NetworkRevisionSerializer
+from ..serializers.network_map import (
+    NetworkLayoutSerializer, NetworkLinkSerializer, NetworkRevisionSerializer, NetworkMapPreferenceSerializer,
+    NetworkBulkLinksSerializer,
+)
 from ..user_messages import error_response, success_response
 
 
@@ -29,7 +32,21 @@ def save_link(serializer, **kwargs):
 @api_view(["GET"])
 @permission_classes([permissions.IsAuthenticated])
 def network_map(request):
-    return Response({"data": network_map_data()})
+    data = network_map_data()
+    value = NetworkMapPreference.objects.filter(user=request.user).values_list("show_lldp_suggestions", flat=True).first()
+    data["preferences"] = {"show_lldp_suggestions": bool(value)}
+    return Response({"data": data})
+
+
+@extend_schema(request=NetworkMapPreferenceSerializer, responses=NetworkMapPreferenceSerializer)
+@api_view(["PUT"])
+@permission_classes([permissions.IsAuthenticated])
+def network_map_preferences(request):
+    serializer = NetworkMapPreferenceSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    with serialized_database_write():
+        NetworkMapPreference.objects.update_or_create(user=request.user, defaults=serializer.validated_data)
+    return success_response(serializer.validated_data, "Preference saved", "Your Network Map display preference was saved.")
 
 
 @extend_schema(request=NetworkLinkSerializer, responses=NetworkLinkSerializer)
@@ -41,6 +58,29 @@ def network_links(request):
         serializer.is_valid(raise_exception=True)
         save_link(serializer)
     return success_response(serializer.data, "Connection saved", "The network connection was added.")
+
+
+@extend_schema(request=NetworkBulkLinksSerializer, responses=OpenApiTypes.OBJECT)
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated, CanEditDevices])
+def network_links_bulk(request):
+    batch = NetworkBulkLinksSerializer(data=request.data)
+    batch.is_valid(raise_exception=True)
+    with serialized_database_write(), transaction.atomic():
+        pending, signatures = [], set()
+        for index, body in enumerate(batch.validated_data["connections"]):
+            serializer = NetworkLinkSerializer(data=body)
+            if not serializer.is_valid():
+                raise serializers.ValidationError({"connections": {index: serializer.errors}})
+            signature = serializer.validated_data["signature"]
+            if signature in signatures:
+                raise serializers.ValidationError({"connections": {index: "Duplicate connection in this selection."}})
+            signatures.add(signature)
+            pending.append(serializer)
+        for serializer in pending:
+            save_link(serializer)
+    return success_response({"connections": [serializer.data for serializer in pending]},
+                            "Connections saved", f"{len(pending)} manual connections were added.")
 
 
 @extend_schema(methods=["PUT"], request=NetworkLinkSerializer, responses=NetworkLinkSerializer)

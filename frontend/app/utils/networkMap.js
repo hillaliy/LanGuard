@@ -21,17 +21,21 @@ export function networkMapConnections(data, includeSuggestions = false) {
 }
 
 export function networkMapPositions(devices, links, saved = {}) {
+  if (!devices.length) return {};
+  const linkedIds = new Set(links.flatMap((link) => [link.source_device, link.target_device]));
   const graph = new dagre.graphlib.Graph({ multigraph: true });
   graph.setGraph({ rankdir: 'TB', nodesep: 48, ranksep: 90, marginx: 30, marginy: 30 });
   graph.setDefaultEdgeLabel(() => ({}));
-  devices.forEach((device) => graph.setNode(String(device.id), { width: networkNodeWidth, height: networkNodeHeight }));
+  devices.filter((device) => linkedIds.has(device.id)).forEach((device) => graph.setNode(String(device.id), { width: networkNodeWidth, height: networkNodeHeight }));
   links.forEach((link, index) => {
     if (graph.hasNode(String(link.source_device)) && graph.hasNode(String(link.target_device))
       && link.source_device !== link.target_device) {
       graph.setEdge(String(link.source_device), String(link.target_device), {}, String(index));
     }
   });
-  dagre.layout(graph);
+  if (graph.nodeCount()) dagre.layout(graph);
+  const connectedRight = Math.max(0, ...graph.nodes().map((id) => graph.node(id).x + networkNodeWidth / 2));
+  const stagingX = graph.nodeCount() ? connectedRight + 100 : 30;
   const positions = {};
   const occupied = [];
   const isPosition = (value) => value && Number.isFinite(value.x) && Number.isFinite(value.y);
@@ -39,9 +43,13 @@ export function networkMapPositions(devices, links, saved = {}) {
     positions[device.id] = { ...saved[device.id] };
     occupied.push(positions[device.id]);
   });
+  let unconnectedIndex = 0;
   devices.filter((device) => !positions[device.id]).forEach((device) => {
     const node = graph.node(String(device.id));
-    const position = { x: node.x - networkNodeWidth / 2, y: node.y - networkNodeHeight / 2 };
+    const index = unconnectedIndex;
+    if (!node) unconnectedIndex++;
+    const position = node ? { x: node.x - networkNodeWidth / 2, y: node.y - networkNodeHeight / 2 }
+      : { x: stagingX + (index % 3) * (networkNodeWidth + 40), y: 30 + Math.floor(index / 3) * (networkNodeHeight + 40) };
     // New devices must not cover nodes the user has already positioned.
     while (occupied.some((other) => Math.abs(other.x - position.x) < networkNodeWidth + 16
       && Math.abs(other.y - position.y) < networkNodeHeight + 24)) {

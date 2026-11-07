@@ -110,12 +110,18 @@ Custom rooms remain visible in **All**, even when empty. Other filters retain a 
 
 ## Network Map
 
-The separate **Network Map** shows connections between devices, not room membership. Open it from navigation or the Home Map shortcut. Devices without saved connections remain in **Unconnected devices** until connected; the map does not invent an Internet gateway or infer links from names, subnets, or router client lists.
+The separate **Network Map** shows connections between devices, not room membership. Open it from navigation or the Home Map shortcut. All regular devices appear immediately. Devices without saved connections appear with dashed outlines in a separate staging grid and a searchable **Unconnected devices** list; the map does not invent an Internet gateway or infer links from names, subnets, or router client lists.
 
 Choose **Edit map > Add connection** and select both devices, their network interfaces, optional port names, connection type, and label. Multiple links between the same devices are supported when their interfaces or ports differ. A merged device appears once, while each link retains its actual MAC-level endpoint. Editing or deleting a connection does not alter device inventory or scanner presence.
+
+For several devices, select their checkboxes in **Unconnected devices**, choose **Connect selected**, then select the upstream device, its interface, and the connection type. **Connect devices** also lets you choose any inventoried devices, including those already connected elsewhere. Multi-interface endpoints have explicit interface selectors. A group saves together or not at all; invalid or duplicate links leave existing connections unchanged.
+
+In edit mode, drag an unconnected device's connection grip onto another device in the graph or list. Mouse, touch, and keyboard dragging are supported. Single-interface endpoints create a manual connection with an **Unknown** type and no port assumptions; multiple-interface endpoints open the connection form before saving. Selecting a saved connection exposes inline type, port, and label fields. **Edit connection** remains available for changing endpoints. All of these actions require device-edit permission.
 
 Manual links, confirmed LLDP links, unconfirmed LLDP suggestions, and stale observations use distinct line styles. LLDP suggestions require an exact match between a reported neighbor chassis MAC and an inventoried interface; names alone are not sufficient. Review suggestions explicitly before accepting them. Unmatched neighbors are listed separately. Missing or older-than-24-hour LLDP observations mark accepted links stale instead of deleting them. LLDP does not establish whether a connection is Ethernet or Wi-Fi, so its initial type is **Unknown**.
 
 Pan, zoom, search for a device, or select a connection to inspect its endpoints and evidence timestamp. During editing, drag a device by its grip or choose automatic layout, then **Done** to save positions. Position changes are independent of the Home Map and survive refreshes. Creating, editing, confirming, dismissing, or deleting connections saves immediately. Concurrent edits are rejected rather than silently overwriting another user's changes.
 
 Connection editing requires device-edit permission; saving positions requires Home Map edit permission. Visitors and archived devices are omitted. Connections hidden by archiving or merging are retained and can reappear when their endpoints are visible again.
+
+The **LLDP suggestions** display toggle is a personal preference stored in the database for the signed-in user. It survives application restarts and follows the account across browsers and devices. All authenticated users can save their own display preference, including read-only users; this does not confirm suggestions or change the shared connections.

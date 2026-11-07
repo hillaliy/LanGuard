@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.26.1 - 2026-11-07
+
+- Made all Network Map devices visible immediately, separated unconnected devices into a searchable selection list and graph staging grid, enabled automatic layout before connections exist, and added atomic bulk connections, mouse/touch/keyboard drag-to-connect, and inline connection type, port, and label editing. Kept manual connections distinct from LLDP evidence.
+
+- Stored the Network Map LLDP suggestions toggle per user in the database so it survives reloads and application restarts and follows the user across browsers, without automatically confirming connections. Kept the last saved state and displayed an error when saving fails.
+
 ## 1.26.0 - 2026-11-07
 
 - Added a separate Network Map with interface-level manual connections, explicit review of exact-MAC LLDP suggestions, stale-observation indicators, parallel links, merged-device nodes, unconnected-device lists, and independently saved draggable positions. Included automatic layout, zoom, search, permission checks, and conflict-safe editing without inferring topology from names or shared IP ranges.
