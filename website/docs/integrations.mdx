@@ -17,6 +17,7 @@ Docker installations can connect optional services from **Settings > Integration
 | Technitium DNS Server v15+ | DNS destinations and blocked totals, with optional DHCP enrichment | Stores aggregate counters and selected lease identity data, not raw DNS responses |
 | DHCP lease source | IPv4 address and hostname evidence from dnsmasq, Kea, or ISC DHCP files | Imports active leases; does not infer online presence or delete devices on expiry |
 | ASUSWRT | Router client discovery, IPv4/hostname/vendor enrichment, and available connection details | Reads structured client data; preserves user-managed identity and scanner presence |
+| OpenWrt / LuCI | IPv4 DHCP leases, neighbor-derived host hints, and multi-radio Wi-Fi observations | Reads HTTP ubus inventory; existing device identity, IP and presence are unchanged |
 | Speedtest Tracker | Latest internet result and health on the dashboard and Network Map Internet tile | Stores settings and latest processed health state, not result history |
 | HomeBox | Search and link an existing inventory item to a device | Stores the linked item ID; does not synchronize inventory |
 | Docker inventory | Running containers, health, addresses, restarts, and published ports | Reads the local Docker engine from the scheduler |
@@ -46,6 +47,56 @@ Only clients explicitly reported as active with valid private IPv4 and unicast M
 Available router-reported name, model, Ethernet/Wi-Fi band, SSID, signal strength, and observation time appear on the device page. These are timestamped observations, not a live link monitor or a verified topology. Missing optional fields are not invented. A router record never marks an existing device online/offline, advances its scan last-seen time, or removes it when it disappears; new devices start as Unknown and not Online until LanGuard verifies presence.
 
 This integration does **not** collect DNS query history, blocked-domain statistics, or DHCP lease expiry information. Continue using AdGuard Home, Pi-hole, or Technitium for DNS activity, or the independent DHCP lease source when actual lease-file evidence is needed. Client-list responses are limited to 5 MiB and 5,000 entries. Only selected normalized observations and sync summaries are stored.
+
+## OpenWrt
+
+Under **Settings > Integrations > Network controllers**, enable **OpenWrt / LuCI**.
+Enter the router's HTTP(S) origin (or its `/ubus` URL) and dedicated rpcd
+credentials. Use **Test connection** to check access without changing inventory,
+then save and use **Sync now** or let the scheduler run.
+
+This integration uses the [HTTP ubus JSON-RPC API](https://openwrt.org/docs/techref/ubus),
+not the legacy LuCI `/cgi-bin/luci/rpc` API. Compatibility is detected by
+available methods and permissions, not a firmware version check. The router
+needs an HTTP ubus endpoint (typically `uhttpd-mod-ubus`) and LuCI inventory RPCs
+(`rpcd-mod-luci`). Wireless associations additionally require
+`rpcd-mod-iwinfo`. Package availability and responses vary by firmware build.
+
+Have the router administrator assign a dedicated rpcd login a **read-only**
+ACL group (for example, `languard-inventory`), with no write permissions. The
+inventory permissions for that group are:
+
+```json
+{
+  "languard-inventory": {
+    "description": "LanGuard read-only inventory",
+    "read": {
+      "ubus": {
+        "luci-rpc": ["getDHCPLeases", "getHostHints", "getWirelessDevices"],
+        "iwinfo": ["assoclist"]
+      }
+    }
+  }
+}
+```
+
+Keep `/ubus` reachable only from the management network. Prefer HTTPS with a
+trusted certificate and TLS verification enabled. HTTP exposes credentials to
+the network; disabling TLS verification removes server identity protection.
+LanGuard does not use SSH, edit router configuration, or execute commands.
+Automatic login pauses after authentication failure; correct the settings and
+run a manual sync to resume. If a method is unavailable, the integration reports
+it and uses the other supported sources.
+
+OpenWrt observations show reported lease/interface information, IPv4/IPv6 host
+hints, and Wi-Fi associations with interface, radio, SSID, logical networks and
+signal where available. Host hints can include cached neighbors, static leases,
+and router-local interfaces. They are not proof of current reachability.
+Wi-Fi observations cover access points reported by the configured router, not
+other mesh nodes. Observations are timestamped; absent clients are not marked
+offline or removed. Existing device identity, IP and scan status are preserved.
+Optional creation is off by default and uses only unambiguous IPv4 DHCP leases;
+it never marks devices online.
 
 ## DHCP lease source
 

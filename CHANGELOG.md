@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Added an opt-in, read-only OpenWrt / LuCI integration under Network controllers, with a non-mutating connection test, manual and scheduled sync, and optional device creation from unambiguous IPv4 DHCP leases. Device details show timestamped host hints and per-interface Wi-Fi observations across multiple radios without overwriting existing identity, IP assignments, or scanner presence.
+- Documented OpenWrt setup, minimal rpcd read permissions, TLS verification, and firmware compatibility limits. Unsupported inventory methods are reported without blocking other supported sources, and scheduled login pauses after an authentication failure.
+- Updated Mantine core, hooks, and notifications from 9.7.4 to 9.7.5, and Next.js and eslint-config-next from 16.4.3 to 16.4.5 (#316).
+- Updated Django from 6.1.2 to 6.1.3 and Ruff from 0.17.3 to 0.17.4 (#317).
+
 ## 1.26.3 - 2026-11-07
 
 - Widened all Network Map device-list dialogs, reserved readable address/status/date/action columns, corrected the screen-reader-only actions heading, and wrapped long device/connection text without clipping while retaining horizontal scrolling on smaller screens.

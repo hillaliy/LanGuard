@@ -200,6 +200,10 @@ def scan_status(request):
                     "enabled": app_config.asuswrt_enabled,
                     "configured": bool(app_config.asuswrt_url and app_config.asuswrt_username and app_config.asuswrt_password),
                 },
+                "openwrt": {
+                    "enabled": app_config.openwrt_enabled,
+                    "configured": bool(app_config.openwrt_url and app_config.openwrt_username and app_config.openwrt_password),
+                },
                 "speedtest_tracker": {
                     "enabled": app_config.speedtest_tracker_enabled,
                     "configured": bool(

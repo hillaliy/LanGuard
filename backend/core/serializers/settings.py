@@ -25,6 +25,11 @@ class AppSettingsSerializer(serializers.ModelSerializer):
     asuswrt_configured = serializers.SerializerMethodField()
     asuswrt_password = serializers.CharField(write_only=True, required=False, allow_blank=True,
                                              max_length=255, trim_whitespace=False)
+    openwrt_last_sync_at = UTCDateTimeField(read_only=True)
+    openwrt_configured = serializers.SerializerMethodField()
+    openwrt_url = serializers.CharField(required=False, allow_blank=True, max_length=2048)
+    openwrt_password = serializers.CharField(write_only=True, required=False, allow_blank=True,
+                                             max_length=255, trim_whitespace=False)
     scan_max_hosts = serializers.SerializerMethodField()
     snmp_max_devices = serializers.SerializerMethodField()
     discord_configured = serializers.SerializerMethodField()
@@ -226,6 +231,18 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "asuswrt_last_error",
             "asuswrt_auth_failed",
             "asuswrt_configured",
+            "openwrt_enabled",
+            "openwrt_url",
+            "openwrt_username",
+            "openwrt_password",
+            "openwrt_verify_ssl",
+            "openwrt_create_devices",
+            "openwrt_sync_interval",
+            "openwrt_last_sync_at",
+            "openwrt_last_sync_summary",
+            "openwrt_last_error",
+            "openwrt_auth_failed",
+            "openwrt_configured",
             "speedtest_tracker_enabled",
             "homebox_enabled",
             "homebox_url",
@@ -258,6 +275,9 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             "asuswrt_last_sync_summary": {"read_only": True},
             "asuswrt_last_error": {"read_only": True},
             "asuswrt_auth_failed": {"read_only": True},
+            "openwrt_last_sync_summary": {"read_only": True},
+            "openwrt_last_error": {"read_only": True},
+            "openwrt_auth_failed": {"read_only": True},
             "speedtest_tracker_url": {"required": False, "allow_blank": True},
             "updated_at": {"read_only": True},
         }
@@ -367,11 +387,41 @@ class AppSettingsSerializer(serializers.ModelSerializer):
         return value
 
     @extend_schema_field(serializers.BooleanField)
+    def get_openwrt_configured(self, obj):
+        return bool(obj.openwrt_url and obj.openwrt_username and obj.openwrt_password)
+
+    def validate_openwrt_url(self, value):
+        from ..integrations.openwrt import OpenWrtError, normalize_openwrt_url
+        try:
+            return normalize_openwrt_url(value) if value else ""
+        except OpenWrtError as exc:
+            raise serializers.ValidationError(str(exc)) from exc
+
+    def validate_openwrt_username(self, value):
+        if any(not char.isprintable() for char in value):
+            raise serializers.ValidationError("Enter a valid rpcd username.")
+        return value
+
+    def validate_openwrt_sync_interval(self, value):
+        if not 1 <= value <= 1440:
+            raise serializers.ValidationError("OpenWrt sync interval must be between 1 and 1440 minutes.")
+        return value
+
+    @extend_schema_field(serializers.BooleanField)
     def get_speedtest_tracker_configured(self, obj):
         return bool(obj.speedtest_tracker_url and obj.speedtest_tracker_api_token)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        if attrs.get("openwrt_enabled", getattr(self.instance, "openwrt_enabled", False)):
+            for field in ("openwrt_url", "openwrt_username", "openwrt_password"):
+                if not (attrs.get(field, getattr(self.instance, field, ""))
+                        or (field == "openwrt_password" and getattr(self.instance, field, ""))):
+                    raise serializers.ValidationError({field: "Enter the OpenWrt connection details before enabling sync."})
+        if getattr(self.instance, "openwrt_password", "") and not attrs.get("openwrt_password"):
+            for field in ("openwrt_url", "openwrt_username"):
+                if field in attrs and attrs[field] != getattr(self.instance, field):
+                    raise serializers.ValidationError({"openwrt_password": "Re-enter the password when changing the router URL or username."})
         asus_enabled = attrs.get("asuswrt_enabled", getattr(self.instance, "asuswrt_enabled", False))
         for field in ("asuswrt_url", "asuswrt_username", "asuswrt_password"):
             effective = attrs.get(field, getattr(self.instance, field, ""))
@@ -669,6 +719,13 @@ class AppSettingsSerializer(serializers.ModelSerializer):
             validated_data["asuswrt_last_error"] = ""
         if not validated_data.get("asuswrt_password"):
             validated_data.pop("asuswrt_password", None)
+        if validated_data.get("openwrt_password") or any(
+            field in validated_data and validated_data[field] != getattr(instance, field)
+            for field in ("openwrt_url", "openwrt_username", "openwrt_verify_ssl")
+        ):
+            validated_data.update(openwrt_auth_failed=False, openwrt_last_error="")
+        if not validated_data.get("openwrt_password"):
+            validated_data.pop("openwrt_password", None)
         if not validated_data.get("technitium_api_token"):
             validated_data.pop("technitium_api_token", None)
         if not validated_data.get("telegram_token"):
