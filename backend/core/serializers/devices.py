@@ -72,6 +72,7 @@ class DeviceInterfaceSerializer(serializers.ModelSerializer):
             "open_ports",
             "primary",
             "asuswrt_data",
+            "openwrt_data",
         )
 
     @extend_schema_field(DevicePortSerializer(many=True))
@@ -451,6 +452,7 @@ class DeviceSerializer(serializers.ModelSerializer):
             "identity_conflict_detected_at",
             "snmp_data",
             "asuswrt_data",
+            "openwrt_data",
             "snmp_last_seen",
             "merged_into",
             "merged_at",

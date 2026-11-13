@@ -24,6 +24,7 @@ from core.integrations.pihole import sync_pihole
 from core.integrations.technitium import sync_technitium
 from core.integrations.dhcp import sync_dhcp
 from core.integrations.asuswrt import sync_asuswrt
+from core.integrations.openwrt import sync_openwrt
 from core.versioning import check_for_version_update
 from core.integrations.speedtest_tracker import (
     HEALTH_CHECK_INTERVAL_SECONDS,
@@ -287,6 +288,22 @@ class Command(BaseCommand):
                 if stop_event.wait(interval_seconds):
                     break
 
+        def openwrt_sync_loop():
+            while not stop_event.is_set():
+                close_old_connections()
+                interval_seconds = 60
+                try:
+                    config = AppSettings.load()
+                    if config.openwrt_enabled:
+                        interval_seconds = max(config.openwrt_sync_interval, 1) * 60
+                        sync_openwrt()
+                except Exception:
+                    LOGGER.error("OpenWrt sync failed; see integration settings for diagnostics")
+                finally:
+                    close_old_connections()
+                if stop_event.wait(interval_seconds):
+                    break
+
         def run_speedtest_health_check():
             close_old_connections()
             try:
@@ -490,6 +507,7 @@ class Command(BaseCommand):
         dhcp_sync_thread.start()
         asuswrt_sync_thread = threading.Thread(target=asuswrt_sync_loop, daemon=True)
         asuswrt_sync_thread.start()
+        threading.Thread(target=openwrt_sync_loop, daemon=True).start()
         version_update_thread = threading.Thread(target=version_update_loop, daemon=True)
         version_update_thread.start()
         speedtest_health_thread = threading.Thread(

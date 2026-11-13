@@ -104,6 +104,7 @@ class Device(models.Model):
         TECHNITIUM = "technitium", "Technitium DHCP"
         DHCP = "dhcp", "DHCP lease source"
         ASUSWRT = "asuswrt", "ASUSWRT router"
+        OPENWRT = "openwrt", "OpenWrt router"
 
     class Status(models.TextChoices):
         ONLINE = "online", "Online"
@@ -185,6 +186,7 @@ class Device(models.Model):
     last_port_scan = models.DateTimeField(blank=True, null=True)
     snmp_data = models.JSONField(default=dict, blank=True)
     asuswrt_data = models.JSONField(default=dict, blank=True)
+    openwrt_data = models.JSONField(default=dict, blank=True)
     snmp_last_seen = models.DateTimeField(blank=True, null=True)
     missed_scans = models.PositiveIntegerField(default=0)
     known = models.BooleanField(default=False)
@@ -907,6 +909,17 @@ class AppSettings(models.Model):
     asuswrt_last_sync_summary = models.JSONField(default=dict, blank=True)
     asuswrt_last_error = models.TextField(blank=True, default="")
     asuswrt_auth_failed = models.BooleanField(default=False)
+    openwrt_enabled = models.BooleanField(default=False)
+    openwrt_url = models.URLField(max_length=2048, blank=True, default="")
+    openwrt_username = models.CharField(max_length=255, blank=True, default="")
+    openwrt_password = models.CharField(max_length=255, blank=True, default="")
+    openwrt_verify_ssl = models.BooleanField(default=True)
+    openwrt_create_devices = models.BooleanField(default=False)
+    openwrt_sync_interval = models.PositiveIntegerField(default=5)
+    openwrt_last_sync_at = models.DateTimeField(blank=True, null=True)
+    openwrt_last_sync_summary = models.JSONField(default=dict, blank=True)
+    openwrt_last_error = models.TextField(blank=True, default="")
+    openwrt_auth_failed = models.BooleanField(default=False)
     speedtest_tracker_enabled = models.BooleanField(default=False)
     homebox_enabled = models.BooleanField(default=False)
     homebox_url = models.URLField(max_length=2048, blank=True, default="")

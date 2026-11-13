@@ -1,6 +1,7 @@
 from django.urls import path
 from .views.dhcp import sync_dhcp_now, test_dhcp_source
 from .views.asuswrt import sync_asuswrt_now, test_asuswrt_connection
+from .views.openwrt import sync_openwrt_now, test_openwrt_connection
 from .views.homebox import test_homebox, search_homebox
 from .views.docker import (
     docker_device_context,
@@ -113,6 +114,8 @@ urlpatterns = [
     path("integrations/dhcp/sync/", sync_dhcp_now, name="sync-dhcp-source"),
     path("integrations/asuswrt/test/", test_asuswrt_connection, name="test-asuswrt"),
     path("integrations/asuswrt/sync/", sync_asuswrt_now, name="sync-asuswrt"),
+    path("integrations/openwrt/test/", test_openwrt_connection, name="test-openwrt"),
+    path("integrations/openwrt/sync/", sync_openwrt_now, name="sync-openwrt"),
     path("integrations/pihole/sync/", sync_pihole_now, name="sync-pihole"),
     path(
         "integrations/technitium/test/",
