@@ -361,6 +361,7 @@ def device_needs_attention(device, risk_data=None):
 
 
 class DeviceSerializer(serializers.ModelSerializer):
+    controller_observations = serializers.SerializerMethodField()
     homebox_link = serializers.SerializerMethodField()
     homebox_available = serializers.SerializerMethodField()
     effective_external_url = serializers.CharField(read_only=True)
@@ -373,6 +374,8 @@ class DeviceSerializer(serializers.ModelSerializer):
         super().__init__(*args, **kwargs)
         if not self.context.get("include_related_links"):
             self.fields.pop("related_links", None)
+        if not self.context.get("include_interfaces"):
+            self.fields.pop("controller_observations", None)
 
     def homebox_config(self):
         if "homebox_config" not in self.context:
@@ -528,6 +531,21 @@ class DeviceSerializer(serializers.ModelSerializer):
             many=True,
             context=self.context,
         ).data
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_controller_observations(self, obj):
+        from ..models import ControllerDeviceLink
+        links = ControllerDeviceLink.objects.filter(
+            device_id__in=[item.pk for item in device_interfaces(obj)],
+        ).select_related("connection", "device").order_by("-observed_at", "pk")
+        return [{
+            "provider": link.connection.provider,
+            "external_id": link.external_id,
+            "mac": link.device.mac,
+            "metadata": link.metadata,
+            "observed_at": UTCDateTimeField().to_representation(link.observed_at),
+            "synced_at": UTCDateTimeField().to_representation(link.synced_at),
+        } for link in links]
 
     def get_device_identity(self, obj):
         if not hasattr(obj, "_identity_data"):

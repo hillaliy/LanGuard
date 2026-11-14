@@ -14,6 +14,7 @@ from .datetime_utils import utc_isoformat
 from .models import (
     AdGuardUnmatchedClient,
     AppSettings,
+    ControllerConnection,
     Device,
     DeviceDNSActivity,
     DeviceIPAddressAssignment,
@@ -118,6 +119,9 @@ def build_diagnostics_report():
     ]
     private_log_values.extend(
         get_user_model().objects.values_list("username", flat=True)
+    )
+    private_log_values.extend(
+        value for pair in ControllerConnection.objects.values_list("url", "api_key") for value in pair
     )
     latest_scans = [
         _scan_run_payload(scan_run)

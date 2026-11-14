@@ -2,6 +2,7 @@ from django.urls import path
 from .views.dhcp import sync_dhcp_now, test_dhcp_source
 from .views.asuswrt import sync_asuswrt_now, test_asuswrt_connection
 from .views.openwrt import sync_openwrt_now, test_openwrt_connection
+from .views.controllers import controller_connection, controller_sites, controller_sync, controller_test
 from .views.homebox import test_homebox, search_homebox
 from .views.docker import (
     docker_device_context,
@@ -65,6 +66,10 @@ from .views.inventory import (
 )
 
 urlpatterns = [
+    path("integrations/controllers/<slug:provider>/", controller_connection),
+    path("integrations/controllers/<slug:provider>/sites/", controller_sites),
+    path("integrations/controllers/<slug:provider>/test/", controller_test),
+    path("integrations/controllers/<slug:provider>/sync/", controller_sync),
     path("network-map/", network_map, name="network-map"),
     path("network-map/internet/", network_internet, name="network-map-internet"),
     path("network-map/commands/", network_map_commands, name="network-map-commands"),

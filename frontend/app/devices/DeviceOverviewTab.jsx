@@ -28,6 +28,7 @@ import {
 import DeviceSnmpInventory from './DeviceSnmpInventory';
 import DeviceAsuswrtObservation from './DeviceAsuswrtObservation';
 import DeviceOpenWrtObservation from './DeviceOpenWrtObservation';
+import DeviceUniFiObservation from './DeviceUniFiObservation';
 import DeviceInterfacesSection from './DeviceInterfacesSection';
 import DeviceRelatedLinksSection from './DeviceRelatedLinksSection';
 import DeviceNetworkChange from './DeviceNetworkChange';
@@ -372,6 +373,7 @@ export default function DeviceOverviewTab({
           <DeviceSnmpInventory device={device} timeZone={timeZone} />
           <DeviceAsuswrtObservation device={device} timeZone={timeZone} />
           <DeviceOpenWrtObservation device={device} timeZone={timeZone} />
+          <DeviceUniFiObservation device={device} timeZone={timeZone} />
 
           <Divider />
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">

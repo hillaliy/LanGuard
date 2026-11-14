@@ -105,6 +105,7 @@ class Device(models.Model):
         DHCP = "dhcp", "DHCP lease source"
         ASUSWRT = "asuswrt", "ASUSWRT router"
         OPENWRT = "openwrt", "OpenWrt router"
+        UNIFI = "unifi", "UniFi Network"
 
     class Status(models.TextChoices):
         ONLINE = "online", "Online"
@@ -117,6 +118,7 @@ class Device(models.Model):
         LOCAL = "local", "Local scanner"
         PORT = "port", "Port"
         ICMP = "icmp", "ICMP"
+        UNIFI = "unifi", "UniFi"
         RECENT = "recent", "Recent"
         NONE = "none", "None"
 
@@ -271,6 +273,38 @@ class Device(models.Model):
             )
         except (TypeError, ValueError):
             return self.external_url
+
+
+class ControllerConnection(models.Model):
+    class Provider(models.TextChoices):
+        UNIFI = "unifi", "UniFi Network"
+
+    provider = models.CharField(max_length=32, choices=Provider.choices, unique=True)
+    enabled = models.BooleanField(default=False)
+    url = models.URLField(max_length=2048, blank=True)
+    api_key = models.CharField(max_length=512, blank=True)
+    site_id = models.UUIDField(null=True, blank=True)
+    verify_ssl = models.BooleanField(default=True)
+    sync_interval = models.PositiveIntegerField(default=5)
+    last_attempt_at = models.DateTimeField(null=True, blank=True)
+    last_sync_at = models.DateTimeField(null=True, blank=True)
+    last_result = models.JSONField(default=dict, blank=True)
+    last_error = models.CharField(max_length=255, blank=True)
+    lock_until = models.DateTimeField(null=True, blank=True)
+
+
+class ControllerDeviceLink(models.Model):
+    connection = models.ForeignKey(ControllerConnection, on_delete=models.CASCADE)
+    device = models.ForeignKey(Device, on_delete=models.CASCADE, related_name="controller_links")
+    external_id = models.CharField(max_length=128)
+    metadata = models.JSONField(default=dict)
+    observed_at = models.DateTimeField()
+    synced_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("connection", "device"), name="unique_controller_device"),
+        ]
 
 
 class DeviceRelatedLink(models.Model):
