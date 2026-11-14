@@ -109,6 +109,7 @@ The public documentation is the source of truth for setup and operation:
 - [Integrations](https://hillaliy.github.io/LanGuard/docs/integrations)
 - [Notifications](https://hillaliy.github.io/LanGuard/docs/notifications)
 - [Scheduler Tasks](https://hillaliy.github.io/LanGuard/docs/scheduler-tasks)
+- [UniFi Network setup](https://hillaliy.github.io/LanGuard/docs/integrations#unifi-network): Network 9.1+ deployments exposing local Integration API v1, using a dedicated local API key, one selected site, and HTTPS with TLS verification by default.
 - [Backup and Migration](https://hillaliy.github.io/LanGuard/docs/backup-and-migration)
 - [Troubleshooting](https://hillaliy.github.io/LanGuard/docs/troubleshooting)
 - [Release Notes](https://hillaliy.github.io/LanGuard/docs/release-notes)

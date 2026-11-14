@@ -8,6 +8,7 @@ import SpeedtestTrackerIntegrationSettings from './SpeedtestTrackerIntegrationSe
 import TechnitiumIntegrationSettings from './TechnitiumIntegrationSettings';
 import DhcpIntegrationSettings from './DhcpIntegrationSettings';
 import RouterIntegrationSettings from './RouterIntegrationSettings';
+import UniFiIntegrationSettings from './UniFiIntegrationSettings';
 
 export default function IntegrationSettings({ controller }) {
   const { integrationCategory, onSaved, setIntegrationCategory, timeZone } = controller;
@@ -20,7 +21,7 @@ export default function IntegrationSettings({ controller }) {
             <Title order={3}>Integrations</Title>
             <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
           </Box>
-          <Badge variant="light">9 available</Badge>
+          <Badge variant="light">10 available</Badge>
         </Group>
         <Tabs
           value={integrationCategory}
@@ -55,6 +56,7 @@ export default function IntegrationSettings({ controller }) {
             <Stack gap="xl">
               <RouterIntegrationSettings provider="asuswrt" controller={controller.asuswrt} timeZone={timeZone} />
               <RouterIntegrationSettings provider="openwrt" controller={controller.openwrt} timeZone={timeZone} />
+              <UniFiIntegrationSettings timeZone={timeZone} onChanged={onSaved} />
               <DhcpIntegrationSettings controller={controller} />
             </Stack>
           </Tabs.Panel>

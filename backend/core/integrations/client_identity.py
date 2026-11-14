@@ -6,6 +6,24 @@ from ..scanning.identity import guess_device_identity, validated_hostname
 from ..scanning.reconciliation import IP_IDENTITY_CONFLICT_MARKER, IP_IDENTITY_CONFLICT_WINDOW
 
 
+def flag_competing_ip(mac, ip, observed_at, device=None):
+    competing = Device.objects.filter(ip=ip, archived=False).exclude(mac=mac).filter(
+        Q(lastseen__gte=timezone.now() - IP_IDENTITY_CONFLICT_WINDOW)
+        | Q(ip_assignments__ip=ip, ip_assignments__valid_from__gt=observed_at,
+            ip_assignments__valid_until__isnull=True)
+    ).distinct()
+    ids = list(competing.values_list("pk", flat=True))
+    if not ids:
+        return False
+    macs = sorted({mac, *competing.values_list("mac", flat=True)})[:4]
+    reason = f"IP {ip}{IP_IDENTITY_CONFLICT_MARKER}{', '.join(macs)}"
+    Device.objects.filter(pk__in=[*ids, *([device.pk] if device else [])]).filter(
+        Q(identity_conflict_detected_at__isnull=True)
+        | Q(identity_conflict_detected_at__lte=observed_at)
+    ).update(identity_conflict_reason=reason, identity_conflict_detected_at=observed_at)
+    return True
+
+
 def apply_client_observations(
     leases, observed_at, create_devices, *, identity_source=Device.IdentitySource.DHCP,
     observation_reason="Observed in DHCP lease source",
@@ -28,19 +46,7 @@ def apply_client_observations(
         ):
             summary["devices_skipped"] += 1
             continue
-        competing = Device.objects.filter(ip=lease["ip"], archived=False).exclude(mac=mac).filter(
-            Q(lastseen__gte=timezone.now() - IP_IDENTITY_CONFLICT_WINDOW)
-            | Q(ip_assignments__ip=lease["ip"], ip_assignments__valid_from__gt=observed_at,
-                ip_assignments__valid_until__isnull=True)
-        ).distinct()
-        if competing.exists():
-            macs = sorted({mac, *competing.values_list("mac", flat=True)})[:4]
-            reason = f"IP {lease['ip']}{IP_IDENTITY_CONFLICT_MARKER}{', '.join(macs)}"
-            ids = [*competing.values_list("pk", flat=True), *([device.pk] if device else [])]
-            Device.objects.filter(pk__in=ids).filter(
-                Q(identity_conflict_detected_at__isnull=True)
-                | Q(identity_conflict_detected_at__lte=observed_at)
-            ).update(identity_conflict_reason=reason, identity_conflict_detected_at=observed_at)
+        if flag_competing_ip(mac, lease["ip"], observed_at, device):
             summary["identity_conflicts"] += 1
             continue
         if device is None:

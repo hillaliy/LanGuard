@@ -18,12 +18,17 @@ The `languard-scheduler` container owns recurring and queued background work. It
 | AdGuard Home sync | Every 5 minutes when enabled | Integration sync interval and retention |
 | Pi-hole sync | Every 5 minutes when enabled | Integration sync interval and retention |
 | Technitium sync | Every 5 minutes when enabled | Integration sync interval, retention, and optional DHCP behavior |
+| UniFi Network sync | Checked every 30 seconds; due every 5 minutes by default | **Settings > Integrations > Network controllers > UniFi Network** |
 | LanGuard update check | At startup, then every 6 hours when enabled | Update-check interval and notification rule |
 | Speedtest health check | At startup, then every 5 minutes when enabled | Integration, thresholds, and notification rule |
 | Detailed device port scan | On demand, one queued scan at a time | Device page and user permissions |
 | Docker inventory | Checked every minute; synchronization follows its saved interval | Docker integration setting |
 
 ## How intervals behave
+
+UniFi uses the last attempt to schedule its next synchronization, including
+failed attempts. Manual and scheduled syncs share a per-connection lease so
+they do not write observations concurrently.
 
 Intervals are measured from the end of the previous run, not from fixed clock boundaries. A five-minute network interval and a scan ending at 10:12 results in the next scan starting at approximately 10:17.
 

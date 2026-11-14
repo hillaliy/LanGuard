@@ -22,6 +22,35 @@ Docker installations can connect optional services from **Settings > Integration
 | HomeBox | Search and link an existing inventory item to a device | Stores the linked item ID; does not synchronize inventory |
 | Docker inventory | Running containers, health, addresses, restarts, and published ports | Reads the local Docker engine from the scheduler |
 
+## UniFi Network
+
+In UniFi Network, open **Settings > Control Plane > Integrations** and check
+that your installation exposes the official local Network Integration API.
+Use a dedicated API key with the least privileges your installation supports:
+list local sites and connected clients, and optionally read adopted devices to
+resolve access point and switch names.
+
+In LanGuard, open **Settings > Integrations > Network controllers > UniFi Network**.
+Enter the local HTTPS controller origin (or the exact Integration API base
+from the controller's documentation), paste the key, and choose **Load sites**.
+Select one site, use **Test connection**, enable the integration, and choose
+**Save UniFi settings**. **Sync now** imports the selected site's connected
+clients. Automatic sync defaults to five minutes.
+
+The integration targets Network 9.1 and newer installations that expose the
+local Integration API v1. Console and standalone API prefixes are supported;
+older private APIs and the UniFi Site Manager cloud API are not used. Verify TLS
+is on by default. Prefer a trusted certificate; disable verification only on a
+trusted management network when using a self-signed certificate. Leaving the
+key blank preserves it on the same controller URL.
+
+New clients with a valid unique MAC and IP are added as Unknown. Existing
+Known profiles are preserved, and an observed connection can mark a device
+Online. Omission from a later response does not mark the device Offline. Optional
+fields such as SSID, VLAN, switch port, signal, and client links are displayed
+only when the controller supplies them. Some versions expose only basic
+connection information in the official API.
+
 ## ASUSWRT
 
 ASUSWRT appears under **Settings > Integrations > Network controllers**. It reads the router's local HTTP(S) client-list interface, using the same login and read-hook protocol used by the [AsusRouter project](https://github.com/Vaskivskyi/asusrouter). No SSH, shell commands, HTML/JavaScript scraping, router configuration changes, or firmware-specific scripts are used.

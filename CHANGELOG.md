@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added the read-only UniFi Network controller integration. Administrators can discover sites, test and synchronize one selected site, and enrich or discover clients by MAC without changing Known-device profiles. Connected clients can supply a positive Online observation; missing clients remain subject to normal scan rules. Device details show timestamped controller observations and optional connection metadata.
 - Added an opt-in, read-only OpenWrt / LuCI integration under Network controllers, with a non-mutating connection test, manual and scheduled sync, and optional device creation from unambiguous IPv4 DHCP leases. Device details show timestamped host hints and per-interface Wi-Fi observations across multiple radios without overwriting existing identity, IP assignments, or scanner presence.
 - Documented OpenWrt setup, minimal rpcd read permissions, TLS verification, and firmware compatibility limits. Unsupported inventory methods are reported without blocking other supported sources, and scheduled login pauses after an authentication failure.
 - Updated Mantine core, hooks, and notifications from 9.7.4 to 9.7.5, and Next.js and eslint-config-next from 16.4.3 to 16.4.5 (#316).

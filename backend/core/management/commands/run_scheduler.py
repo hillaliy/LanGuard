@@ -25,6 +25,7 @@ from core.integrations.technitium import sync_technitium
 from core.integrations.dhcp import sync_dhcp
 from core.integrations.asuswrt import sync_asuswrt
 from core.integrations.openwrt import sync_openwrt
+from core.integrations.controllers import sync_due_connections
 from core.versioning import check_for_version_update
 from core.integrations.speedtest_tracker import (
     HEALTH_CHECK_INTERVAL_SECONDS,
@@ -304,6 +305,18 @@ class Command(BaseCommand):
                 if stop_event.wait(interval_seconds):
                     break
 
+        def controller_sync_loop():
+            while not stop_event.is_set():
+                close_old_connections()
+                try:
+                    sync_due_connections()
+                except Exception:
+                    LOGGER.warning("Network controller sync could not complete")
+                finally:
+                    close_old_connections()
+                if stop_event.wait(30):
+                    break
+
         def run_speedtest_health_check():
             close_old_connections()
             try:
@@ -508,6 +521,7 @@ class Command(BaseCommand):
         asuswrt_sync_thread = threading.Thread(target=asuswrt_sync_loop, daemon=True)
         asuswrt_sync_thread.start()
         threading.Thread(target=openwrt_sync_loop, daemon=True).start()
+        threading.Thread(target=controller_sync_loop, daemon=True).start()
         version_update_thread = threading.Thread(target=version_update_loop, daemon=True)
         version_update_thread.start()
         speedtest_health_thread = threading.Thread(
