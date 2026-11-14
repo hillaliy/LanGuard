@@ -141,7 +141,9 @@ class HostnameResolutionTests(SimpleTestCase):
             "HAA 123456",
         )
 
-    def test_preloaded_hint_preserves_discovery_source(self):
+    @patch("core.scanning.discovery.mdns_reverse_hostname", return_value="")
+    @patch("core.scanning.discovery.reverse_dns_hostname", return_value="")
+    def test_preloaded_hint_preserves_discovery_source(self, *_):
         self.assertEqual(
             get_hostname(
                 "192.168.1.42",
