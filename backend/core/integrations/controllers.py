@@ -14,6 +14,7 @@ from ..scanning.identity import guess_device_identity, is_default_device_name, v
 from ..scanning.presence import set_device_status
 from .client_identity import flag_competing_ip
 from .unifi import ControllerError, UniFiProvider
+from .omada import OmadaProvider
 
 
 class InventoryProvider(Protocol):
@@ -22,7 +23,7 @@ class InventoryProvider(Protocol):
     def sync_devices(self, site_id) -> tuple[list, int]: ...
 
 
-PROVIDERS = {ControllerConnection.Provider.UNIFI: UniFiProvider}
+PROVIDERS = {ControllerConnection.Provider.UNIFI: UniFiProvider, ControllerConnection.Provider.OMADA: OmadaProvider}
 SYNC_LEASE = timedelta(minutes=2)
 
 
@@ -36,7 +37,16 @@ def is_due(connection, now):
 
 
 def _source(connection):
-    return connection.url, connection.api_key, connection.verify_ssl, connection.site_id
+    return (connection.url, connection.api_key, connection.verify_ssl, str(connection.site_id),
+            connection.controller_id, connection.client_id)
+
+
+def provider_client(connection):
+    credentials = (connection.url, connection.api_key, connection.verify_ssl)
+    if connection.provider == ControllerConnection.Provider.OMADA:
+        return PROVIDERS[connection.provider](*credentials, controller_id=connection.controller_id,
+                                               client_id=connection.client_id)
+    return PROVIDERS[connection.provider](*credentials)
 
 
 def reconcile_clients(connection, clients, observed_at):
@@ -122,7 +132,7 @@ def sync_connection(provider, *, manual=False):
             raise ControllerBusy("This controller is already syncing.")
     active = ControllerConnection.objects.filter(pk=connection.pk, lock_until=lock)
     try:
-        with PROVIDERS[provider](*_source(connection)[:3]) as client:
+        with provider_client(connection) as client:
             clients, total = client.sync_devices(connection.site_id)
         with serialized_database_write(timeout=5), transaction.atomic():
             current = active.select_for_update().first()
@@ -139,7 +149,7 @@ def sync_connection(provider, *, manual=False):
         _release_sync(active, last_error=str(exc))
         raise
     except Exception:
-        _release_sync(active, last_error="Could not save UniFi observations.")
+        _release_sync(active, last_error="Could not save controller observations.")
         raise
 
 
