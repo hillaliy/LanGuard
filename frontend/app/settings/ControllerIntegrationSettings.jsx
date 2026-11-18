@@ -1,18 +1,22 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Badge, Box, Button, Group, NumberInput, PasswordInput, Select, SimpleGrid,
+  Alert, Anchor, Badge, Box, Button, Group, NumberInput, PasswordInput, Select, SimpleGrid,
   Stack, Switch, Text, TextInput,
 } from '@mantine/core';
-import { IconListSearch, IconPlugConnected, IconRefresh } from '@tabler/icons-react';
+import { IconListSearch, IconPlugConnected, IconRefresh, IconRouter } from '@tabler/icons-react';
 import Image from 'next/image';
 import { apiRequest } from '../api';
 import { formatDate } from '../utils/date';
 import { showErrorNotification, showServerNotification } from '../utils/notifications';
 
-const endpoint = 'integrations/controllers/unifi/';
-const defaults = { enabled: false, url: '', api_key: '', site_id: null, verify_ssl: true, sync_interval: 5 };
-
-export default function UniFiIntegrationSettings({ timeZone, onChanged }) {
+export default function ControllerIntegrationSettings({ provider, timeZone, onChanged }) {
+  const omada = provider === 'omada';
+  const name = omada ? 'TP-Link Omada' : 'UniFi Network';
+  const shortName = omada ? 'Omada' : 'UniFi';
+  const secretField = omada ? 'client_secret' : 'api_key';
+  const endpoint = `integrations/controllers/${provider}/`;
+  const defaults = { enabled: false, url: '', [secretField]: '', site_id: null, verify_ssl: true, sync_interval: 5,
+    ...(omada ? { client_id: '', controller_id: '' } : {}) };
   const [form, setForm] = useState(defaults);
   const [saved, setSaved] = useState(null);
   const [sites, setSites] = useState([]);
@@ -22,7 +26,7 @@ export default function UniFiIntegrationSettings({ timeZone, onChanged }) {
   function hydrate(data) {
     setSaved(data);
     setForm({ ...defaults, ...Object.fromEntries(Object.keys(defaults)
-      .filter(key => key !== 'api_key').map(key => [key, data[key]])) });
+      .filter(key => key !== secretField).map(key => [key, data[key]])) });
   }
 
   async function run(action, work) {
@@ -43,11 +47,15 @@ export default function UniFiIntegrationSettings({ timeZone, onChanged }) {
   }, []);
 
   const set = (key, value) => {
-    setForm(current => ({ ...current, [key]: value, ...(key === 'url' ? { site_id: null } : {}) }));
-    if (key === 'url' || key === 'api_key' || key === 'verify_ssl') setSites([]);
+    setForm(current => ({ ...current, [key]: value,
+      ...(['url', 'controller_id', 'client_id'].includes(key) ? { site_id: null } : {}) }));
+    if (['url', secretField, 'verify_ssl', 'controller_id', 'client_id'].includes(key)) setSites([]);
   };
-  const dirty = !!saved && Object.keys(defaults).some(key => key === 'api_key' ? !!form.api_key : form[key] !== saved[key]);
-  const credentialsReady = !!form.url.trim() && (!!form.api_key || (saved?.has_key && form.url.trim() === saved.url));
+  const dirty = !!saved && Object.keys(defaults).some(key => key === secretField ? !!form[secretField] : form[key] !== saved[key]);
+  const sameIdentity = saved?.has_key && form.url.trim() === saved.url && (!omada
+    || (form.controller_id === saved.controller_id && form.client_id === saved.client_id));
+  const credentialsReady = !!form.url.trim() && (!omada || (!!form.controller_id && !!form.client_id))
+    && (!!form[secretField] || sameIdentity);
   const payload = { ...form, url: form.url.trim() };
   const options = sites.map(site => ({ value: site.id, label: site.name }));
   if (form.site_id && !options.some(site => site.value === form.site_id)) {
@@ -73,10 +81,10 @@ export default function UniFiIntegrationSettings({ timeZone, onChanged }) {
     <Stack className="settings-subsection" gap="sm">
       <Group justify="space-between">
         <Group gap="sm">
-          <Box bg="white" px={6} py={4} style={{ borderRadius: 4, display: 'flex' }}>
+          {omada ? <IconRouter size={24} aria-hidden="true" /> : <Box bg="white" px={6} py={4} style={{ borderRadius: 4, display: 'flex' }}>
             <Image src="/integrations/unifi.svg" alt="" width={53} height={16} />
-          </Box>
-          <Text fw={700}>UniFi Network</Text>
+          </Box>}
+          <Text fw={700}>{name}</Text>
           <Switch label="Enabled" checked={form.enabled} disabled={!saved || !!busy}
             onChange={event => set('enabled', event.currentTarget.checked)} />
         </Group>
@@ -85,10 +93,16 @@ export default function UniFiIntegrationSettings({ timeZone, onChanged }) {
       <SimpleGrid cols={{ base: 1, md: 2 }}>
         <TextInput label="Controller URL" placeholder="https://192.168.1.1" value={form.url}
           disabled={!saved || !!busy} onChange={event => set('url', event.currentTarget.value)} />
-        <PasswordInput label="Local API key" autoComplete="new-password" value={form.api_key}
-          placeholder={saved?.has_key ? 'Saved API key' : ''} disabled={!saved || !!busy}
-          onChange={event => set('api_key', event.currentTarget.value)} />
-        <Select label="UniFi site" data={options} value={form.site_id} allowDeselect={false}
+        {omada && <>
+          <TextInput label="Omada controller ID" value={form.controller_id} disabled={!saved || !!busy}
+            onChange={event => set('controller_id', event.currentTarget.value)} />
+          <TextInput label="Client ID" value={form.client_id} disabled={!saved || !!busy}
+            onChange={event => set('client_id', event.currentTarget.value)} />
+        </>}
+        <PasswordInput label={omada ? 'Client Secret' : 'Local API key'} autoComplete="new-password" value={form[secretField]}
+          placeholder={saved?.has_key ? 'Saved secret' : ''} disabled={!saved || !!busy}
+          onChange={event => set(secretField, event.currentTarget.value)} />
+        <Select label={`${shortName} site`} data={options} value={form.site_id} allowDeselect={false}
           disabled={!saved || !!busy || !options.length} onChange={value => set('site_id', value)} />
         <NumberInput label="Sync interval" suffix=" min" min={1} max={1440} allowDecimal={false}
           value={form.sync_interval} disabled={!saved || !!busy}
@@ -96,7 +110,7 @@ export default function UniFiIntegrationSettings({ timeZone, onChanged }) {
       </SimpleGrid>
       <Switch label="Verify TLS certificate" checked={form.verify_ssl} disabled={!saved || !!busy}
         onChange={event => set('verify_ssl', event.currentTarget.checked)} />
-      {(error || saved?.last_error) && <Alert color="red" title="UniFi">{error || saved.last_error}</Alert>}
+      {(error || saved?.last_error) && <Alert color="red" title={shortName}>{error || saved.last_error}</Alert>}
       {saved?.last_error && saved.last_attempt_at && (
         <Text size="sm" c="dimmed">Last attempt: {formatDate(saved.last_attempt_at, timeZone)}</Text>
       )}
@@ -107,6 +121,8 @@ export default function UniFiIntegrationSettings({ timeZone, onChanged }) {
         </Text>
       )}
       <Group gap="sm">
+        <Anchor href={`https://hillaliy.github.io/LanGuard/docs/integrations#${omada ? 'tp-link-omada' : 'unifi-network'}`}
+          target="_blank" rel="noopener noreferrer" size="sm">{shortName} setup</Anchor>
         <Button variant="default" leftSection={<IconListSearch size={18} />} loading={busy === 'sites'}
           disabled={!credentialsReady || !!busy} onClick={() => probe('sites')}>Load sites</Button>
         <Button variant="default" leftSection={<IconPlugConnected size={18} />} loading={busy === 'test'}
@@ -116,7 +132,7 @@ export default function UniFiIntegrationSettings({ timeZone, onChanged }) {
             const response = await apiRequest(endpoint, { method: 'PUT', body: payload, timeoutMs: 8000 });
             hydrate(response.data);
             showServerNotification(response);
-          })}>Save UniFi settings</Button>
+          })}>Save {shortName} settings</Button>
         <Button variant="light" leftSection={<IconRefresh size={18} />} loading={busy === 'sync'}
           disabled={!saved?.enabled || !saved.configured || dirty || !!busy}
           onClick={() => run('sync', async () => {

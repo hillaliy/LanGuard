@@ -3,12 +3,13 @@ import { IconAccessPoint, IconExternalLink } from '@tabler/icons-react';
 import { formatDate } from '../utils/date';
 import { DeviceField } from './DeviceDetailFields';
 
-export default function DeviceUniFiObservation({ device, timeZone }) {
-  const observations = device.controller_observations?.filter(item => item.provider === 'unifi') || [];
+export default function DeviceControllerObservation({ device, timeZone, provider }) {
+  const name = provider === 'omada' ? 'Omada' : 'UniFi';
+  const observations = device.controller_observations?.filter(item => item.provider === provider) || [];
   if (!observations.length) return null;
   return (
     <section className="device-detail-section">
-      <Group gap="xs"><IconAccessPoint size={20} /><Title order={4}>UniFi observations</Title></Group>
+      <Group gap="xs"><IconAccessPoint size={20} /><Title order={4}>{name} observations</Title></Group>
       <Stack gap="md" mt="md">
         {observations.map(({ external_id, mac, metadata: info, observed_at, synced_at }) => {
           const fields = [
@@ -17,6 +18,8 @@ export default function DeviceUniFiObservation({ device, timeZone }) {
             ['SSID', info.ssid], ['Network', info.network], ['VLAN', info.vlan],
             ['Access point or switch', info.uplink], ['Switch port', info.switch_port],
             ['Signal', info.rssi != null ? `${info.rssi} dBm` : null],
+            ['Signal strength', info.signal_percent != null ? `${info.signal_percent}%` : null],
+            ['Radio', info.radio], ['Channel', info.channel],
             ['Observed at', formatDate(observed_at, timeZone)], ['Synced at', formatDate(synced_at, timeZone)],
           ];
           return (
@@ -28,7 +31,7 @@ export default function DeviceUniFiObservation({ device, timeZone }) {
               </SimpleGrid>
               {/^https:\/\//.test(info.client_url || '') && (
                 <Anchor href={info.client_url} target="_blank" rel="noopener noreferrer" size="sm">
-                  <Group gap={4}>Open in UniFi <IconExternalLink size={14} /></Group>
+                  <Group gap={4}>Open in {name} <IconExternalLink size={14} /></Group>
                 </Anchor>
               )}
             </Stack>

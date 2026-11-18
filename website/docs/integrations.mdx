@@ -1,6 +1,6 @@
 ---
 title: Integrations
-description: Connect LanGuard to ASUSWRT routers, DHCP sources, Docker hosts, DNS providers, Speedtest Tracker, HomeBox, and automation services.
+description: Connect LanGuard to network controllers, DHCP sources, Docker hosts, DNS providers, Speedtest Tracker, HomeBox, and automation services.
 slug: /integrations
 ---
 
@@ -18,6 +18,7 @@ Docker installations can connect optional services from **Settings > Integration
 | DHCP lease source | IPv4 address and hostname evidence from dnsmasq, Kea, or ISC DHCP files | Imports active leases; does not infer online presence or delete devices on expiry |
 | ASUSWRT | Router client discovery, IPv4/hostname/vendor enrichment, and available connection details | Reads structured client data; preserves user-managed identity and scanner presence |
 | OpenWrt / LuCI | IPv4 DHCP leases, neighbor-derived host hints, and multi-radio Wi-Fi observations | Reads HTTP ubus inventory; existing device identity, IP and presence are unchanged |
+| TP-Link Omada | Connected clients, wired/Wi-Fi metadata, uplink, VLAN and signal | Reads local OpenAPI v1 with Client Credentials; preserves Known-device profiles |
 | Speedtest Tracker | Latest internet result and health on the dashboard and Network Map Internet tile | Stores settings and latest processed health state, not result history |
 | HomeBox | Search and link an existing inventory item to a device | Stores the linked item ID; does not synchronize inventory |
 | Docker inventory | Running containers, health, addresses, restarts, and published ports | Reads the local Docker engine from the scheduler |
@@ -50,6 +51,51 @@ Online. Omission from a later response does not mark the device Offline. Optiona
 fields such as SSID, VLAN, switch port, signal, and client links are displayed
 only when the controller supplies them. Some versions expose only basic
 connection information in the official API.
+
+## TP-Link Omada
+
+LanGuard supports **one local controller and one site** using Omada OpenAPI v1
+and OAuth **Client Credentials** (Client mode). This targets software controllers
+and hardware controllers whose installed firmware exposes these endpoints.
+Feature availability varies by model and firmware; a controller version alone
+does not guarantee OpenAPI support. Cloud-managed controllers, username/password
+Web API sessions, authorization-code login and Omada Pro-specific APIs are not
+part of this connector. Check the controller's own OpenAPI documentation.
+
+1. In the controller's global settings, open **Platform Integration > Open API**.
+2. Create a dedicated application in **Client mode**, with a read-only role and
+   access to the selected site. Copy the **Omada controller ID**, **Client ID**
+   and **Client Secret**. These are three different values.
+3. In **Settings > Integrations > Network controllers > TP-Link Omada**, enter
+   the local HTTPS origin, including the port used by that controller's OpenAPI.
+   The token and inventory endpoints must be available under that same origin.
+4. Enter the IDs and secret, choose **Load sites**, select a site, and use
+   **Test connection**. Testing never modifies device inventory.
+5. Enable the connector and choose **Save Omada settings**. Use **Sync now** or
+   allow the scheduler to sync every five minutes by default.
+
+TLS verification is on by default. Use a trusted router certificate where
+possible. Disable verification only on a trusted management network with a
+self-signed certificate. Credentials are sent only in the token request body;
+access tokens are kept in memory for one operation and never saved in the
+database. A blank Client Secret preserves the saved secret only when the URL,
+controller ID and Client ID have not changed.
+
+Only records explicitly reported as active are reconciled by MAC. New clients
+with a usable IP are created as Unknown; existing Known profiles remain
+protected. A positive controller observation can mark a device Online.
+Omission or an inactive record does not mark a device Offline. IP changes use
+LanGuard's identity-conflict protections.
+
+Device pages show timestamped Omada observations: reported name, site, connection
+type, SSID, network/VLAN, access point/switch/gateway, port, radio/channel, and
+signal when provided. Signal percentages and dBm values are displayed separately.
+No blocking, disconnect, reboot, adoption or network-configuration API is called.
+Only token acquisition uses POST; inventory calls use fixed GET endpoints.
+
+See TP-Link's [OpenAPI setup guide](https://community.tp-link.com/en/business/kb/detail/412930)
+and [OpenAPI reference](https://use1-omada-northbound.tplinkcloud.com/doc.html)
+for account permissions and response schemas.
 
 ## ASUSWRT
 

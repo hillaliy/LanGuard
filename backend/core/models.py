@@ -106,6 +106,7 @@ class Device(models.Model):
         ASUSWRT = "asuswrt", "ASUSWRT router"
         OPENWRT = "openwrt", "OpenWrt router"
         UNIFI = "unifi", "UniFi Network"
+        OMADA = "omada", "Omada controller"
 
     class Status(models.TextChoices):
         ONLINE = "online", "Online"
@@ -119,6 +120,7 @@ class Device(models.Model):
         PORT = "port", "Port"
         ICMP = "icmp", "ICMP"
         UNIFI = "unifi", "UniFi"
+        OMADA = "omada", "Omada"
         RECENT = "recent", "Recent"
         NONE = "none", "None"
 
@@ -278,12 +280,15 @@ class Device(models.Model):
 class ControllerConnection(models.Model):
     class Provider(models.TextChoices):
         UNIFI = "unifi", "UniFi Network"
+        OMADA = "omada", "TP-Link Omada"
 
     provider = models.CharField(max_length=32, choices=Provider.choices, unique=True)
     enabled = models.BooleanField(default=False)
     url = models.URLField(max_length=2048, blank=True)
     api_key = models.CharField(max_length=512, blank=True)
-    site_id = models.UUIDField(null=True, blank=True)
+    site_id = models.CharField(max_length=128, null=True, blank=True)
+    controller_id = models.CharField(max_length=128, blank=True, default="")
+    client_id = models.CharField(max_length=128, blank=True, default="")
     verify_ssl = models.BooleanField(default=True)
     sync_interval = models.PositiveIntegerField(default=5)
     last_attempt_at = models.DateTimeField(null=True, blank=True)
