@@ -19,6 +19,7 @@ Docker installations can connect optional services from **Settings > Integration
 | ASUSWRT | Router client discovery, IPv4/hostname/vendor enrichment, and available connection details | Reads structured client data; preserves user-managed identity and scanner presence |
 | OpenWrt / LuCI | IPv4 DHCP leases, neighbor-derived host hints, and multi-radio Wi-Fi observations | Reads HTTP ubus inventory; existing device identity, IP and presence are unchanged |
 | TP-Link Omada | Connected clients, wired/Wi-Fi metadata, uplink, VLAN and signal | Reads local OpenAPI v1 with Client Credentials; preserves Known-device profiles |
+| MikroTik RouterOS | Reachable ARP and Wi-Fi clients, DHCP leases, bridge/interface and VLAN context | Reads HTTPS REST; passive lease/bridge evidence never implies Online |
 | Speedtest Tracker | Latest internet result and health on the dashboard and Network Map Internet tile | Stores settings and latest processed health state, not result history |
 | HomeBox | Search and link an existing inventory item to a device | Stores the linked item ID; does not synchronize inventory |
 | Docker inventory | Running containers, health, addresses, restarts, and published ports | Reads the local Docker engine from the scheduler |
@@ -51,6 +52,75 @@ Online. Omission from a later response does not mark the device Offline. Optiona
 fields such as SSID, VLAN, switch port, signal, and client links are displayed
 only when the controller supplies them. Some versions expose only basic
 connection information in the official API.
+
+## MikroTik RouterOS
+
+Open **Settings > Integrations > Network controllers > MikroTik RouterOS**.
+This integration targets stable **RouterOS 7.1 or newer 7.x** installations
+exposing the REST API over HTTPS. RouterOS 6, the binary RouterOS API,
+HTTP-only access, configuration writes, and scripts are not used.
+The current configuration supports **one router**, not a multi-router fleet.
+Only inventory visible to that router is available; LanGuard does not guess
+which other router or access point a client is attached to.
+
+Create a dedicated user with only `read,api,rest-api` policies, not the default
+read group (which grants additional permissions). For example, in RouterOS:
+
+```text
+/user/group/add name=languard-read policy=read,api,rest-api
+/user/add name=languard group=languard-read password="replace-with-a-long-random-password"
+```
+
+Configure a certificate and enable the `www-ssl` service. Restrict access to
+LanGuard's management address with service and firewall rules; do not expose
+REST publicly. Enter the HTTPS origin, such as `https://192.168.88.1:8443`,
+without `/rest`, embedded credentials or query parameters. Enter the dedicated
+username and password, choose **Test connection**, enable the integration and
+choose **Save RouterOS settings**. There is no site selector. **Sync now** runs
+the same inventory collection as the scheduler, which defaults to five minutes.
+
+TLS verification is enabled by default; use a trusted certificate. Disable
+verification only on a trusted management network if necessary for a self-signed
+certificate. Credentials use HTTP Basic authentication over HTTPS. Use printable
+ASCII credentials; passwords may contain spaces. Passwords are write-only in API
+responses, but are stored with the application's other integration secrets:
+protect database files and backups. Leaving the password blank preserves it only
+for the same router URL and username; changing either requires the password again.
+
+The integration makes bounded GET requests with explicit property lists to:
+
+- `/system/resource` and `/system/identity` for version and router name.
+- `/ip/arp` for reachability evidence; only `status=reachable` is positive.
+- `/ip/dhcp-server/lease` for bound IPv4 leases and hostnames.
+- `/interface/bridge/host` for interface, bridge and VLAN context.
+- `/interface/wifi/registration-table` for explicitly authorized Wi-Fi peers.
+- `/interface/wireless/registration-table` for legacy associated client peers.
+- `/caps-man/registration-table` for legacy CAPsMAN associated peers.
+
+Unavailable optional menus (404) are reported as warnings; supported sources
+remain usable. Permission errors, invalid responses and exhausted collection
+limits fail the entire sync without partial device writes. A router exposing
+none of the inventory menus is rejected. Firmware/package differences may
+leave optional fields absent. No radio configuration or sensitive properties
+are requested, and no changes are made to the router.
+
+New clients require a valid, unambiguous MAC/IP plus positive ARP or Wi-Fi
+evidence and are created as Unknown. Bound leases and bridge learning alone
+only add timestamped observations to existing devices; they do not change IP,
+identity, last-seen time, or Online state. Static, stale and incomplete ARP
+entries do not prove Online. Missing clients never force Offline.
+Known-device profiles remain unchanged. Duplicate leases, conflicting IPs,
+VLANs or simultaneous Wi-Fi registrations are skipped rather than guessing.
+A learned bridge port is not automatically labeled Ethernet, and these
+observations do not automatically create Network Map links.
+
+Device details show the router, reported IP, interface, bridge, VLAN, DHCP server,
+lease/ARP state and optional Wi-Fi SSID/signal, with observation timestamps.
+These are last collected observations, not a live connection guarantee.
+
+See the official [REST API guide](https://manual.mikrotik.com/docs/developer-guides/rest-api/),
+[ARP states](https://help.mikrotik.com/docs/spaces/ROS/pages/100892687/ARP) and
+[WiFi registration table](https://help.mikrotik.com/docs/spaces/ROS/pages/224559120/WiFi).
 
 ## TP-Link Omada
 

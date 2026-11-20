@@ -11,12 +11,13 @@ import { showErrorNotification, showServerNotification } from '../utils/notifica
 
 export default function ControllerIntegrationSettings({ provider, timeZone, onChanged }) {
   const omada = provider === 'omada';
-  const name = omada ? 'TP-Link Omada' : 'UniFi Network';
-  const shortName = omada ? 'Omada' : 'UniFi';
-  const secretField = omada ? 'client_secret' : 'api_key';
+  const routeros = provider === 'routeros';
+  const name = routeros ? 'MikroTik RouterOS' : omada ? 'TP-Link Omada' : 'UniFi Network';
+  const shortName = routeros ? 'RouterOS' : omada ? 'Omada' : 'UniFi';
+  const secretField = routeros ? 'password' : omada ? 'client_secret' : 'api_key';
   const endpoint = `integrations/controllers/${provider}/`;
   const defaults = { enabled: false, url: '', [secretField]: '', site_id: null, verify_ssl: true, sync_interval: 5,
-    ...(omada ? { client_id: '', controller_id: '' } : {}) };
+    ...(omada ? { client_id: '', controller_id: '' } : {}), ...(routeros ? { username: '' } : {}) };
   const [form, setForm] = useState(defaults);
   const [saved, setSaved] = useState(null);
   const [sites, setSites] = useState([]);
@@ -48,14 +49,15 @@ export default function ControllerIntegrationSettings({ provider, timeZone, onCh
 
   const set = (key, value) => {
     setForm(current => ({ ...current, [key]: value,
-      ...(['url', 'controller_id', 'client_id'].includes(key) ? { site_id: null } : {}) }));
-    if (['url', secretField, 'verify_ssl', 'controller_id', 'client_id'].includes(key)) setSites([]);
+      ...(['url', 'controller_id', 'client_id', 'username'].includes(key) ? { site_id: null } : {}) }));
+    if (['url', secretField, 'verify_ssl', 'controller_id', 'client_id', 'username'].includes(key)) setSites([]);
   };
   const dirty = !!saved && Object.keys(defaults).some(key => key === secretField ? !!form[secretField] : form[key] !== saved[key]);
   const sameIdentity = saved?.has_key && form.url.trim() === saved.url && (!omada
-    || (form.controller_id === saved.controller_id && form.client_id === saved.client_id));
+    || (form.controller_id === saved.controller_id && form.client_id === saved.client_id))
+    && (!routeros || form.username === saved.username);
   const credentialsReady = !!form.url.trim() && (!omada || (!!form.controller_id && !!form.client_id))
-    && (!!form[secretField] || sameIdentity);
+    && (!routeros || !!form.username.trim()) && (!!form[secretField] || sameIdentity);
   const payload = { ...form, url: form.url.trim() };
   const options = sites.map(site => ({ value: site.id, label: site.name }));
   if (form.site_id && !options.some(site => site.value === form.site_id)) {
@@ -81,7 +83,7 @@ export default function ControllerIntegrationSettings({ provider, timeZone, onCh
     <Stack className="settings-subsection" gap="sm">
       <Group justify="space-between">
         <Group gap="sm">
-          {omada ? <IconRouter size={24} aria-hidden="true" /> : <Box bg="white" px={6} py={4} style={{ borderRadius: 4, display: 'flex' }}>
+          {omada || routeros ? <IconRouter size={24} aria-hidden="true" /> : <Box bg="white" px={6} py={4} style={{ borderRadius: 4, display: 'flex' }}>
             <Image src="/integrations/unifi.svg" alt="" width={53} height={16} />
           </Box>}
           <Text fw={700}>{name}</Text>
@@ -91,7 +93,7 @@ export default function ControllerIntegrationSettings({ provider, timeZone, onCh
         <Badge color={saved?.configured ? 'teal' : 'gray'}>{saved?.configured ? 'Configured' : 'Not configured'}</Badge>
       </Group>
       <SimpleGrid cols={{ base: 1, md: 2 }}>
-        <TextInput label="Controller URL" placeholder="https://192.168.1.1" value={form.url}
+        <TextInput label={routeros ? 'Router URL' : 'Controller URL'} placeholder="https://192.168.1.1" value={form.url}
           disabled={!saved || !!busy} onChange={event => set('url', event.currentTarget.value)} />
         {omada && <>
           <TextInput label="Omada controller ID" value={form.controller_id} disabled={!saved || !!busy}
@@ -99,11 +101,13 @@ export default function ControllerIntegrationSettings({ provider, timeZone, onCh
           <TextInput label="Client ID" value={form.client_id} disabled={!saved || !!busy}
             onChange={event => set('client_id', event.currentTarget.value)} />
         </>}
-        <PasswordInput label={omada ? 'Client Secret' : 'Local API key'} autoComplete="new-password" value={form[secretField]}
+        {routeros && <TextInput label="Username" autoComplete="off" value={form.username} disabled={!saved || !!busy}
+          onChange={event => set('username', event.currentTarget.value)} />}
+        <PasswordInput label={routeros ? 'Password' : omada ? 'Client Secret' : 'Local API key'} autoComplete="new-password" value={form[secretField]}
           placeholder={saved?.has_key ? 'Saved secret' : ''} disabled={!saved || !!busy}
           onChange={event => set(secretField, event.currentTarget.value)} />
-        <Select label={`${shortName} site`} data={options} value={form.site_id} allowDeselect={false}
-          disabled={!saved || !!busy || !options.length} onChange={value => set('site_id', value)} />
+        {!routeros && <Select label={`${shortName} site`} data={options} value={form.site_id} allowDeselect={false}
+          disabled={!saved || !!busy || !options.length} onChange={value => set('site_id', value)} />}
         <NumberInput label="Sync interval" suffix=" min" min={1} max={1440} allowDecimal={false}
           value={form.sync_interval} disabled={!saved || !!busy}
           onChange={value => set('sync_interval', Number(value) || 5)} />
@@ -120,14 +124,17 @@ export default function ControllerIntegrationSettings({ provider, timeZone, onCh
           {summary.clients_reported} reported · {summary.created} created · {summary.updated} updated · {summary.skipped} skipped · {summary.conflicts} conflicts
         </Text>
       )}
+      {!!summary?.warnings?.length && <Alert color="yellow" title="Unavailable sources">
+        {summary.warnings.map(warning => <Text size="sm" key={warning}>{warning}</Text>)}
+      </Alert>}
       <Group gap="sm">
-        <Anchor href={`https://hillaliy.github.io/LanGuard/docs/integrations#${omada ? 'tp-link-omada' : 'unifi-network'}`}
+        <Anchor href={`https://hillaliy.github.io/LanGuard/docs/integrations#${routeros ? 'mikrotik-routeros' : omada ? 'tp-link-omada' : 'unifi-network'}`}
           target="_blank" rel="noopener noreferrer" size="sm">{shortName} setup</Anchor>
-        <Button variant="default" leftSection={<IconListSearch size={18} />} loading={busy === 'sites'}
-          disabled={!credentialsReady || !!busy} onClick={() => probe('sites')}>Load sites</Button>
+        {!routeros && <Button variant="default" leftSection={<IconListSearch size={18} />} loading={busy === 'sites'}
+          disabled={!credentialsReady || !!busy} onClick={() => probe('sites')}>Load sites</Button>}
         <Button variant="default" leftSection={<IconPlugConnected size={18} />} loading={busy === 'test'}
           disabled={!credentialsReady || !!busy} onClick={() => probe('test')}>Test connection</Button>
-        <Button loading={busy === 'save'} disabled={!dirty || !!busy || (form.enabled && (!credentialsReady || !form.site_id))}
+        <Button loading={busy === 'save'} disabled={!dirty || !!busy || (form.enabled && (!credentialsReady || (!routeros && !form.site_id)))}
           onClick={() => run('save', async () => {
             const response = await apiRequest(endpoint, { method: 'PUT', body: payload, timeoutMs: 8000 });
             hydrate(response.data);

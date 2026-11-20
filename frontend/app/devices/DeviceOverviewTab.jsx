@@ -375,6 +375,7 @@ export default function DeviceOverviewTab({
           <DeviceOpenWrtObservation device={device} timeZone={timeZone} />
           <DeviceControllerObservation provider="unifi" device={device} timeZone={timeZone} />
           <DeviceControllerObservation provider="omada" device={device} timeZone={timeZone} />
+          <DeviceControllerObservation provider="routeros" device={device} timeZone={timeZone} />
 
           <Divider />
           <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
