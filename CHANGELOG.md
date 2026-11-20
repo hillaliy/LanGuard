@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added an opt-in, read-only MikroTik RouterOS 7.1+ HTTPS REST integration under Network controllers, with connection testing, manual/scheduled sync, DHCP and bridge/interface/VLAN observations, and Wi-Fi registration support. Only reachable ARP or active Wi-Fi associations supply positive presence; passive leases and bridge learning do not create devices or change scanner presence, and conflicting client evidence is skipped.
+- Documented RouterOS read-only credentials, HTTPS service setup, optional wireless packages, one-router scope, and inventory/presence limits. Existing UniFi and Omada settings and user-managed profiles are preserved.
 - Added an opt-in, read-only TP-Link Omada OpenAPI v1 provider under Network controllers, with Client Credentials authentication, site discovery, manual and scheduled sync, and separate client observations. Only explicitly active clients provide positive presence; saved UniFi site selections and user-managed profiles are preserved.
 - Documented Omada setup, supported local-controller OpenAPI requirements, read-only permissions, TLS verification, and credential handling. Added shared controller settings and observation views while retaining provider-specific authentication and metadata.
 - Updated Mantine core, hooks, and notifications from 9.7.5 to 9.8.0, Tabler icons from 3.50.0 to 3.51.0, and Next.js and eslint-config-next from 16.4.5 to 16.4.6 (#322).

@@ -21,7 +21,7 @@ export default function IntegrationSettings({ controller }) {
             <Title order={3}>Integrations</Title>
             <Text c="dimmed">Connect external services that extend LanGuard network visibility.</Text>
           </Box>
-          <Badge variant="light">11 available</Badge>
+          <Badge variant="light">12 available</Badge>
         </Group>
         <Tabs
           value={integrationCategory}
@@ -58,6 +58,7 @@ export default function IntegrationSettings({ controller }) {
               <RouterIntegrationSettings provider="openwrt" controller={controller.openwrt} timeZone={timeZone} />
               <ControllerIntegrationSettings provider="unifi" timeZone={timeZone} onChanged={onSaved} />
               <ControllerIntegrationSettings provider="omada" timeZone={timeZone} onChanged={onSaved} />
+              <ControllerIntegrationSettings provider="routeros" timeZone={timeZone} onChanged={onSaved} />
               <DhcpIntegrationSettings controller={controller} />
             </Stack>
           </Tabs.Panel>

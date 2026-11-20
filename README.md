@@ -111,6 +111,7 @@ The public documentation is the source of truth for setup and operation:
 - [Scheduler Tasks](https://hillaliy.github.io/LanGuard/docs/scheduler-tasks)
 - [UniFi Network setup](https://hillaliy.github.io/LanGuard/docs/integrations#unifi-network): Network 9.1+ deployments exposing local Integration API v1, using a dedicated local API key, one selected site, and HTTPS with TLS verification by default.
 - [TP-Link Omada setup](https://hillaliy.github.io/LanGuard/docs/integrations#tp-link-omada): local OpenAPI v1 with Client Credentials, one selected site, read-only client discovery and separate connection observations.
+- [MikroTik RouterOS setup](https://hillaliy.github.io/LanGuard/docs/integrations#mikrotik-routeros): read-only HTTPS REST access, DHCP and bridge context, and positive ARP/Wi-Fi observations from one RouterOS 7 router.
 - [Backup and Migration](https://hillaliy.github.io/LanGuard/docs/backup-and-migration)
 - [Troubleshooting](https://hillaliy.github.io/LanGuard/docs/troubleshooting)
 - [Release Notes](https://hillaliy.github.io/LanGuard/docs/release-notes)

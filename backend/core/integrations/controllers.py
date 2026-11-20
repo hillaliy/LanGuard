@@ -15,6 +15,7 @@ from ..scanning.presence import set_device_status
 from .client_identity import flag_competing_ip
 from .unifi import ControllerError, UniFiProvider
 from .omada import OmadaProvider
+from .routeros import RouterOSProvider
 
 
 class InventoryProvider(Protocol):
@@ -23,7 +24,8 @@ class InventoryProvider(Protocol):
     def sync_devices(self, site_id) -> tuple[list, int]: ...
 
 
-PROVIDERS = {ControllerConnection.Provider.UNIFI: UniFiProvider, ControllerConnection.Provider.OMADA: OmadaProvider}
+PROVIDERS = {ControllerConnection.Provider.UNIFI: UniFiProvider, ControllerConnection.Provider.OMADA: OmadaProvider,
+             ControllerConnection.Provider.ROUTEROS: RouterOSProvider}
 SYNC_LEASE = timedelta(minutes=2)
 
 
@@ -38,11 +40,13 @@ def is_due(connection, now):
 
 def _source(connection):
     return (connection.url, connection.api_key, connection.verify_ssl, str(connection.site_id),
-            connection.controller_id, connection.client_id)
+            connection.controller_id, connection.client_id, connection.username)
 
 
 def provider_client(connection):
     credentials = (connection.url, connection.api_key, connection.verify_ssl)
+    if connection.provider == ControllerConnection.Provider.ROUTEROS:
+        return PROVIDERS[connection.provider](*credentials, username=connection.username)
     if connection.provider == ControllerConnection.Provider.OMADA:
         return PROVIDERS[connection.provider](*credentials, controller_id=connection.controller_id,
                                                client_id=connection.client_id)
@@ -75,6 +79,18 @@ def reconcile_clients(connection, clients, observed_at):
             continue
         if not device and not ip:
             counts["skipped"] += 1
+            continue
+        if row.get("presence") is False:
+            # Passive DHCP/bridge context must not change presence, IP ownership,
+            # identity, or create a device that has never been observed live.
+            if not device:
+                counts["skipped"] += 1
+                continue
+            ControllerDeviceLink.objects.update_or_create(connection=connection, device=device, defaults={
+                "external_id": row["external_id"], "metadata": row["metadata"],
+                "observed_at": observed_at, "synced_at": timezone.now(),
+            })
+            counts["updated"] += 1
             continue
         if ip:
             conflict = flag_competing_ip(mac, ip, observed_at, device)
@@ -134,6 +150,7 @@ def sync_connection(provider, *, manual=False):
     try:
         with provider_client(connection) as client:
             clients, total = client.sync_devices(connection.site_id)
+            warnings = getattr(client, "warnings", [])
         with serialized_database_write(timeout=5), transaction.atomic():
             current = active.select_for_update().first()
             if not current or lock <= timezone.now() or not current.enabled or _source(current) != _source(connection):
@@ -141,6 +158,8 @@ def sync_connection(provider, *, manual=False):
             counts = reconcile_clients(current, clients, now)
             counts["skipped"] += total - len(clients)
             result = {"status": "ok", "clients_reported": total, **counts}
+            if warnings:
+                result["warnings"] = warnings
             if clients:
                 result["site_name"] = clients[0]["metadata"].get("site_name", "")
             active.update(last_sync_at=timezone.now(), last_result=result, last_error="", lock_until=None)

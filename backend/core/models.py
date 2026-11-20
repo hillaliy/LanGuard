@@ -107,6 +107,7 @@ class Device(models.Model):
         OPENWRT = "openwrt", "OpenWrt router"
         UNIFI = "unifi", "UniFi Network"
         OMADA = "omada", "Omada controller"
+        ROUTEROS = "routeros", "RouterOS router"
 
     class Status(models.TextChoices):
         ONLINE = "online", "Online"
@@ -121,6 +122,7 @@ class Device(models.Model):
         ICMP = "icmp", "ICMP"
         UNIFI = "unifi", "UniFi"
         OMADA = "omada", "Omada"
+        ROUTEROS = "routeros", "RouterOS"
         RECENT = "recent", "Recent"
         NONE = "none", "None"
 
@@ -281,6 +283,7 @@ class ControllerConnection(models.Model):
     class Provider(models.TextChoices):
         UNIFI = "unifi", "UniFi Network"
         OMADA = "omada", "TP-Link Omada"
+        ROUTEROS = "routeros", "MikroTik RouterOS"
 
     provider = models.CharField(max_length=32, choices=Provider.choices, unique=True)
     enabled = models.BooleanField(default=False)
@@ -289,6 +292,7 @@ class ControllerConnection(models.Model):
     site_id = models.CharField(max_length=128, null=True, blank=True)
     controller_id = models.CharField(max_length=128, blank=True, default="")
     client_id = models.CharField(max_length=128, blank=True, default="")
+    username = models.CharField(max_length=128, blank=True, default="")
     verify_ssl = models.BooleanField(default=True)
     sync_interval = models.PositiveIntegerField(default=5)
     last_attempt_at = models.DateTimeField(null=True, blank=True)

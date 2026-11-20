@@ -82,6 +82,7 @@ def status_reason(source, detail=""):
         Device.StatusSource.ICMP: "Responded to ICMP ping",
         Device.StatusSource.UNIFI: "Reported connected by UniFi",
         Device.StatusSource.OMADA: "Reported connected by Omada",
+        Device.StatusSource.ROUTEROS: "Reported reachable or associated by RouterOS",
         Device.StatusSource.RECENT: "Recently seen during scan grace period",
         Device.StatusSource.NONE: "No discovery signal responded",
     }

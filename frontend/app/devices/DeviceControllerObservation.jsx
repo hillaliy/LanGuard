@@ -4,7 +4,7 @@ import { formatDate } from '../utils/date';
 import { DeviceField } from './DeviceDetailFields';
 
 export default function DeviceControllerObservation({ device, timeZone, provider }) {
-  const name = provider === 'omada' ? 'Omada' : 'UniFi';
+  const name = provider === 'routeros' ? 'RouterOS' : provider === 'omada' ? 'Omada' : 'UniFi';
   const observations = device.controller_observations?.filter(item => item.provider === provider) || [];
   if (!observations.length) return null;
   return (
@@ -20,6 +20,9 @@ export default function DeviceControllerObservation({ device, timeZone, provider
             ['Signal', info.rssi != null ? `${info.rssi} dBm` : null],
             ['Signal strength', info.signal_percent != null ? `${info.signal_percent}%` : null],
             ['Radio', info.radio], ['Channel', info.channel],
+            ['Router', info.router], ['Interface', info.interface], ['Bridge', info.bridge],
+            ['Reported IP', info.reported_ip], ['DHCP server', info.dhcp_server], ['Lease status', info.lease_status],
+            ['ARP state', info.arp_status], ['Presence evidence', info.presence_evidence],
             ['Observed at', formatDate(observed_at, timeZone)], ['Synced at', formatDate(synced_at, timeZone)],
           ];
           return (
