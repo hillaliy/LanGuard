@@ -2,12 +2,16 @@
 
 ## Unreleased
 
+## 1.28.0 - 2026-11-27
+
 - Added an opt-in, read-only MikroTik RouterOS 7.1+ HTTPS REST integration under Network controllers, with connection testing, manual/scheduled sync, DHCP and bridge/interface/VLAN observations, and Wi-Fi registration support. Only reachable ARP or active Wi-Fi associations supply positive presence; passive leases and bridge learning do not create devices or change scanner presence, and conflicting client evidence is skipped.
 - Documented RouterOS read-only credentials, HTTPS service setup, optional wireless packages, one-router scope, and inventory/presence limits. Existing UniFi and Omada settings and user-managed profiles are preserved.
 - Added an opt-in, read-only TP-Link Omada OpenAPI v1 provider under Network controllers, with Client Credentials authentication, site discovery, manual and scheduled sync, and separate client observations. Only explicitly active clients provide positive presence; saved UniFi site selections and user-managed profiles are preserved.
 - Documented Omada setup, supported local-controller OpenAPI requirements, read-only permissions, TLS verification, and credential handling. Added shared controller settings and observation views while retaining provider-specific authentication and metadata.
 - Updated Mantine core, hooks, and notifications from 9.7.5 to 9.8.0, Tabler icons from 3.50.0 to 3.51.0, and Next.js and eslint-config-next from 16.4.5 to 16.4.6 (#322).
 - Updated Granian from 2.8.7 to 2.8.8 and Ruff from 0.17.4 to 0.17.5 (#321).
+- Updated Ruff from 0.17.5 to 0.17.6 (#325).
+- Updated Mantine core, hooks, and notifications from 9.8.0 to 9.8.1, Tabler icons from 3.51.0 to 3.52.0, and React Flow from 12.12.1 to 13.0.2 (#326).
 
 ## 1.27.0 - 2026-11-14
 
